@@ -1772,17 +1772,18 @@ function ExcelPanel({products,setProducts}) {
       });
     }
 
-    // Save to Supabase in parallel chunks of 5 batches at a time
-    const batchSize = 100;
+    // Save to Supabase sequentially with 500 per batch
+    const batchSize = 500;
     const batches = [];
     for(let i=0;i<newProds.length;i+=batchSize) {
       batches.push(newProds.slice(i,i+batchSize));
     }
-    const chunkSize = 5; // 5 batches in parallel
-    for(let i=0;i<batches.length;i+=chunkSize) {
-      const pct = Math.round(i/batches.length*100);
-      setStatus({type:"progress", msg:`⏳ Subiendo productos... ${Math.min(i+chunkSize,batches.length)}/${batches.length} lotes (${pct}%)`});
-      await Promise.all(batches.slice(i,i+chunkSize).map(b=>db.upsertProducts(b)));
+    for(let i=0;i<batches.length;i++) {
+      const pct = Math.round((i+1)/batches.length*100);
+      setStatus({type:"progress", msg:`⏳ Subiendo productos... ${i+1}/${batches.length} (${pct}%)`});
+      await db.upsertProducts(batches[i]);
+      // Small delay to avoid rate limiting
+      await new Promise(r=>setTimeout(r,300));
     }
     setProducts(newProds);
     setStatus({type:"success",msg:`✅ ${updated.length} productos actualizados.${notFound.length>0?` ${notFound.length} códigos no encontrados en el catálogo.`:""}`});
