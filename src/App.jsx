@@ -512,7 +512,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     {k:"precios", label:"Precios",            icon:"💲", roles:["admin","vendedor"]},
     {k:"stock",   label:"Stock",              icon:"📦", roles:["admin","vendedor"]},
     {k:"compras", label:"Alta de Mercadería", icon:"🏪", roles:["admin","vendedor"]},
-    {k:"admin",   label:"Administración",     icon:"⚙️",  roles:["admin"]},
+    {k:"admin",   label:"Administracion",     icon:"★",   roles:["admin"]},
   ].filter(t=>t.roles.includes(currentUser.role));
 
   return (
