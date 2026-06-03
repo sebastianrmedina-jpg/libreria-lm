@@ -420,7 +420,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   const TABS = [
     {k:"central", label:"Central",           icon:"📋", roles:["admin","vendedor"]},
     {k:"nuevo",   label:"Nuevo Pedido",       icon:"🛒", roles:["admin","vendedor"]},
-    {k:"precios", label:"Precios",            icon:"🏷️", roles:["admin","vendedor"]},
+    {k:"precios", label:"Precios",            icon:"💲", roles:["admin","vendedor"]},
     {k:"stock",   label:"Stock",              icon:"📦", roles:["admin","vendedor"]},
     {k:"compras", label:"Alta de Mercadería", icon:"🏪", roles:["admin","vendedor"]},
     {k:"admin",   label:"Administración",     icon:"⚙️",  roles:["admin"]},
