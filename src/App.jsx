@@ -1,4 +1,4 @@
-/* eslint-disable */ /* v2 */
+/* eslint-disable */
 import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import * as XLSX from "xlsx";
 
@@ -1725,7 +1725,7 @@ function ExcelPanel({products,setProducts}) {
     reader.readAsArrayBuffer(file);
   };
 
-  const applyImport = () => {
+  const applyImport = async () => {
     if(!preview) return;
     const updated=[], notFound=[];
     const newProds = products.map(p=>({...p}));
