@@ -1,67 +1,46 @@
 /* eslint-disable */
+import { createClient } from "@supabase/supabase-js";
 import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import * as XLSX from "xlsx";
 
 // ─── SUPABASE CONFIG ──────────────────────────────────────────────────────────
 const SUPA_URL = "https://pqwcegwadffzqecmbqbe.supabase.co";
-const SUPA_KEY = "sb_publishable_kVVuZ4_jHd_DCga1Q0f2aQ_soVn8xOe";
-const SUPA_SECRET = "sb_secret_LlNuVzJX-h_29i9fA_seOQ_O6s6jnBv";
+const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBxd2NlZ3dhZGZmenFlY21icWJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0OTgzNjgsImV4cCI6MjA5NjA3NDM2OH0.XnmgmzabW4YV4SrP1YNDtRElp7aNoGjbG37XG6VvXak";
+const SUPA_SERVICE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBxd2NlZ3dhZGZmenFlY21icWJlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDQ5ODM2OCwiZXhwIjoyMDk2MDc0MzY4fQ.dPLccDyKEZ4YPZovD4iXrSJe-DoNf6UFDMNWCmWiK84";
+const supabase = createClient(SUPA_URL, SUPA_ANON);
+const supaAdmin = createClient(SUPA_URL, SUPA_SERVICE);
 
-async function supaFetch(path, options={}) {
-  const isWrite = options.method && options.method !== "GET";
-  const key = isWrite ? SUPA_SECRET : SUPA_KEY;
-  const res = await fetch(`${SUPA_URL}/rest/v1/${path}`, {
-    headers: {
-      "apikey": key,
-      "Authorization": `Bearer ${key}`,
-      "Content-Type": "application/json",
-      "Prefer": options.prefer || "return=representation",
-      ...options.headers,
-    },
-    ...options,
-  });
-  if(!res.ok) {
-    const err = await res.text();
-    throw new Error(`Supabase error: ${res.status} ${err}`);
-  }
-  const text = await res.text();
-  return text ? JSON.parse(text) : [];
-}
+const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock});
+const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[]});
 
 const db = {
-  // Users
-  getUsers:    ()            => supaFetch("lm_users?order=name"),
-  saveUser:    (u)           => supaFetch("lm_users", {method:"POST", body:JSON.stringify(u), headers:{"Prefer":"resolution=merge-duplicates,return=representation"}}),
-  deleteUser:  (id)          => supaFetch(`lm_users?id=eq.${id}`, {method:"DELETE", prefer:""}),
+  getUsers:     async () => { const {data,error} = await supabase.from("lm_users").select("*").order("name"); if(error) throw error; return data||[]; },
+  saveUser:     async (u) => { const {error} = await supaAdmin.from("lm_users").upsert(u); if(error) throw error; },
+  deleteUser:   async (id) => { const {error} = await supaAdmin.from("lm_users").delete().eq("id",id); if(error) throw error; },
 
-  // Vendors
-  getVendors:  ()            => supaFetch("lm_vendors?order=name").then(r=>r.map(v=>v.name)),
-  addVendor:   (name)        => supaFetch("lm_vendors", {method:"POST", body:JSON.stringify({name})}),
-  deleteVendor:(name)        => supaFetch(`lm_vendors?name=eq.${encodeURIComponent(name)}`, {method:"DELETE", prefer:""}),
-  updateVendor:(old,nw)      => supaFetch(`lm_vendors?name=eq.${encodeURIComponent(old)}`, {method:"PATCH", body:JSON.stringify({name:nw})}),
+  getVendors:   async () => { const {data,error} = await supabase.from("lm_vendors").select("name").order("name"); if(error) throw error; return (data||[]).map(v=>v.name); },
+  addVendor:    async (name) => { const {error} = await supaAdmin.from("lm_vendors").insert({name}); if(error) throw error; },
+  deleteVendor: async (name) => { const {error} = await supaAdmin.from("lm_vendors").delete().eq("name",name); if(error) throw error; },
+  updateVendor: async (old,nw) => { const {error} = await supaAdmin.from("lm_vendors").update({name:nw}).eq("name",old); if(error) throw error; },
 
-  // Products
-  getProducts: ()            => supaFetch("lm_products?order=name").then(rows=>rows.map(r=>({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock}))),
-  upsertProduct:(p)          => supaFetch("lm_products", {method:"POST", body:JSON.stringify({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0}), headers:{"Prefer":"resolution=merge-duplicates,return=representation"}}),
-  upsertProducts:(arr)       => supaFetch("lm_products", {method:"POST", body:JSON.stringify(arr.map(p=>({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0}))), headers:{"Prefer":"resolution=merge-duplicates,return=representation"}}),
-  deleteProduct:(id)         => supaFetch(`lm_products?id=eq.${encodeURIComponent(id)}`, {method:"DELETE", prefer:""}),
+  getProducts:  async () => { const {data,error} = await supabase.from("lm_products").select("*").order("name"); if(error) throw error; return (data||[]).map(mapProduct); },
+  upsertProduct: async (p) => { const {error} = await supaAdmin.from("lm_products").upsert({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0}); if(error) throw error; },
+  upsertProducts: async (arr) => { const {error} = await supaAdmin.from("lm_products").upsert(arr.map(p=>({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0}))); if(error) throw error; },
+  deleteProduct: async (id) => { const {error} = await supaAdmin.from("lm_products").delete().eq("id",id); if(error) throw error; },
 
-  // Orders
-  getOrders:   ()            => supaFetch("lm_orders?order=date.desc").then(rows=>rows.map(r=>({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[]}))),
-  upsertOrder: (o)           => supaFetch("lm_orders", {method:"POST", body:JSON.stringify({id:o.id,client:o.client,vendedor:o.vendedor||"",notes:o.notes||"",total:o.total,stage:o.stage,date:o.date,items:o.items}), headers:{"Prefer":"resolution=merge-duplicates,return=representation"}}),
-  deleteOrder: (id)          => supaFetch(`lm_orders?id=eq.${id}`, {method:"DELETE", prefer:""}),
+  getOrders:    async () => { const {data,error} = await supabase.from("lm_orders").select("*").order("date",{ascending:false}); if(error) throw error; return (data||[]).map(mapOrder); },
+  upsertOrder:  async (o) => { const {error} = await supaAdmin.from("lm_orders").upsert({id:o.id,client:o.client,vendedor:o.vendedor||"",notes:o.notes||"",total:o.total,stage:o.stage,date:o.date,items:o.items}); if(error) throw error; },
+  deleteOrder:  async (id) => { const {error} = await supaAdmin.from("lm_orders").delete().eq("id",id); if(error) throw error; },
 
-  // Stock log
-  getStockLog: ()            => supaFetch("lm_stocklog?order=fecha.desc"),
-  addStockLog: (e)           => supaFetch("lm_stocklog", {method:"POST", body:JSON.stringify({id:e.id,fecha:e.fecha,usuario:e.usuario,rol:e.rol,tipo:e.tipo,producto_id:e.productoId,producto:e.producto,stock_antes:e.stockAntes,stock_despues:e.stockDespues,cambio:e.cambio,motivo:e.motivo})}),
-  clearStockLog:()           => supaFetch("lm_stocklog?id=neq.none", {method:"DELETE", prefer:""}),
+  getStockLog:  async () => { const {data,error} = await supabase.from("lm_stocklog").select("*").order("fecha",{ascending:false}); if(error) throw error; return (data||[]).map(r=>({...r,productoId:r.producto_id,stockAntes:r.stock_antes,stockDespues:r.stock_despues})); },
+  addStockLog:  async (e) => { const {error} = await supaAdmin.from("lm_stocklog").insert({id:e.id,fecha:e.fecha,usuario:e.usuario,rol:e.rol,tipo:e.tipo,producto_id:e.productoId,producto:e.producto,stock_antes:e.stockAntes,stock_despues:e.stockDespues,cambio:e.cambio,motivo:e.motivo}); if(error) throw error; },
+  clearStockLog: async () => { const {error} = await supaAdmin.from("lm_stocklog").delete().neq("id","none"); if(error) throw error; },
 
-  // Notifs
-  getNotifs:   ()            => supaFetch("lm_notifs?order=fecha.desc"),
-  addNotif:    (n)           => supaFetch("lm_notifs", {method:"POST", body:JSON.stringify(n)}),
-  updateNotif: (id,data)     => supaFetch(`lm_notifs?id=eq.${id}`, {method:"PATCH", body:JSON.stringify(data)}),
-  deleteNotif: (id)          => supaFetch(`lm_notifs?id=eq.${id}`, {method:"DELETE", prefer:""}),
-  clearNotifs: ()            => supaFetch("lm_notifs?id=neq.none", {method:"DELETE", prefer:""}),
+  getNotifs:    async () => { const {data,error} = await supabase.from("lm_notifs").select("*").order("fecha",{ascending:false}); if(error) throw error; return data||[]; },
+  addNotif:     async (n) => { const {error} = await supaAdmin.from("lm_notifs").insert(n); if(error) throw error; },
+  updateNotif:  async (id,data) => { const {error} = await supaAdmin.from("lm_notifs").update(data).eq("id",id); if(error) throw error; },
+  deleteNotif:  async (id) => { const {error} = await supaAdmin.from("lm_notifs").delete().eq("id",id); if(error) throw error; },
+  clearNotifs:  async () => { const {error} = await supaAdmin.from("lm_notifs").delete().neq("id","none"); if(error) throw error; },
 };
 
 const CATALOG = [];
