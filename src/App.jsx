@@ -1,7 +1,65 @@
 /* eslint-disable */
-import React, { useState, useMemo, useRef } from "react";
-
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import * as XLSX from "xlsx";
+
+// ─── SUPABASE CONFIG ──────────────────────────────────────────────────────────
+const SUPA_URL = "https://pqwcegwadffzqecmbqbe.supabase.co";
+const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBxd2NlZ3dhZGZmenFlY21icWJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0OTgzNjgsImV4cCI6MjA5NjA3NDM2OH0.XnmgmzabW4YV4SrP1YNDtRElp7aNoGjbG37XG6VvXak";
+
+async function supaFetch(path, options={}) {
+  const res = await fetch(`${SUPA_URL}/rest/v1/${path}`, {
+    headers: {
+      "apikey": SUPA_KEY,
+      "Authorization": `Bearer ${SUPA_KEY}`,
+      "Content-Type": "application/json",
+      "Prefer": options.prefer || "return=representation",
+      ...options.headers,
+    },
+    ...options,
+  });
+  if(!res.ok) {
+    const err = await res.text();
+    throw new Error(`Supabase error: ${res.status} ${err}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : [];
+}
+
+const db = {
+  // Users
+  getUsers:    ()            => supaFetch("lm_users?order=name"),
+  saveUser:    (u)           => supaFetch("lm_users", {method:"POST", body:JSON.stringify(u), headers:{"Prefer":"resolution=merge-duplicates,return=representation"}}),
+  deleteUser:  (id)          => supaFetch(`lm_users?id=eq.${id}`, {method:"DELETE", prefer:""}),
+
+  // Vendors
+  getVendors:  ()            => supaFetch("lm_vendors?order=name").then(r=>r.map(v=>v.name)),
+  addVendor:   (name)        => supaFetch("lm_vendors", {method:"POST", body:JSON.stringify({name})}),
+  deleteVendor:(name)        => supaFetch(`lm_vendors?name=eq.${encodeURIComponent(name)}`, {method:"DELETE", prefer:""}),
+  updateVendor:(old,nw)      => supaFetch(`lm_vendors?name=eq.${encodeURIComponent(old)}`, {method:"PATCH", body:JSON.stringify({name:nw})}),
+
+  // Products
+  getProducts: ()            => supaFetch("lm_products?order=name").then(rows=>rows.map(r=>({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock}))),
+  upsertProduct:(p)          => supaFetch("lm_products", {method:"POST", body:JSON.stringify({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0}), headers:{"Prefer":"resolution=merge-duplicates,return=representation"}}),
+  upsertProducts:(arr)       => supaFetch("lm_products", {method:"POST", body:JSON.stringify(arr.map(p=>({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0}))), headers:{"Prefer":"resolution=merge-duplicates,return=representation"}}),
+  deleteProduct:(id)         => supaFetch(`lm_products?id=eq.${encodeURIComponent(id)}`, {method:"DELETE", prefer:""}),
+
+  // Orders
+  getOrders:   ()            => supaFetch("lm_orders?order=date.desc").then(rows=>rows.map(r=>({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[]}))),
+  upsertOrder: (o)           => supaFetch("lm_orders", {method:"POST", body:JSON.stringify({id:o.id,client:o.client,vendedor:o.vendedor||"",notes:o.notes||"",total:o.total,stage:o.stage,date:o.date,items:o.items}), headers:{"Prefer":"resolution=merge-duplicates,return=representation"}}),
+  deleteOrder: (id)          => supaFetch(`lm_orders?id=eq.${id}`, {method:"DELETE", prefer:""}),
+
+  // Stock log
+  getStockLog: ()            => supaFetch("lm_stocklog?order=fecha.desc"),
+  addStockLog: (e)           => supaFetch("lm_stocklog", {method:"POST", body:JSON.stringify({id:e.id,fecha:e.fecha,usuario:e.usuario,rol:e.rol,tipo:e.tipo,producto_id:e.productoId,producto:e.producto,stock_antes:e.stockAntes,stock_despues:e.stockDespues,cambio:e.cambio,motivo:e.motivo})}),
+  clearStockLog:()           => supaFetch("lm_stocklog?id=neq.none", {method:"DELETE", prefer:""}),
+
+  // Notifs
+  getNotifs:   ()            => supaFetch("lm_notifs?order=fecha.desc"),
+  addNotif:    (n)           => supaFetch("lm_notifs", {method:"POST", body:JSON.stringify(n)}),
+  updateNotif: (id,data)     => supaFetch(`lm_notifs?id=eq.${id}`, {method:"PATCH", body:JSON.stringify(data)}),
+  deleteNotif: (id)          => supaFetch(`lm_notifs?id=eq.${id}`, {method:"DELETE", prefer:""}),
+  clearNotifs: ()            => supaFetch("lm_notifs?id=neq.none", {method:"DELETE", prefer:""}),
+};
 
 const CATALOG = [];
 
@@ -88,12 +146,14 @@ function NotifPanel({notifs,setNotifs,currentUser,users,onClose,onMarkAllRead,pu
   );
   const unread = myNotifs.filter(n => !n.leida.includes(currentUser.id));
 
-  const markRead = (id) => setNotifs(ns => ns.map(n =>
-    n.id===id && !n.leida.includes(currentUser.id)
-      ? {...n, leida:[...n.leida, currentUser.id]}
-      : n
-  ));
-  const delNotif = (id) => setNotifs(ns => ns.filter(n => n.id!==id));
+  const markRead = async (id) => {
+    const n = notifs.find(x=>x.id===id);
+    if(!n||n.leida.includes(currentUser.id)) return;
+    const updated = [...n.leida, currentUser.id];
+    setNotifs(ns=>ns.map(x=>x.id===id?{...x,leida:updated}:x));
+    await db.updateNotif(id, {leida:updated});
+  };
+  const delNotif = async (id) => { setNotifs(ns=>ns.filter(n=>n.id!==id)); await db.deleteNotif(id); };
 
   const pendingOrders = orders.filter(o=>o.stage!=="entregado");
 
@@ -224,7 +284,7 @@ function NotifConfig({users,setUsers,notifs,setNotifs}) {
 
       {notifs.length>0&&(
         <div style={{marginTop:8,textAlign:"right"}}>
-          <button onClick={()=>setNotifs([])} style={{padding:"7px 14px",borderRadius:8,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:12,fontWeight:600}}>
+          <button onClick={async()=>{setNotifs([]);await db.clearNotifs();}} style={{padding:"7px 14px",borderRadius:8,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:12,fontWeight:600}}>
             🗑 Limpiar todas las notificaciones ({notifs.length})
           </button>
         </div>
@@ -280,20 +340,52 @@ function Login({users, onLogin}) {
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
-  const [users, setUsers]         = useLocalData("lm_users", safeInitUsers());
-  const [vendors, setVendors]     = useLocalData("lm_vendors", safeInitVendors());
-  const [products, setProducts]   = useLocalData("lm_products", (() => {
-    // Read saved products from localStorage — never touch other keys
-    try {
-      const saved = JSON.parse(localStorage.getItem("lm_products"));
-      if(saved && Array.isArray(saved) && saved.length > 0) return saved;
-    } catch(e) {}
-    // First time: start with empty catalog (user will import from Excel)
-    return CATALOG.map(p=>({...p, stock:0}));
-  })());
-  const [orders, setOrders]       = useLocalData("lm_orders", []);
-  const [stockLog, setStockLog]   = useLocalData("lm_stocklog", []);
-  const [notifs, setNotifs]       = useLocalData("lm_notifs", []);
+  const [users, setUsers]       = useState([]);
+  const [vendors, setVendors]   = useState([]);
+  const [products, setProducts] = useState([]);
+  const [orders, setOrders]     = useState([]);
+  const [stockLog, setStockLog] = useState([]);
+  const [notifs, setNotifs]     = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState(null);
+
+  // Load all data from Supabase on mount
+  useEffect(() => {
+    async function loadAll() {
+      try {
+        const [u, v, p, o, sl, n] = await Promise.all([
+          db.getUsers(), db.getVendors(), db.getProducts(),
+          db.getOrders(), db.getStockLog(), db.getNotifs(),
+        ]);
+        setUsers(u); setVendors(v); setProducts(p);
+        setOrders(o); setStockLog(sl); setNotifs(n);
+      } catch(e) {
+        setError("No se pudo conectar con la base de datos. Verificá tu conexión.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadAll();
+  }, []);
+
+  if(loading) return (
+    <div style={{minHeight:"100vh",background:`linear-gradient(135deg,#922b21,#c0392b)`,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
+      <img src="/logo.png" alt="LM" style={{width:80,height:80,borderRadius:"50%",objectFit:"cover"}}/>
+      <div style={{color:"#fff",fontWeight:700,fontSize:16}}>Cargando Librería LM...</div>
+      <div style={{color:"#ffcccc",fontSize:13}}>Conectando con la base de datos</div>
+    </div>
+  );
+
+  if(error) return (
+    <div style={{minHeight:"100vh",background:"#f5f5f5",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"#fff",borderRadius:16,padding:32,maxWidth:400,textAlign:"center",boxShadow:"0 4px 20px #0002"}}>
+        <div style={{fontSize:48,marginBottom:12}}>⚠️</div>
+        <div style={{fontWeight:800,fontSize:16,marginBottom:8}}>Error de conexión</div>
+        <div style={{color:"#666",fontSize:13,marginBottom:20}}>{error}</div>
+        <button onClick={()=>window.location.reload()} style={{padding:"10px 24px",borderRadius:8,border:"none",background:"#c0392b",color:"#fff",fontWeight:700,cursor:"pointer"}}>Reintentar</button>
+      </div>
+    </div>
+  );
 
   if (!currentUser) return <Login users={users} onLogin={u=>setCurrentUser(u)}/>;
 
@@ -316,13 +408,10 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   const [showNotifs, setShowNotifs] = useState(false);
 
   // Push a notification to specific user ids (or "all" / "admins")
-  const pushNotif = (notif) => {
-    setNotifs(n => [{
-      id: genId(),
-      fecha: new Date().toLocaleString("es-AR"),
-      leida: [],   // array of userIds that marked it read
-      ...notif,
-    }, ...n]);
+  const pushNotif = async (notif) => {
+    const full = {id:genId(), fecha:new Date().toLocaleString("es-AR"), leida:[], ...notif};
+    setNotifs(n=>[full,...n]);
+    await db.addNotif(full);
   };
 
   // Unread count for current user
@@ -331,88 +420,88 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     (n.para === "todos" || n.para === currentUser.role || n.para === currentUser.id)
   ).length;
 
-  const markAllRead = () => setNotifs(ns => ns.map(n =>
-    n.leida.includes(currentUser.id) ? n : {...n, leida:[...n.leida, currentUser.id]}
-  ));
+  const markAllRead = async () => {
+    const toUpdate = notifs.filter(n=>!n.leida.includes(currentUser.id) && (n.para==="todos"||n.para===currentUser.role||n.para===currentUser.id));
+    for(const n of toUpdate) {
+      const updated = {...n, leida:[...n.leida, currentUser.id]};
+      await db.updateNotif(n.id, {leida:updated.leida});
+    }
+    setNotifs(ns=>ns.map(n=>n.leida.includes(currentUser.id)?n:{...n,leida:[...n.leida,currentUser.id]}));
+  };
 
-  const addLog = (entry) => setStockLog(l => [{
-    id: genId(),
-    fecha: new Date().toLocaleString("es-AR"),
-    usuario: currentUser.name,
-    rol: currentUser.role,
-    ...entry,
-  }, ...l]);
+  const addLog = async (entry) => {
+    const full = {id:genId(), fecha:new Date().toLocaleString("es-AR"), usuario:currentUser.name, rol:currentUser.role, ...entry};
+    setStockLog(l=>[full,...l]);
+    await db.addStockLog(full);
+  };
 
-  const addOrder = (order) => {
-    setProducts(p => p.map(x => {
+  const addOrder = async (order) => {
+    // Update stock locally and in DB
+    const updatedProds = products.map(x => {
       const it = order.items.find(i=>i.pid===x.id);
       return it ? {...x, stock:Math.max(0,x.stock-it.qty)} : x;
-    }));
-    setOrders(o => [order,...o]);
-    pushNotif({
-      tipo: "NUEVO_PEDIDO",
-      para: "admin",
-      icono: "🛒",
-      titulo: "Nuevo pedido registrado",
-      cuerpo: `${order.client} — ${fARS(order.total)} — Vendedor: ${order.vendedor||"—"}`,
-      ref: order.id,
     });
+    setProducts(updatedProds);
+    setOrders(o => [order,...o]);
+    // Persist to Supabase
+    await db.upsertOrder(order);
+    for(const p of updatedProds.filter(p=>order.items.find(i=>i.pid===p.id))) {
+      await db.upsertProduct(p);
+    }
+    const notif = {id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"NUEVO_PEDIDO",para:"admin",icono:"🛒",titulo:"Nuevo pedido registrado",cuerpo:`${order.client} — ${fARS(order.total)} — Vendedor: ${order.vendedor||"—"}`,ref:order.id};
+    await db.addNotif(notif);
+    setNotifs(n=>[notif,...n]);
   };
-  const setStage = (id,stage) => {
+  const setStage = async (id,stage) => {
     const ord = orders.find(o=>o.id===id);
-    setOrders(o=>o.map(x=>x.id===id?{...x,stage}:x));
+    const updated = {...ord, stage};
+    setOrders(o=>o.map(x=>x.id===id?updated:x));
+    await db.upsertOrder(updated);
     if(ord) {
       const cfg = SCFG[stage]||{};
-      // Notify admin always
-      pushNotif({
-        tipo: "CAMBIO_ESTADO",
-        para: "admin",
-        icono: cfg.icon||"📋",
-        titulo: `Pedido pasó a ${cfg.label}`,
-        cuerpo: `${ord.client} — ${fARS(ord.total)}`,
-        ref: id,
-      });
-      // Notify the vendedor who created it (find by name match)
+      const n1 = {id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"CAMBIO_ESTADO",para:"admin",icono:cfg.icon||"📋",titulo:`Pedido paso a ${cfg.label}`,cuerpo:`${ord.client} — ${fARS(ord.total)}`,ref:id};
+      await db.addNotif(n1);
+      setNotifs(n=>[n1,...n]);
       const vendUser = users.find(u=>u.name===ord.vendedor||u.username===ord.vendedor);
       if(vendUser && vendUser.id !== currentUser.id) {
-        pushNotif({
-          tipo: "CAMBIO_ESTADO",
-          para: vendUser.id,
-          icono: cfg.icon||"📋",
-          titulo: `Tu pedido pasó a ${cfg.label}`,
-          cuerpo: `${ord.client} — ${fARS(ord.total)}`,
-          ref: id,
-        });
+        const n2 = {id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"CAMBIO_ESTADO",para:vendUser.id,icono:cfg.icon||"📋",titulo:`Tu pedido paso a ${cfg.label}`,cuerpo:`${ord.client} — ${fARS(ord.total)}`,ref:id};
+        await db.addNotif(n2);
+        setNotifs(n=>[n2,...n]);
       }
     }
   };
-  const delOrder = (id) => {
+  const delOrder = async (id) => {
     const ord = orders.find(o=>o.id===id);
     if(ord && ord.stage!=="entregado") {
-      setProducts(p=>p.map(x=>{
+      const updatedProds = products.map(x=>{
         const it=ord.items.find(i=>i.pid===x.id);
         return it?{...x,stock:x.stock+it.qty}:x;
-      }));
+      });
+      setProducts(updatedProds);
+      for(const p of updatedProds.filter(p=>ord.items.find(i=>i.pid===p.id))) {
+        await db.upsertProduct(p);
+      }
     }
     setOrders(o=>o.filter(x=>x.id!==id));
+    await db.deleteOrder(id);
   };
-  const updProd  = (upd) => setProducts(p=>p.map(x=>x.id===upd.id?upd:x));
-  const addStock = (pid,qty,newCost) => {
+  const updProd  = async (upd) => { setProducts(p=>p.map(x=>x.id===upd.id?upd:x)); await db.upsertProduct(upd); };
+  const addStock = async (pid,qty,newCost) => {
     const prod = products.find(p=>p.id===pid);
-    setProducts(p=>p.map(x=>{
+    const updatedProds = products.map(x=>{
       if(x.id!==pid) return x;
       const u = {...x, stock:x.stock+qty};
       if(newCost){ u.costPrice=newCost; u.salePrice=Math.round(newCost*1.5*100)/100; }
       return u;
-    }));
-    if(prod) pushNotif({
-      tipo: "ALTA_MERCADERIA",
-      para: "admin",
-      icono: "📦",
-      titulo: "Alta de mercadería",
-      cuerpo: `${prod.name} — +${qty} unidades${newCost?` — Nuevo costo: ${fARS(newCost)}`:""}`,
-      ref: pid,
     });
+    setProducts(updatedProds);
+    const updProd = updatedProds.find(p=>p.id===pid);
+    if(updProd) await db.upsertProduct(updProd);
+    if(prod) {
+      const notif = {id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"ALTA_MERCADERIA",para:"admin",icono:"📦",titulo:"Alta de mercaderia",cuerpo:`${prod.name} — +${qty} unidades${newCost?` — Nuevo costo: ${fARS(newCost)}`:""}`,ref:pid};
+      await db.addNotif(notif);
+      setNotifs(n=>[notif,...n]);
+    }
   };
 
   const pending = orders.filter(o=>o.stage!=="entregado").length;
@@ -995,7 +1084,7 @@ function StockAdjust({products,onDel,onAdjust,addLog}) {
     if(!selected) return;
     if(!reason.trim()){alert("El motivo es obligatorio para registrar el movimiento");return;}
     if(mode==="baja") {
-      onDel(selected.id);
+      await onDel(selected.id);
       addLog({
         tipo: "BAJA",
         productoId:   selected.id,
@@ -1169,7 +1258,7 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
       )}
 
       {isAdmin && stockTab==="ajuste" && <StockAdjust products={products} onDel={onDel} onAdjust={onAdjust} addLog={addLog}/>}
-      {isAdmin && stockTab==="log" && <StockLog log={stockLog} onClear={()=>setStockLog([])}/>}
+      {isAdmin && stockTab==="log" && <StockLog log={stockLog} onClear={async()=>{setStockLog([]);await db.clearStockLog();}}/>}
       {stockTab==="lista" && <>
       {low.length>0&&<StockAlert low={low}/>}
       <div style={{background:"#fff",borderRadius:12,padding:14,marginBottom:14,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",boxShadow:"0 1px 4px #0001"}}>
@@ -1348,20 +1437,22 @@ function VendorsPanel({vendors,setVendors}) {
   const [editing, setEditing] = useState(null);
   const [editVal, setEditVal] = useState("");
 
-  const add = () => {
+  const add = async () => {
     const n = newName.trim();
     if(!n) return;
     if(vendors.includes(n)){alert("Ya existe ese vendedor");return;}
     setVendors(v=>[...v,n]);
     setNewName("");
+    await db.addVendor(n);
   };
   const [confirmDel, setConfirmDel] = useState(null);
   const remove = (v) => setConfirmDel(v);
-  const doRemove = () => { setVendors(vs=>vs.filter(x=>x!==confirmDel)); setConfirmDel(null); };
-  const saveEdit = (old) => {
+  const doRemove = async () => { setVendors(vs=>vs.filter(x=>x!==confirmDel)); await db.deleteVendor(confirmDel); setConfirmDel(null); };
+  const saveEdit = async (old) => {
     const n = editVal.trim();
     if(!n) return;
     setVendors(vs=>vs.map(x=>x===old?n:x));
+    await db.updateVendor(old,n);
     setEditing(null);
   };
 
@@ -1417,19 +1508,24 @@ function UsersPanel({users,setUsers}) {
   const startEdit = (u) => { setEditing(u.id); setForm({username:u.username,password:u.password,name:u.name,role:u.role}); };
   const cancelEdit = () => { setEditing(null); setForm({username:"",password:"",name:"",role:"vendedor"}); };
 
-  const save = () => {
-    if(!form.username.trim()||!form.password.trim()||!form.name.trim()){alert("Completá todos los campos");return;}
+  const save = async () => {
+    if(!form.username.trim()||!form.password.trim()||!form.name.trim()){alert("Completa todos los campos");return;}
     if(editing) {
-      setUsers(us=>us.map(u=>u.id===editing?{...u,...form}:u));
+      const updated = {...users.find(u=>u.id===editing), ...form};
+      setUsers(us=>us.map(u=>u.id===editing?updated:u));
+      await db.saveUser(updated);
     } else {
       if(users.find(u=>u.username===form.username.trim())){alert("Ese usuario ya existe");return;}
-      setUsers(us=>[...us,{id:genId(),...form,username:form.username.trim(),name:form.name.trim()}]);
+      const newUser = {id:genId(),...form,username:form.username.trim(),name:form.name.trim()};
+      setUsers(us=>[...us,newUser]);
+      await db.saveUser(newUser);
     }
     cancelEdit();
   };
-  const remove = (id) => {
+  const remove = async (id) => {
     if(users.filter(u=>u.role==="admin").length===1&&users.find(u=>u.id===id)?.role==="admin"){alert("Debe haber al menos un administrador");return;}
-    if(confirm("¿Eliminar este usuario?")) setUsers(us=>us.filter(u=>u.id!==id));
+    setUsers(us=>us.filter(u=>u.id!==id));
+    await db.deleteUser(id);
   };
 
   return (
@@ -1656,6 +1752,11 @@ function ExcelPanel({products,setProducts}) {
       });
     }
 
+    // Save all to Supabase in batches of 50
+    const batchSize = 50;
+    for(let i=0;i<newProds.length;i+=batchSize) {
+      await db.upsertProducts(newProds.slice(i,i+batchSize));
+    }
     setProducts(newProds);
     setStatus({type:"success",msg:`✅ ${updated.length} productos actualizados.${notFound.length>0?` ${notFound.length} códigos no encontrados en el catálogo.`:""}`});
     setPreview(null);
