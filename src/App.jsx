@@ -265,7 +265,18 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [users, setUsers]         = useLocalData("lm_users", DEFAULT_USERS);
   const [vendors, setVendors]     = useLocalData("lm_vendors", ["Rocío","Valentina","Lucía","Sofía","Martina"]);
-  const [products, setProducts]   = useLocalData("lm_products", CATALOG.map(p=>({...p})));
+  const [products, setProducts]   = useLocalData("lm_products", (() => {
+    // Always start from CATALOG structure but preserve any saved stock/prices from localStorage
+    try {
+      const saved = JSON.parse(localStorage.getItem("lm_products"));
+      if(saved && saved.length > 0) {
+        // Merge: use saved data but add any new products from CATALOG with stock 0
+        const savedMap = Object.fromEntries(saved.map(p=>[p.id,p]));
+        return CATALOG.map(p => savedMap[p.id] ? savedMap[p.id] : {...p, stock:0});
+      }
+    } catch(e) {}
+    return CATALOG.map(p=>({...p, stock:0}));
+  })());
   const [orders, setOrders]       = useLocalData("lm_orders", []);
   const [stockLog, setStockLog]   = useLocalData("lm_stocklog", []);
   const [notifs, setNotifs]       = useLocalData("lm_notifs", []);
