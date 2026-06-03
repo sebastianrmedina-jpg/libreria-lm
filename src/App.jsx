@@ -24,6 +24,23 @@ const today = () => new Date().toLocaleDateString("es-AR");
 const DEFAULT_USERS = [
   {id:"u1", username:"admin", password:"admin123", role:"admin", name:"Administrador"},
 ];
+const DEFAULT_VENDORS = ["Rocío","Valentina","Lucía","Sofía","Martina"];
+
+// Protect existing users/vendors — never overwrite if they already exist in localStorage
+function safeInitUsers() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("lm_users"));
+    if(saved && Array.isArray(saved) && saved.length > 0) return saved;
+  } catch(e) {}
+  return DEFAULT_USERS;
+}
+function safeInitVendors() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("lm_vendors"));
+    if(saved && Array.isArray(saved)) return saved;
+  } catch(e) {}
+  return DEFAULT_VENDORS;
+}
 
 // ─── STORAGE HELPERS (memory only) ──────────────────────────────────────────
 function useLocalData(key, initial) {
@@ -263,18 +280,15 @@ function Login({users, onLogin}) {
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
-  const [users, setUsers]         = useLocalData("lm_users", DEFAULT_USERS);
-  const [vendors, setVendors]     = useLocalData("lm_vendors", ["Rocío","Valentina","Lucía","Sofía","Martina"]);
+  const [users, setUsers]         = useLocalData("lm_users", safeInitUsers());
+  const [vendors, setVendors]     = useLocalData("lm_vendors", safeInitVendors());
   const [products, setProducts]   = useLocalData("lm_products", (() => {
-    // Always start from CATALOG structure but preserve any saved stock/prices from localStorage
+    // Read saved products from localStorage — never touch other keys
     try {
       const saved = JSON.parse(localStorage.getItem("lm_products"));
-      if(saved && saved.length > 0) {
-        // Merge: use saved data but add any new products from CATALOG with stock 0
-        const savedMap = Object.fromEntries(saved.map(p=>[p.id,p]));
-        return CATALOG.map(p => savedMap[p.id] ? savedMap[p.id] : {...p, stock:0});
-      }
+      if(saved && Array.isArray(saved) && saved.length > 0) return saved;
     } catch(e) {}
+    // First time: start with empty catalog (user will import from Excel)
     return CATALOG.map(p=>({...p, stock:0}));
   })());
   const [orders, setOrders]       = useLocalData("lm_orders", []);
