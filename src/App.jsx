@@ -299,11 +299,31 @@ function Login({users, onLogin}) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [showPass, setShowPass] = useState(false);
+  const [checking, setChecking] = useState(false);
 
-  const handleLogin = () => {
-    const u = users.find(u => u.username === username.trim() && u.password === password);
-    if (u) { setError(""); onLogin(u); }
-    else setError("Usuario o contraseña incorrectos");
+  const handleLogin = async () => {
+    if(!username.trim()||!password) return;
+    setChecking(true);
+    setError("");
+    try {
+      // Query Supabase directly for freshest data
+      const fresh = await db.getUsers();
+      const u = fresh.find(u => u.username === username.trim() && u.password === password);
+      if (u) { setError(""); onLogin(u); }
+      else {
+        // Fallback to local users array
+        const u2 = users.find(u => u.username === username.trim() && u.password === password);
+        if(u2) { setError(""); onLogin(u2); }
+        else setError("Usuario o contraseña incorrectos");
+      }
+    } catch(e) {
+      // If Supabase fails, try local
+      const u = users.find(u => u.username === username.trim() && u.password === password);
+      if (u) { setError(""); onLogin(u); }
+      else setError("Usuario o contraseña incorrectos");
+    } finally {
+      setChecking(false);
+    }
   };
 
   return (
@@ -329,8 +349,8 @@ function Login({users, onLogin}) {
           </div>
         </Field>
         {error && <div style={{background:"#fdecea",color:RED,borderRadius:8,padding:"8px 12px",fontSize:13,marginBottom:12,textAlign:"center"}}>{error}</div>}
-        <button onClick={handleLogin} style={{width:"100%",padding:12,borderRadius:10,border:"none",background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",fontWeight:800,fontSize:15,cursor:"pointer",marginTop:4}}>
-          Ingresar
+        <button onClick={handleLogin} disabled={checking} style={{width:"100%",padding:12,borderRadius:10,border:"none",background:checking?"#aaa":`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",fontWeight:800,fontSize:15,cursor:checking?"not-allowed":"pointer",marginTop:4}}>
+          {checking?"Verificando...":"Ingresar"}
         </button>
       </div>
     </div>
