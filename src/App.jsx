@@ -1443,18 +1443,20 @@ function VendorsPanel({vendors,setVendors}) {
     const n = newName.trim();
     if(!n) return;
     if(vendors.includes(n)){alert("Ya existe ese vendedor");return;}
-    setVendors(v=>[...v,n]);
-    setNewName("");
     await db.addVendor(n);
+    const fresh = await db.getVendors();
+    setVendors(fresh);
+    setNewName("");
   };
   const [confirmDel, setConfirmDel] = useState(null);
   const remove = (v) => setConfirmDel(v);
-  const doRemove = async () => { setVendors(vs=>vs.filter(x=>x!==confirmDel)); await db.deleteVendor(confirmDel); setConfirmDel(null); };
+  const doRemove = async () => { await db.deleteVendor(confirmDel); const fresh = await db.getVendors(); setVendors(fresh); setConfirmDel(null); };
   const saveEdit = async (old) => {
     const n = editVal.trim();
     if(!n) return;
-    setVendors(vs=>vs.map(x=>x===old?n:x));
     await db.updateVendor(old,n);
+    const fresh = await db.getVendors();
+    setVendors(fresh);
     setEditing(null);
   };
 
