@@ -1434,30 +1434,62 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
 }
 
 // ── Vendors ───────────────────────────────────────────────────────────────────
-function VendorsPanel({vendors,setVendors}) {
+function VendorsPanel({vendors:initVendors,setVendors:setParentVendors}) {
+  const [localVendors, setLocalVendors] = useState(initVendors||[]);
   const [newName, setNewName] = useState("");
   const [editing, setEditing] = useState(null);
   const [editVal, setEditVal] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // Always sync from Supabase on mount
+  useEffect(()=>{
+    db.getVendors().then(v=>{ setLocalVendors(v); setParentVendors(v); }).catch(()=>{});
+  },[]);
+
+  const refresh = async () => {
+    const fresh = await db.getVendors();
+    setLocalVendors(fresh);
+    setParentVendors(fresh);
+    return fresh;
+  };
 
   const add = async () => {
     const n = newName.trim();
     if(!n) return;
-    if(vendors.includes(n)){alert("Ya existe ese vendedor");return;}
-    await db.addVendor(n);
-    const fresh = await db.getVendors();
-    setVendors(fresh);
-    setNewName("");
+    if(localVendors.includes(n)){alert("Ya existe ese vendedor");return;}
+    setLoading(true);
+    try {
+      await db.addVendor(n);
+      await refresh();
+      setNewName("");
+    } catch(e) {
+      alert("Error al agregar: " + e.message);
+    } finally {
+      setLoading(false);
+    }
   };
+  const vendors = localVendors;
+  const setVendors = setLocalVendors;
   const [confirmDel, setConfirmDel] = useState(null);
   const remove = (v) => setConfirmDel(v);
-  const doRemove = async () => { await db.deleteVendor(confirmDel); const fresh = await db.getVendors(); setVendors(fresh); setConfirmDel(null); };
+  const doRemove = async () => {
+    setLoading(true);
+    try {
+      await db.deleteVendor(confirmDel);
+      await refresh();
+    } catch(e) { alert("Error: "+e.message); }
+    finally { setLoading(false); setConfirmDel(null); }
+  };
   const saveEdit = async (old) => {
     const n = editVal.trim();
     if(!n) return;
-    await db.updateVendor(old,n);
-    const fresh = await db.getVendors();
-    setVendors(fresh);
-    setEditing(null);
+    setLoading(true);
+    try {
+      await db.updateVendor(old,n);
+      await refresh();
+      setEditing(null);
+    } catch(e) { alert("Error: "+e.message); }
+    finally { setLoading(false); }
   };
 
   return (
