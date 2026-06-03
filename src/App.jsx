@@ -1772,18 +1772,25 @@ function ExcelPanel({products,setProducts}) {
       });
     }
 
-    // Save to Supabase sequentially with 500 per batch
-    const batchSize = 500;
+    // Save to Supabase one by one in small batches with error handling
+    const batchSize = 20;
     const batches = [];
     for(let i=0;i<newProds.length;i+=batchSize) {
       batches.push(newProds.slice(i,i+batchSize));
     }
+    let uploadedCount = 0;
+    let errorCount = 0;
     for(let i=0;i<batches.length;i++) {
       const pct = Math.round((i+1)/batches.length*100);
-      setStatus({type:"progress", msg:`⏳ Subiendo productos... ${i+1}/${batches.length} (${pct}%)`});
-      await db.upsertProducts(batches[i]);
-      // Small delay to avoid rate limiting
-      await new Promise(r=>setTimeout(r,300));
+      setStatus({type:"progress", msg:`⏳ Subiendo... ${uploadedCount}/${newProds.length} productos (${pct}%)`});
+      try {
+        await db.upsertProducts(batches[i]);
+        uploadedCount += batches[i].length;
+      } catch(e) {
+        errorCount += batches[i].length;
+        console.error("Batch error:", e);
+      }
+      await new Promise(r=>setTimeout(r,100));
     }
     setProducts(newProds);
     setStatus({type:"success",msg:`✅ ${updated.length} productos actualizados.${notFound.length>0?` ${notFound.length} códigos no encontrados en el catálogo.`:""}`});
