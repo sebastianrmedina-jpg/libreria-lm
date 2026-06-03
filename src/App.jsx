@@ -1100,7 +1100,7 @@ function StockAdjust({products,onDel,onAdjust,addLog}) {
 
   const reset = () => { setSelected(null); setQty(0); setReason(""); setSearch(""); };
 
-  const confirmAction = () => {
+  const confirmAction = async () => {
     if(!selected) return;
     if(!reason.trim()){alert("El motivo es obligatorio para registrar el movimiento");return;}
     if(mode==="baja") {
