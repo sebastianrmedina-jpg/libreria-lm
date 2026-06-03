@@ -1772,10 +1772,17 @@ function ExcelPanel({products,setProducts}) {
       });
     }
 
-    // Save all to Supabase in batches of 50
-    const batchSize = 50;
+    // Save to Supabase in parallel chunks of 5 batches at a time
+    const batchSize = 100;
+    const batches = [];
     for(let i=0;i<newProds.length;i+=batchSize) {
-      await db.upsertProducts(newProds.slice(i,i+batchSize));
+      batches.push(newProds.slice(i,i+batchSize));
+    }
+    const chunkSize = 5; // 5 batches in parallel
+    for(let i=0;i<batches.length;i+=chunkSize) {
+      const pct = Math.round(i/batches.length*100);
+      setStatus({type:"progress", msg:`⏳ Subiendo productos... ${Math.min(i+chunkSize,batches.length)}/${batches.length} lotes (${pct}%)`});
+      await Promise.all(batches.slice(i,i+chunkSize).map(b=>db.upsertProducts(b)));
     }
     setProducts(newProds);
     setStatus({type:"success",msg:`✅ ${updated.length} productos actualizados.${notFound.length>0?` ${notFound.length} códigos no encontrados en el catálogo.`:""}`});
@@ -1814,11 +1821,14 @@ function ExcelPanel({products,setProducts}) {
             onChange={e=>{if(e.target.files[0])parseExcel(e.target.files[0]);}}/>
         </div>
 
-        {status&&<div style={{padding:"10px 14px",borderRadius:8,background:status.type==="error"?"#fdecea":"#d5f5e3",color:status.type==="error"?RED:"#1e8449",fontSize:13,fontWeight:600,marginBottom:12}}>{status.msg}</div>}
+        {status&&<div style={{padding:"10px 14px",borderRadius:8,
+          background:status.type==="error"?"#fdecea":status.type==="progress"?"#fef9e7":"#d5f5e3",
+          color:status.type==="error"?RED:status.type==="progress"?"#7d6608":"#1e8449",
+          fontSize:13,fontWeight:600,marginBottom:12}}>{status.msg}</div>}
 
         {preview&&(
-          <button onClick={applyImport} style={{width:"100%",padding:"11px",borderRadius:10,border:"none",background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",fontWeight:800,fontSize:14,cursor:"pointer"}}>
-            📥 Aplicar importación ({preview.total} productos)
+          <button onClick={applyImport} disabled={status?.type==="progress"} style={{width:"100%",padding:"11px",borderRadius:10,border:"none",background:status?.type==="progress"?"#aaa":`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",fontWeight:800,fontSize:14,cursor:status?.type==="progress"?"not-allowed":"pointer"}}>
+            {status?.type==="progress"?"⏳ Importando, no cierres esta página...":"📥 Aplicar importación ("+preview.total+" productos)"}
           </button>
         )}
       </div>
