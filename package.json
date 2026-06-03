@@ -6,11 +6,12 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "@supabase/supabase-js": "^2.39.0"
   },
   "scripts": {
     "start": "react-scripts start",
-   "build": "react-scripts build",
+    "build": "BUILD_PATH=dist react-scripts build",
     "test": "react-scripts test"
   },
   "eslintConfig": {
