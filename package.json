@@ -11,7 +11,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "BUILD_PATH=dist react-scripts build",
+    "build": "react-scripts build",
     "test": "react-scripts test"
   },
   "eslintConfig": {
