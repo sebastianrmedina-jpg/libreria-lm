@@ -4,13 +4,16 @@ import * as XLSX from "xlsx";
 
 // ─── SUPABASE CONFIG ──────────────────────────────────────────────────────────
 const SUPA_URL = "https://pqwcegwadffzqecmbqbe.supabase.co";
-const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBxd2NlZ3dhZGZmenFlY21icWJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0OTgzNjgsImV4cCI6MjA5NjA3NDM2OH0.XnmgmzabW4YV4SrP1YNDtRElp7aNoGjbG37XG6VvXak";
+const SUPA_KEY = "sb_publishable_kVVuZ4_jHd_DCga1Q0f2aQ_soVn8xOe";
+const SUPA_SECRET = "sb_secret_LlNuVzJX-h_29i9fA_seOQ_O6s6jnBv";
 
 async function supaFetch(path, options={}) {
+  const isWrite = options.method && options.method !== "GET";
+  const key = isWrite ? SUPA_SECRET : SUPA_KEY;
   const res = await fetch(`${SUPA_URL}/rest/v1/${path}`, {
     headers: {
-      "apikey": SUPA_KEY,
-      "Authorization": `Bearer ${SUPA_KEY}`,
+      "apikey": key,
+      "Authorization": `Bearer ${key}`,
       "Content-Type": "application/json",
       "Prefer": options.prefer || "return=representation",
       ...options.headers,
