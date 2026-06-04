@@ -1454,15 +1454,20 @@ function VendorsPanel({vendors:initVendors,setVendors:setParentVendors}) {
   };
 
   const add = async () => {
+    console.log("ADD clicked, name:", newName, "loading:", loading);
     const n = newName.trim();
-    if(!n) return;
+    if(!n) { alert("Escribí un nombre"); return; }
     if(localVendors.includes(n)){alert("Ya existe ese vendedor");return;}
     setLoading(true);
     try {
+      console.log("Calling db.addVendor...");
       await db.addVendor(n);
+      console.log("Added! Refreshing...");
       await refresh();
       setNewName("");
+      alert("Vendedor agregado: " + n);
     } catch(e) {
+      console.error("Error adding vendor:", e);
       alert("Error al agregar: " + e.message);
     } finally {
       setLoading(false);
