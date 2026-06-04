@@ -22,6 +22,12 @@ const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.note
 const padNum = (n) => String(n).padStart(6,"0");
 const fmtDocNum = (prefix, n) => `${prefix}-${padNum(n)}`;
 
+// ─── TEST MODE ────────────────────────────────────────────────────────────────
+// Vendedor "Prueba": no incrementa contadores, numera como TEST-000000
+// y agrega marca de agua en el PDF
+const TEST_VENDOR = "Prueba";
+const isTestOrder = (vendedor) => vendedor === TEST_VENDOR;
+
 const db = {
   getUsers:     async () => { const {data,error} = await supabase.from("lm_users").select("*").order("name"); if(error) throw error; return data||[]; },
   saveUser:     async (u) => { const {error} = await supaAdmin.from("lm_users").upsert(u); if(error) throw error; },
@@ -198,78 +204,121 @@ function printDoc(doc, tipo) {
 <title>${docLabel} ${docNumDisplay}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;}
-  body{background:#fff;color:#1a1a1a;}
-  @media print{.no-print{display:none!important;}@page{margin:0;size:A4;}}
-  .print-btn{display:block;margin:16px auto;padding:10px 32px;background:${badgeColor};color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;}
-  .pdf-wrap{padding:0 0 40px;}
-  .header-img{width:100%;display:block;border-bottom:3px solid #c0392b;}
-  .content{padding:24px 48px 0;}
-  .doc-meta{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;padding-bottom:16px;border-bottom:1px solid #f0f0f0;}
-  .doc-badge{display:inline-block;padding:7px 20px;border-radius:8px;font-size:14px;font-weight:800;letter-spacing:1px;background:${badgeColor};color:#fff;}
-  .doc-num{font-size:26px;font-weight:900;color:#1a1a1a;text-align:right;letter-spacing:-0.5px;}
-  .doc-date{font-size:12px;color:#888;text-align:right;margin-top:4px;}
-  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 24px;margin-bottom:24px;}
-  .info-box{background:#f9f9f9;border-radius:8px;padding:11px 14px;border-left:3px solid #e5e5e5;}
+  html,body{background:#fff;color:#1a1a1a;width:210mm;}
+  @media screen{body{max-width:210mm;margin:0 auto;box-shadow:0 0 20px #0002;}}
+  @media print{.no-print{display:none!important;}@page{margin:10mm 12mm;size:A4 portrait;}body{width:100%;}}
+  .print-btn{display:block;margin:12px auto;padding:9px 28px;background:${badgeColor};color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;}
+  .pdf-wrap{padding:0 0 32px;}
+
+  /* HEADER — fixed height, image fills width but max 28mm tall */
+  .header-img{
+    width:100%;
+    max-height:28mm;
+    object-fit:cover;
+    object-position:left center;
+    display:block;
+    border-bottom:3px solid #c0392b;
+  }
+
+  .content{padding:16px 24px 0;}
+
+  /* DOC META row */
+  .doc-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid #f0f0f0;}
+  .doc-left{}
+  .doc-type-label{font-size:10px;color:#999;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;}
+  .doc-badge{display:inline-block;padding:5px 16px;border-radius:6px;font-size:13px;font-weight:800;letter-spacing:1px;background:${badgeColor};color:#fff;}
+  .doc-right{text-align:right;}
+  .doc-num{font-size:22px;font-weight:900;color:#1a1a1a;letter-spacing:-0.5px;}
+  .doc-date{font-size:11px;color:#888;margin-top:3px;}
+
+  /* INFO GRID */
+  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 20px;margin-bottom:16px;}
+  .info-box{background:#f9f9f9;border-radius:6px;padding:8px 12px;border-left:3px solid #e5e5e5;}
   .info-box.hl{border-left-color:${badgeColor};}
-  .info-label{font-size:9px;color:#999;text-transform:uppercase;letter-spacing:.7px;margin-bottom:4px;font-weight:700;}
-  .info-value{font-size:14px;font-weight:700;color:#1a1a1a;}
-  table{width:100%;border-collapse:collapse;margin-bottom:20px;}
+  .info-label{font-size:8px;color:#999;text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px;font-weight:700;}
+  .info-value{font-size:13px;font-weight:700;color:#1a1a1a;}
+
+  /* VALIDITY */
+  .validity-bar{background:#fef9e7;border-left:3px solid #f1c40f;padding:6px 12px;border-radius:0 6px 6px 0;font-size:12px;color:#7d6608;margin-bottom:12px;}
+
+  /* TABLE */
+  table{width:100%;border-collapse:collapse;margin-bottom:16px;}
   thead tr{background:#f5f5f5;}
-  th{padding:10px 12px;text-align:left;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.5px;font-weight:700;}
+  th{padding:8px 10px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.5px;font-weight:700;}
   th.r{text-align:right;}th.c{text-align:center;}
+  td{padding:8px 10px;border-bottom:1px solid #f0f0f0;font-size:14px;color:#1a1a1a;vertical-align:middle;}
+  td.r{text-align:right;}td.c{text-align:center;}
   tbody tr:nth-child(even){background:#fafafa;}
-  .total-wrap{display:flex;justify-content:flex-end;margin-bottom:20px;}
-  .total-box{background:${tipo==="cotizacion"?"#e8daef":"#fdecea"};border-radius:10px;padding:16px 24px;display:flex;align-items:center;gap:24px;min-width:300px;}
-  .total-label{font-size:14px;color:#555;font-weight:600;}
-  .total-amount{font-size:28px;font-weight:900;color:${badgeColor};margin-left:auto;}
-  .notes{background:#f9f9f9;border-left:3px solid ${badgeColor};padding:10px 14px;border-radius:0 8px 8px 0;font-size:13px;color:#555;margin-bottom:20px;}
-  .footer{border-top:1px solid #f0f0f0;padding-top:14px;margin:0 48px;text-align:center;font-size:11px;color:#bbb;display:flex;justify-content:space-between;}
+  tbody tr:last-child td{border-bottom:none;}
+
+  /* TOTAL */
+  .total-wrap{display:flex;justify-content:flex-end;margin-bottom:16px;}
+  .total-box{background:${tipo==="cotizacion"?"#e8daef":"#fdecea"};border-radius:8px;padding:12px 20px;min-width:260px;}
+  .disc-row{display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;}
+  .disc-row.green{color:#1e8449;}
+  .disc-row.grey{color:#888;}
+  .disc-divider{border:none;border-top:1px solid #ddd;margin:6px 0;}
+  .total-final{display:flex;justify-content:space-between;align-items:center;margin-top:4px;}
+  .total-label{font-size:13px;color:#555;font-weight:600;}
+  .total-amount{font-size:26px;font-weight:900;color:${badgeColor};}
+
+  /* NOTES */
+  .notes{background:#f9f9f9;border-left:3px solid ${badgeColor};padding:8px 12px;border-radius:0 6px 6px 0;font-size:12px;color:#555;margin-bottom:16px;}
+
+  /* FOOTER */
+  .footer{border-top:1px solid #f0f0f0;padding-top:10px;margin:0 0;font-size:10px;color:#bbb;display:flex;justify-content:space-between;align-items:center;}
   .footer-brand{color:#c0392b;font-weight:700;}
+  /* TEST WATERMARK */
+  .test-banner{background:#f1c40f;color:#1a1a1a;text-align:center;padding:8px;font-weight:900;font-size:13px;letter-spacing:2px;border-bottom:2px solid #d4ac0d;}
+  .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:80px;font-weight:900;color:rgba(241,196,15,0.15);pointer-events:none;white-space:nowrap;z-index:0;}
+  .pdf-wrap{position:relative;z-index:1;}
 </style></head><body>
-<button class="no-print print-btn" onclick="window.print()">🖨️️ Imprimir / Guardar PDF</button>
+<button class="no-print print-btn" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+${doc.isTest ? `<div class="test-banner">⚠️ DOCUMENTO DE PRUEBA — NO VÁLIDO COMO COMPROBANTE</div>` : ""}
+${doc.isTest ? `<div class="watermark">PRUEBA</div>` : ""}
 <div class="pdf-wrap">
   <img class="header-img" src="${logoSrc}" alt="Libreria Madrid" onerror="this.style.display='none'"/>
   <div class="content">
     <div class="doc-meta">
-      <div>
-        <div style="font-size:12px;color:#888;margin-bottom:6px;">Comprobante de</div>
+      <div class="doc-left">
+        <div class="doc-type-label">Comprobante de</div>
         <div class="doc-badge">${docLabel}</div>
       </div>
-      <div>
+      <div class="doc-right">
         <div class="doc-num">${docNumDisplay}</div>
         <div class="doc-date">${doc.date}</div>
       </div>
     </div>
     <div class="info-grid">
       <div class="info-box hl"><div class="info-label">Cliente</div><div class="info-value">${doc.client}</div></div>
-      <div class="info-box"><div class="info-label">Vendedor</div><div class="info-value">${doc.vendedor||"&mdash;"}</div></div>
+      <div class="info-box"><div class="info-label">Vendedor</div><div class="info-value">${doc.vendedor||"—"}</div></div>
       <div class="info-box"><div class="info-label">Fecha</div><div class="info-value">${doc.date}</div></div>
-      ${doc.validity?`<div class="info-box"><div class="info-label">V&aacute;lida hasta</div><div class="info-value" style="color:#7d6608">${doc.validity}</div></div>`:""}
+      ${doc.validity?`<div class="info-box"><div class="info-label">Válida hasta</div><div class="info-value" style="color:#7d6608">${doc.validity}</div></div>`:""}
     </div>
     ${validityHtml}
     <table>
       <thead><tr>
-        <th style="width:50%">Descripci&oacute;n</th>
+        <th style="width:48%">Descripción</th>
         <th class="c" style="width:10%">Cant.</th>
-        <th class="r" style="width:20%">P. Unit.</th>
-        <th class="r" style="width:20%">Subtotal</th>
+        <th class="r" style="width:21%">P. Unit.</th>
+        <th class="r" style="width:21%">Subtotal</th>
       </tr></thead>
       <tbody>${itemRows}</tbody>
     </table>
     <div class="total-wrap">
-      <div class="total-box" style="flex-direction:column;align-items:stretch;gap:0;">
+      <div class="total-box">
         ${discountRows}
-        <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div class="total-final">
           <span class="total-label">TOTAL</span>
           <span class="total-amount">${fARS(doc.total)}</span>
         </div>
       </div>
     </div>
     ${doc.notes?`<div class="notes"><strong>Notas:</strong> ${doc.notes}</div>`:""}
-  </div>
-  <div class="footer">
-    <span><span class="footer-brand">Libreria Madrid</span> &mdash; madrid.libreria &middot; +54 9 11 2502-0640</span>
-    <span>Emitido el ${new Date().toLocaleString("es-AR")}</span>
+    <div class="footer">
+      <span><span class="footer-brand">Libreria Madrid</span> — madrid.libreria · +54 9 11 2502-0640</span>
+      <span>Emitido el ${new Date().toLocaleString("es-AR")}</span>
+    </div>
   </div>
 </div>
 </body></html>`;
@@ -550,9 +599,10 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     setStockLog(l=>[full,...l]); await db.addStockLog(full);
   };
   const addOrder = async (order) => {
-    // Assign Reserva-XXXXXX correlative number
-    const n = await db.nextCounter("reserva");
-    const orderWithNum = {...order, docNum: fmtDocNum("Reserva", n)};
+    // Assign Reserva-XXXXXX correlative number (skip counter for test orders)
+    const test = isTestOrder(order.vendedor);
+    const n = test ? 0 : await db.nextCounter("reserva");
+    const orderWithNum = {...order, docNum: test ? "TEST-000000" : fmtDocNum("Reserva", n), isTest: test};
 
     const updatedProds = products.map(x=>{const it=orderWithNum.items.find(i=>i.pid===x.id);return it?{...x,stock:Math.max(0,x.stock-it.qty)}:x;});
     setProducts(updatedProds); setOrders(o=>[orderWithNum,...o]);
@@ -569,10 +619,11 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const ord = orders.find(o=>o.id===id);
     let updated = {...ord, stage};
 
-    // When moving to "confirmado": assign Comp-XXXXXX
+    // When moving to "confirmado": assign Comp-XXXXXX (skip counter for test orders)
     if(stage === "confirmado" && !ord.compNum) {
-      const n = await db.nextCounter("comp");
-      updated = {...updated, compNum: fmtDocNum("Comp", n)};
+      const test = isTestOrder(ord.vendedor);
+      const n = test ? 0 : await db.nextCounter("comp");
+      updated = {...updated, compNum: test ? "TEST-000000" : fmtDocNum("Comp", n), isTest: test};
     }
 
     setOrders(o=>o.map(x=>x.id===id?updated:x));
@@ -604,8 +655,9 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     setOrders(o=>o.filter(x=>x.id!==id)); await db.deleteOrder(id);
   };
   const addQuote = async (quote) => {
-    const n = await db.nextCounter("presu");
-    const quoteWithNum = {...quote, docNum: fmtDocNum("Presu", n)};
+    const test = isTestOrder(quote.vendedor);
+    const n = test ? 0 : await db.nextCounter("presu");
+    const quoteWithNum = {...quote, docNum: test ? "TEST-000000" : fmtDocNum("Presu", n), isTest: test};
     setQuotes(q=>[quoteWithNum,...q]);
     await db.upsertQuote(quoteWithNum);
   };
@@ -771,8 +823,9 @@ function OCard({o,exp,toggle,getP,onStage,onDel}) {
         <div style={{flex:1,minWidth:100}}>
           <div style={{fontWeight:700,fontSize:14,color:"#1a1a1a"}}>{o.client}</div>
           <div style={{fontSize:11,color:"#aaa",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-            {o.docNum&&<span style={{fontWeight:700,color:"#c0392b"}}>{o.docNum}</span>}
-            {o.compNum&&<span style={{fontWeight:700,color:"#1a5276"}}>{o.compNum}</span>}
+            {o.isTest&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:800}}>TEST</span>}
+            {o.docNum&&!o.isTest&&<span style={{fontWeight:700,color:"#c0392b"}}>{o.docNum}</span>}
+            {o.compNum&&!o.isTest&&<span style={{fontWeight:700,color:"#1a5276"}}>{o.compNum}</span>}
             <span>{o.date}</span>
             {o.vendedor&&<span>. 👤 {o.vendedor}</span>}
           </div>
@@ -1063,7 +1116,8 @@ function QuoteCard({q,exp,toggle,getP,onDel}) {
         <div style={{flex:1,minWidth:100}}>
           <div style={{fontWeight:700,fontSize:14,color:"#1a1a1a"}}>{q.client}</div>
           <div style={{fontSize:11,color:"#aaa",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-            {q.docNum&&<span style={{fontWeight:700,color:"#6c3483"}}>{q.docNum}</span>}
+            {q.isTest&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:800}}>TEST</span>}
+            {q.docNum&&!q.isTest&&<span style={{fontWeight:700,color:"#6c3483"}}>{q.docNum}</span>}
             <span>{q.date}</span>
             {q.vendedor&&<span>. 👤 {q.vendedor}</span>}
           </div>
