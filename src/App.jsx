@@ -62,10 +62,8 @@ const db = {
   clearNotifs:  async () => { const {error} = await supaAdmin.from("lm_notifs").delete().neq("id","none"); if(error) throw error; },
   // Counters
   nextCounter: async (id) => {
-    // Atomically increment and return new value
     const {data,error} = await supaAdmin.rpc("increment_counter", {counter_id: id});
     if(error) {
-      // Fallback: manual read+write if RPC not available
       const {data:row} = await supaAdmin.from("lm_counters").select("value").eq("id",id).single();
       const next = (row?.value||0) + 1;
       await supaAdmin.from("lm_counters").upsert({id, value:next});
@@ -73,6 +71,11 @@ const db = {
     }
     return data;
   },
+  // Activity log
+  // SQL: CREATE TABLE lm_activity (id TEXT PRIMARY KEY, fecha TEXT, usuario TEXT, rol TEXT, accion TEXT, detalle TEXT, ref_id TEXT, ref_tipo TEXT);
+  getActivity:  async () => { const {data,error} = await supabase.from("lm_activity").select("*").order("fecha",{ascending:false}).limit(500); if(error) throw error; return data||[]; },
+  addActivity:  async (a) => { try { await supaAdmin.from("lm_activity").insert(a); } catch(e) {} }, // silent fail - non critical
+  clearActivity: async () => { const {error} = await supaAdmin.from("lm_activity").delete().neq("id","none"); if(error) throw error; },
 };
 
 const RED = "#c0392b", REDD = "#922b21";
@@ -511,6 +514,7 @@ export default function App() {
   const [orders, setOrders]     = useState([]);
   const [quotes, setQuotes]     = useState([]);
   const [stockLog, setStockLog] = useState([]);
+  const [activity, setActivity] = useState([]);
   const [notifs, setNotifs]     = useState([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(null);
@@ -518,12 +522,12 @@ export default function App() {
   useEffect(() => {
     async function loadAll() {
       try {
-        const [u,v,p,o,q,sl,n] = await Promise.all([
+        const [u,v,p,o,q,sl,act,n] = await Promise.all([
           db.getUsers(), db.getVendors(), db.getProducts(),
-          db.getOrders(), db.getQuotes(), db.getStockLog(), db.getNotifs(),
+          db.getOrders(), db.getQuotes(), db.getStockLog(), db.getActivity(), db.getNotifs(),
         ]);
         setUsers(u); setVendors(v); setProducts(p);
-        setOrders(o); setQuotes(q); setStockLog(sl); setNotifs(n);
+        setOrders(o); setQuotes(q); setStockLog(sl); setActivity(act); setNotifs(n);
       } catch(e) {
         setError("No se pudo conectar con la base de datos. Verificá tu conexión.");
       } finally { setLoading(false); }
@@ -557,12 +561,13 @@ export default function App() {
     orders={orders} setOrders={setOrders}
     quotes={quotes} setQuotes={setQuotes}
     stockLog={stockLog} setStockLog={setStockLog}
+    activity={activity} setActivity={setActivity}
     notifs={notifs} setNotifs={setNotifs}
   />;
 }
 
 // ─── MAIN APP (authenticated) ─────────────────────────────────────────────────
-function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,products,setProducts,orders,setOrders,quotes,setQuotes,stockLog,setStockLog,notifs,setNotifs}) {
+function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,products,setProducts,orders,setOrders,quotes,setQuotes,stockLog,setStockLog,activity,setActivity,notifs,setNotifs}) {
   const isAdmin = currentUser.role === "admin";
   const [tab, setTab] = useState("central");
   const [showNotifs, setShowNotifs] = useState(false);
@@ -584,6 +589,11 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const full = {id:genId(),fecha:new Date().toLocaleString("es-AR"),usuario:currentUser.name,rol:currentUser.role,...entry};
     setStockLog(l=>[full,...l]); await db.addStockLog(full);
   };
+  const logActivity = async (accion, detalle, refId="", refTipo="") => {
+    const entry = {id:genId(),fecha:new Date().toLocaleString("es-AR"),usuario:currentUser.name,rol:currentUser.role,accion,detalle,ref_id:refId,ref_tipo:refTipo};
+    setActivity(a=>[entry,...a]);
+    await db.addActivity(entry);
+  };
   const addOrder = async (order) => {
     // Assign Reserva-XXXXXX correlative number (skip counter for test orders)
     const test = isTestOrder(order.vendedor);
@@ -596,6 +606,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     for(const p of updatedProds.filter(p=>orderWithNum.items.find(i=>i.pid===p.id))) await db.upsertProduct(p);
     const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"NUEVO_PEDIDO",para:"admin",icono:"🛒",titulo:"Nuevo pedido registrado",cuerpo:`${orderWithNum.client} - ${fARS(orderWithNum.total)} - ${orderWithNum.docNum}`,ref:orderWithNum.id};
     await db.addNotif(notif); setNotifs(n=>[notif,...n]);
+    await logActivity("Nuevo pedido", `${orderWithNum.docNum} - ${orderWithNum.client} - ${fARS(orderWithNum.total)} - Vendedor: ${orderWithNum.vendedor||"-"}`, orderWithNum.id, "pedido");
     // Auto-print Reserva document
     setTimeout(() => printDoc(orderWithNum, "reserva"), 400);
   };
@@ -624,6 +635,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       const cfg=SCFG[stage]||{};
       const n1={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"CAMBIO_ESTADO",para:"admin",icono:cfg.icon||"📋",titulo:`Pedido paso a ${cfg.label}`,cuerpo:`${ord.client} - ${fARS(ord.total)} - ${updated.compNum||""}`,ref:id};
       await db.addNotif(n1); setNotifs(n=>[n1,...n]);
+      await logActivity(`Cambio estado: ${cfg.label}`, `${ord.docNum||""} ${updated.compNum||""} - ${ord.client} - ${fARS(ord.total)}`.trim(), id, "pedido");
       const vendUser=users.find(u=>u.name===ord.vendedor||u.username===ord.vendedor);
       if(vendUser&&vendUser.id!==currentUser.id){
         const n2={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"CAMBIO_ESTADO",para:vendUser.id,icono:cfg.icon||"📋",titulo:`Tu pedido paso a ${cfg.label}`,cuerpo:`${ord.client} - ${fARS(ord.total)}`,ref:id};
@@ -638,7 +650,9 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       setProducts(updatedProds);
       for(const p of updatedProds.filter(p=>ord.items.find(i=>i.pid===p.id))) await db.upsertProduct(p);
     }
+    const ordDel=orders.find(o=>o.id===id);
     setOrders(o=>o.filter(x=>x.id!==id)); await db.deleteOrder(id);
+    if(ordDel) await logActivity("Pedido eliminado", `${ordDel.docNum||ordDel.compNum||""} - ${ordDel.client} - ${fARS(ordDel.total)}`, id, "pedido");
   };
   const addQuote = async (quote) => {
     const test = isTestOrder(quote.vendedor);
@@ -646,6 +660,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const quoteWithNum = {...quote, docNum: test ? "TEST-000000" : fmtDocNum("Presu", n), isTest: test};
     setQuotes(q=>[quoteWithNum,...q]);
     await db.upsertQuote(quoteWithNum);
+    await logActivity("Nueva cotización", `${quoteWithNum.docNum} - ${quoteWithNum.client} - ${fARS(quoteWithNum.total)} - Vendedor: ${quoteWithNum.vendedor||"-"}`, quoteWithNum.id, "cotizacion");
   };
   const delQuote = async (id) => { setQuotes(q=>q.filter(x=>x.id!==id)); await db.deleteQuote(id); };
 
@@ -664,12 +679,17 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       date: today(),
     };
     await addOrder(order);
+    await logActivity("Cotización convertida a reserva", `${quote.docNum||""} - ${quote.client} - ${fARS(quote.total)}`, quote.id, "cotizacion");
     // Marcar la cotización como convertida (no eliminar, queda como historial)
     const updated = {...quote, convertida: true, ordenId: order.id};
     setQuotes(q=>q.map(x=>x.id===quote.id?updated:x));
     await db.upsertQuote({...updated});
   };
-  const updProd = async (upd) => { setProducts(p=>p.map(x=>x.id===upd.id?upd:x)); await db.upsertProduct(upd); };
+  const updProd = async (upd) => {
+    const prev = products.find(p=>p.id===upd.id);
+    setProducts(p=>p.map(x=>x.id===upd.id?upd:x)); await db.upsertProduct(upd);
+    if(prev) await logActivity("Precio/stock editado", `${upd.name} - Venta: ${fARS(upd.salePrice)} (antes ${fARS(prev.salePrice)}) - Stock: ${upd.stock}`, upd.id, "producto");
+  };
   const addStock = async (pid,qty,newCost) => {
     const prod=products.find(p=>p.id===pid);
     const updatedProds=products.map(x=>{if(x.id!==pid)return x;const u={...x,stock:x.stock+qty};if(newCost){u.costPrice=newCost;u.salePrice=Math.round(newCost*1.5*100)/100;}return u;});
@@ -735,7 +755,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
         {tab==="precios"    && <Precios products={products}/>}
         {tab==="stock"      && <Stock products={products} onUpd={updProd} onDel={pid=>setProducts(p=>p.filter(x=>x.id!==pid))} onAdjust={(pid,qty)=>setProducts(p=>p.map(x=>x.id===pid?{...x,stock:x.stock+qty}:x))} isAdmin={isAdmin} addLog={addLog} stockLog={stockLog} setStockLog={setStockLog}/>}
         {tab==="compras"    && <Compras products={products} onStock={addStock}/>}
-        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs}/>}
+        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders}/>}
       </div>
     </div>
   );
@@ -1720,14 +1740,16 @@ function Compras({products,onStock}) {
 }
 
 // ─── ADMIN PANEL ──────────────────────────────────────────────────────────────
-function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs}) {
+function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders}) {
   const [section, setSection] = useState("vendors");
 
   const SECTIONS = [
-    {k:"vendors", label:"Vendedores",       icon:"👥"},
-    {k:"users",   label:"Usuarios",         icon:"🔐"},
-    {k:"excel",   label:"Lista de Precios", icon:"📊"},
-    {k:"notifcfg",label:"Notificaciones",   icon:"🔔"},
+    {k:"ventas",   label:"Ventas",           icon:"📈"},
+    {k:"activity", label:"Actividad",        icon:"📝"},
+    {k:"vendors",  label:"Vendedores",       icon:"👥"},
+    {k:"users",    label:"Usuarios",         icon:"🔐"},
+    {k:"excel",    label:"Lista de Precios", icon:"📊"},
+    {k:"notifcfg", label:"Notificaciones",   icon:"🔔"},
   ];
 
   return (
@@ -1739,10 +1761,284 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
           </button>
         ))}
       </div>
-      {section==="vendors"  && <VendorsPanel vendors={vendors} setVendors={setVendors}/>}
-      {section==="users"    && <UsersPanel   users={users}     setUsers={setUsers}/>}
-      {section==="excel"    && <ExcelPanel   products={products} setProducts={setProducts}/>}
-      {section==="notifcfg" && <NotifConfig  users={users} setUsers={setUsers} notifs={notifs} setNotifs={setNotifs}/>}
+      {section==="ventas"    && <VentasPanel   orders={orders}/>}
+      {section==="activity"  && <ActivityPanel activity={activity} setActivity={setActivity}/>}
+      {section==="vendors"   && <VendorsPanel  vendors={vendors} setVendors={setVendors}/>}
+      {section==="users"     && <UsersPanel    users={users}     setUsers={setUsers}/>}
+      {section==="excel"     && <ExcelPanel    products={products} setProducts={setProducts}/>}
+      {section==="notifcfg"  && <NotifConfig   users={users} setUsers={setUsers} notifs={notifs} setNotifs={setNotifs}/>}
+    </div>
+  );
+}
+
+// ── Panel de Ventas ───────────────────────────────────────────────────────────
+function VentasPanel({orders}) {
+  const vendidas = orders.filter(o=>o.stage==="entregado");
+  const [periodo, setPeriodo] = useState("mes"); // "dia"|"mes"|"vendedor"
+
+  // ── helpers ──
+  const totalGeneral = vendidas.reduce((s,o)=>s+o.total,0);
+  const cantGeneral  = vendidas.length;
+
+  // Por día (últimos 30 días)
+  const byDay = useMemo(()=>{
+    const map = {};
+    vendidas.forEach(o=>{
+      const d = o.date||"Sin fecha";
+      map[d] = (map[d]||0) + o.total;
+    });
+    return Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0])).slice(-30);
+  },[vendidas]);
+
+  // Por mes
+  const byMonth = useMemo(()=>{
+    const map = {};
+    vendidas.forEach(o=>{
+      const parts = (o.date||"").split("/");
+      const key = parts.length===3 ? `${parts[1]}/${parts[2]}` : o.date||"Sin fecha";
+      map[key] = (map[key]||0) + o.total;
+    });
+    return Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0]));
+  },[vendidas]);
+
+  // Por vendedor
+  const byVendedor = useMemo(()=>{
+    const map = {};
+    vendidas.forEach(o=>{
+      const v = o.vendedor||"Sin vendedor";
+      if(!map[v]) map[v]={total:0,cant:0};
+      map[v].total += o.total;
+      map[v].cant  += 1;
+    });
+    return Object.entries(map).sort((a,b)=>b[1].total-a[1].total);
+  },[vendidas]);
+
+  // ── mini bar chart ──
+  const BarChart = ({data, colorFn}) => {
+    const max = Math.max(...data.map(([,v])=>typeof v==="number"?v:v.total), 1);
+    return (
+      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+        {data.map(([label,val],i)=>{
+          const amount = typeof val==="number" ? val : val.total;
+          const cant   = typeof val==="object" ? val.cant : null;
+          const pct    = (amount/max)*100;
+          const color  = colorFn ? colorFn(i) : RED;
+          return (
+            <div key={label} style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:110,fontSize:11,color:"#555",textAlign:"right",flexShrink:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>
+              <div style={{flex:1,background:"#f5f5f5",borderRadius:4,overflow:"hidden",height:22}}>
+                <div style={{width:`${pct}%`,background:color,height:"100%",borderRadius:4,minWidth:4,transition:"width .3s"}}/>
+              </div>
+              <div style={{width:130,fontSize:12,fontWeight:700,color:"#1a1a1a",whiteSpace:"nowrap"}}>
+                {fARS(amount)}{cant!==null?<span style={{color:"#aaa",fontWeight:400,marginLeft:4}}>({cant})</span>:null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const COLORS = ["#c0392b","#e74c3c","#e67e22","#f1c40f","#1e8449","#1a5276","#6c3483","#2980b9","#16a085","#7f8c8d"];
+
+  if(vendidas.length===0) return (
+    <div style={{textAlign:"center",padding:60,background:"#fff",borderRadius:12,color:"#aaa"}}>
+      <div style={{fontSize:48,marginBottom:8}}>📈</div>
+      <div style={{fontWeight:700,fontSize:15}}>No hay pedidos entregados aún</div>
+      <div style={{fontSize:13,marginTop:4}}>Las ventas aparecerán aquí cuando los pedidos pasen a "Entregado"</div>
+    </div>
+  );
+
+  return (
+    <div>
+      {/* KPIs */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginBottom:20}}>
+        {[
+          {label:"Total vendido",    value:fARS(totalGeneral),      color:RED,   icon:"💰"},
+          {label:"Pedidos entregados",value:cantGeneral,            color:"#1a5276", icon:"📦"},
+          {label:"Ticket promedio",  value:fARS(totalGeneral/Math.max(cantGeneral,1)), color:"#1e8449", icon:"📊"},
+          {label:"Vendedores activos",value:byVendedor.length,      color:"#6c3483", icon:"👥"},
+        ].map(k=>(
+          <div key={k.label} style={{background:"#fff",borderRadius:12,padding:"16px 18px",boxShadow:"0 1px 6px #0001",borderLeft:`4px solid ${k.color}`}}>
+            <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>{k.icon} {k.label}</div>
+            <div style={{fontSize:20,fontWeight:900,color:k.color}}>{k.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tab selector */}
+      <div style={{background:"#fff",borderRadius:12,padding:4,marginBottom:16,display:"flex",gap:4,boxShadow:"0 1px 4px #0001"}}>
+        {[{k:"dia",l:"📅 Por día"},{k:"mes",l:"📆 Por mes"},{k:"vendedor",l:"👤 Por vendedor"}].map(t=>(
+          <button key={t.k} onClick={()=>setPeriodo(t.k)} style={{flex:1,padding:"9px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:periodo===t.k?`linear-gradient(135deg,${REDD},${RED})`:"transparent",color:periodo===t.k?"#fff":"#555"}}>
+            {t.l}
+          </button>
+        ))}
+      </div>
+
+      {/* Chart */}
+      <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 1px 4px #0001"}}>
+        {periodo==="dia" && <>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:16}}>📅 Ventas por día (últimos 30 días)</div>
+          {byDay.length===0
+            ? <div style={{color:"#aaa",textAlign:"center",padding:20}}>Sin datos</div>
+            : <BarChart data={byDay} colorFn={()=>RED}/>
+          }
+        </>}
+        {periodo==="mes" && <>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:16}}>📆 Ventas por mes</div>
+          {byMonth.length===0
+            ? <div style={{color:"#aaa",textAlign:"center",padding:20}}>Sin datos</div>
+            : <BarChart data={byMonth} colorFn={()=>"#1a5276"}/>
+          }
+        </>}
+        {periodo==="vendedor" && <>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:16}}>👤 Ventas por vendedor</div>
+          {byVendedor.length===0
+            ? <div style={{color:"#aaa",textAlign:"center",padding:20}}>Sin datos</div>
+            : <BarChart data={byVendedor} colorFn={(i)=>COLORS[i%COLORS.length]}/>
+          }
+          {/* Tabla detalle por vendedor */}
+          <div style={{marginTop:20,overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead><tr style={{background:"#f9f9f9"}}>
+                {["Vendedor","Pedidos","Total","Promedio"].map(h=>(
+                  <th key={h} style={{padding:"9px 12px",textAlign:"left",fontWeight:700,color:"#888",fontSize:11,textTransform:"uppercase"}}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {byVendedor.map(([v,d],i)=>(
+                  <tr key={v} style={{borderTop:"1px solid #f5f5f5"}}>
+                    <td style={{padding:"10px 12px",fontWeight:700}}>
+                      <span style={{display:"inline-block",width:10,height:10,borderRadius:"50%",background:COLORS[i%COLORS.length],marginRight:8}}/>
+                      {v}
+                    </td>
+                    <td style={{padding:"10px 12px",color:"#666"}}>{d.cant}</td>
+                    <td style={{padding:"10px 12px",fontWeight:800,color:RED}}>{fARS(d.total)}</td>
+                    <td style={{padding:"10px 12px",color:"#666"}}>{fARS(d.total/d.cant)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>}
+      </div>
+    </div>
+  );
+}
+
+// ── Panel de Actividad ────────────────────────────────────────────────────────
+function ActivityPanel({activity, setActivity}) {
+  const [search, setSearch] = useState("");
+  const [filterTipo, setFilterTipo] = useState("todos");
+  const [confirmClear, setConfirmClear] = useState(false);
+
+  const TIPOS = {
+    "Nuevo pedido":                {color:"#1a5276", bg:"#d6eaf8",  icon:"🛒"},
+    "Cambio estado: Confirmado":   {color:"#1a5276", bg:"#d6eaf8",  icon:"✅"},
+    "Cambio estado: En Armado":    {color:"#6c3483", bg:"#e8daef",  icon:"📦"},
+    "Cambio estado: Entregado":    {color:"#1e8449", bg:"#d5f5e3",  icon:"🎉"},
+    "Cambio estado: Reserva":      {color:"#c0392b", bg:"#fdecea",  icon:"🕐"},
+    "Nueva cotización":            {color:"#6c3483", bg:"#e8daef",  icon:"📄"},
+    "Cotización convertida a reserva":{color:"#e67e22",bg:"#fef9e7",icon:"🔄"},
+    "Pedido eliminado":            {color:"#c0392b", bg:"#fdecea",  icon:"🗑"},
+    "Precio/stock editado":        {color:"#e67e22", bg:"#fef9e7",  icon:"✏️"},
+  };
+
+  const tiposUnicos = ["todos", ...new Set(activity.map(a=>a.accion))];
+
+  const filtered = activity.filter(a=>{
+    if(filterTipo!=="todos" && a.accion!==filterTipo) return false;
+    if(search){
+      const q=search.toLowerCase();
+      return a.usuario?.toLowerCase().includes(q)||a.accion?.toLowerCase().includes(q)||a.detalle?.toLowerCase().includes(q);
+    }
+    return true;
+  });
+
+  // Resumen por usuario
+  const byUser = useMemo(()=>{
+    const map={};
+    activity.forEach(a=>{
+      if(!map[a.usuario]) map[a.usuario]=0;
+      map[a.usuario]++;
+    });
+    return Object.entries(map).sort((a,b)=>b[1]-a[1]);
+  },[activity]);
+
+  return (
+    <div>
+      {/* KPIs */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginBottom:16}}>
+        <div style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 4px #0001",borderLeft:`4px solid ${RED}`}}>
+          <div style={{fontSize:11,color:"#888",fontWeight:600}}>📝 Total acciones</div>
+          <div style={{fontSize:24,fontWeight:900,color:RED}}>{activity.length}</div>
+        </div>
+        {byUser.slice(0,3).map(([u,n])=>(
+          <div key={u} style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 4px #0001",borderLeft:"4px solid #1a5276"}}>
+            <div style={{fontSize:11,color:"#888",fontWeight:600}}>👤 {u}</div>
+            <div style={{fontSize:24,fontWeight:900,color:"#1a5276"}}>{n}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filtros */}
+      <div style={{background:"#fff",borderRadius:12,padding:12,marginBottom:12,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",boxShadow:"0 1px 4px #0001"}}>
+        <input value={search} onChange={e=>setSearch(e.target.value)}
+          placeholder="🔍 Buscar por usuario, acción o detalle..."
+          style={{flex:1,minWidth:200,padding:"7px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none"}}/>
+        <select value={filterTipo} onChange={e=>setFilterTipo(e.target.value)}
+          style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:12,background:"#fff",cursor:"pointer"}}>
+          {tiposUnicos.map(t=><option key={t} value={t}>{t==="todos"?"Todas las acciones":t}</option>)}
+        </select>
+        {activity.length>0&&(
+          confirmClear
+            ? <div style={{display:"flex",gap:6,alignItems:"center",background:"#fdecea",borderRadius:8,padding:"5px 10px",border:`1px solid ${RED}44`}}>
+                <span style={{fontSize:12,color:RED,fontWeight:600}}>¿Limpiar historial?</span>
+                <button onClick={async()=>{setActivity([]);await db.clearActivity();setConfirmClear(false);}} style={{padding:"3px 10px",borderRadius:6,border:"none",background:RED,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:12}}>Sí</button>
+                <button onClick={()=>setConfirmClear(false)} style={{padding:"3px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12}}>No</button>
+              </div>
+            : <button onClick={()=>setConfirmClear(true)} style={{padding:"6px 12px",borderRadius:8,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:11,fontWeight:600,whiteSpace:"nowrap"}}>🗑 Limpiar</button>
+        )}
+      </div>
+
+      {/* Tabla */}
+      {filtered.length===0
+        ? <div style={{textAlign:"center",padding:50,color:"#aaa",background:"#fff",borderRadius:12}}>
+            <div style={{fontSize:40,marginBottom:8}}>📝</div>
+            <div>{activity.length===0?"No hay actividad registrada aún.":"No hay resultados para ese filtro."}</div>
+          </div>
+        : <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 4px #0001",overflow:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead>
+                <tr style={{background:"#f9f9f9"}}>
+                  {["Fecha","Usuario","Acción","Detalle"].map(h=>(
+                    <th key={h} style={{padding:"10px 12px",textAlign:"left",fontWeight:700,color:"#888",fontSize:11,textTransform:"uppercase",letterSpacing:.4,whiteSpace:"nowrap"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((a,i)=>{
+                  const cfg = TIPOS[a.accion]||{color:"#666",bg:"#f5f5f5",icon:"•"};
+                  return (
+                    <tr key={a.id||i} style={{borderTop:"1px solid #f5f5f5"}}>
+                      <td style={{padding:"9px 12px",fontSize:11,color:"#888",whiteSpace:"nowrap"}}>{a.fecha}</td>
+                      <td style={{padding:"9px 12px",whiteSpace:"nowrap"}}>
+                        <span style={{fontWeight:700,fontSize:12}}>{a.usuario}</span>
+                        <span style={{fontSize:10,color:a.rol==="admin"?RED:"#1a5276",marginLeft:4,fontWeight:600}}>({a.rol})</span>
+                      </td>
+                      <td style={{padding:"9px 12px"}}>
+                        <span style={{background:cfg.bg,color:cfg.color,borderRadius:8,padding:"3px 9px",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>
+                          {cfg.icon} {a.accion}
+                        </span>
+                      </td>
+                      <td style={{padding:"9px 12px",color:"#555",fontSize:12,maxWidth:300,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={a.detalle}>{a.detalle}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+      }
     </div>
   );
 }
