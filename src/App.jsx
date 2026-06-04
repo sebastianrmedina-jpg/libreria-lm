@@ -29,8 +29,8 @@ const TEST_VENDOR = "Prueba";
 const isTestOrder = (vendedor) => vendedor === TEST_VENDOR;
 
 const db = {
-  getUsers:     async () => { const {data,error} = await supabase.from("lm_users").select("*").order("name"); if(error) throw error; return data||[]; },
-  saveUser:     async (u) => { const {error} = await supaAdmin.from("lm_users").upsert(u); if(error) throw error; },
+  getUsers:     async () => { const {data,error} = await supabase.from("lm_users").select("*").order("name"); if(error) throw error; return (data||[]).map(u=>({...u,priceList:u.price_list||"default",vendedor:u.vendedor||""})); },
+  saveUser:     async (u) => { const {error} = await supaAdmin.from("lm_users").upsert({...u, price_list: u.priceList||"default"}); if(error) throw error; },
   deleteUser:   async (id) => { const {error} = await supaAdmin.from("lm_users").delete().eq("id",id); if(error) throw error; },
 
   getVendors:   async () => { const {data,error} = await supabase.from("lm_vendors").select("name").order("name"); if(error) throw error; return (data||[]).map(v=>v.name); },
@@ -85,6 +85,10 @@ const db = {
     }
     return data;
   },
+  // Price lists
+  getPriceLists: async () => { const {data,error} = await supabase.from("lm_pricelists").select("*").order("name"); if(error) throw error; return data||[]; },
+  savePriceList: async (pl) => { const {error} = await supaAdmin.from("lm_pricelists").upsert(pl); if(error) throw error; },
+  deletePriceList: async (id) => { const {error} = await supaAdmin.from("lm_pricelists").delete().eq("id",id); if(error) throw error; },
   // Activity log
   // SQL: CREATE TABLE lm_activity (id TEXT PRIMARY KEY, fecha TEXT, usuario TEXT, rol TEXT, accion TEXT, detalle TEXT, ref_id TEXT, ref_tipo TEXT);
   getActivity:  async () => { const {data,error} = await supabase.from("lm_activity").select("*").order("fecha",{ascending:false}).limit(500); if(error) throw error; return data||[]; },
@@ -534,6 +538,7 @@ export default function App() {
   const [quotes, setQuotes]     = useState([]);
   const [stockLog, setStockLog] = useState([]);
   const [activity, setActivity] = useState([]);
+  const [priceLists, setPriceLists] = useState([{id:"default",name:"Normal",discount:0}]);
   const [notifs, setNotifs]     = useState([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(null);
@@ -541,12 +546,12 @@ export default function App() {
   useEffect(() => {
     async function loadAll() {
       try {
-        const [u,v,p,o,q,sl,act,n] = await Promise.all([
+        const [u,v,p,o,q,sl,act,pl,n] = await Promise.all([
           db.getUsers(), db.getVendors(), db.getProducts(),
-          db.getOrders(), db.getQuotes(), db.getStockLog(), db.getActivity(), db.getNotifs(),
+          db.getOrders(), db.getQuotes(), db.getStockLog(), db.getActivity(), db.getPriceLists(), db.getNotifs(),
         ]);
         setUsers(u); setVendors(v); setProducts(p);
-        setOrders(o); setQuotes(q); setStockLog(sl); setActivity(act); setNotifs(n);
+        setOrders(o); setQuotes(q); setStockLog(sl); setActivity(act); setPriceLists(pl); setNotifs(n);
       } catch(e) {
         setError("No se pudo conectar con la base de datos. Verificá tu conexión.");
       } finally { setLoading(false); }
@@ -581,12 +586,13 @@ export default function App() {
     quotes={quotes} setQuotes={setQuotes}
     stockLog={stockLog} setStockLog={setStockLog}
     activity={activity} setActivity={setActivity}
+    priceLists={priceLists} setPriceLists={setPriceLists}
     notifs={notifs} setNotifs={setNotifs}
   />;
 }
 
 // ─── MAIN APP (authenticated) ─────────────────────────────────────────────────
-function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,products,setProducts,orders,setOrders,quotes,setQuotes,stockLog,setStockLog,activity,setActivity,notifs,setNotifs}) {
+function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,products,setProducts,orders,setOrders,quotes,setQuotes,stockLog,setStockLog,activity,setActivity,priceLists,setPriceLists,notifs,setNotifs}) {
   const isAdmin = currentUser.role === "admin";
   const [tab, setTab] = useState("central");
   const [showNotifs, setShowNotifs] = useState(false);
@@ -604,6 +610,25 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     for(const n of toUpdate) await db.updateNotif(n.id,{leida:[...n.leida,currentUser.id]});
     setNotifs(ns=>ns.map(n=>n.leida.includes(currentUser.id)?n:{...n,leida:[...n.leida,currentUser.id]}));
   };
+  // ── PRICE LIST ──
+  // Admin can preview any list; other users use their assigned list
+  const [previewListId, setPreviewListId] = useState(null);
+  const activeListId = currentUser.role==="admin" && previewListId
+    ? previewListId
+    : (currentUser.priceList||"default");
+  const activeList = priceLists.find(pl=>pl.id===activeListId) || {id:"default",name:"Normal",discount:0};
+  // Apply list discount to a base price
+  const getPrice = (basePrice) => {
+    if(!activeList || activeList.discount===0) return basePrice;
+    return Math.round(basePrice * (1 - activeList.discount/100) * 100) / 100;
+  };
+  // Products with prices adjusted for active list
+  const pricedProducts = useMemo(()=>products.map(p=>({
+    ...p,
+    salePrice: getPrice(p.salePrice),
+    _basePrice: p.salePrice,
+  })),[products, activeList]);
+
   const addLog = async (entry) => {
     const full = {id:genId(),fecha:new Date().toLocaleString("es-AR"),usuario:currentUser.name,rol:currentUser.role,...entry};
     setStockLog(l=>[full,...l]); await db.addStockLog(full);
@@ -754,9 +779,17 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
               ))}
             </nav>
             <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 8px",borderLeft:"1px solid #ffffff33",marginLeft:4}}>
+              {isAdmin && priceLists.length>1 && (
+                <select value={previewListId||"default"} onChange={e=>setPreviewListId(e.target.value==="default"?null:e.target.value)}
+                  style={{background:"#ffffff22",border:"1px solid #ffffff44",color:"#fff",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:11,fontWeight:600}}>
+                  {priceLists.map(pl=><option key={pl.id} value={pl.id} style={{color:"#1a1a1a"}}>{pl.name}{pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
+                </select>
+              )}
               <button onClick={()=>setShowChangePass(true)}
                 style={{background:"#ffffff15",border:"1px solid #ffffff33",color:"#ffeeee",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:5}}>
-                👤 {currentUser.name} <span style={{fontSize:10,opacity:.7}}>🔑</span>
+                👤 {currentUser.name}
+                {activeList.discount>0&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:4,padding:"1px 5px",fontSize:10,fontWeight:800,marginLeft:3}}>{activeList.name}</span>}
+                <span style={{fontSize:10,opacity:.7}}>🔑</span>
               </button>
               <div style={{position:"relative"}}>
                 <button onClick={()=>setShowNotifs(s=>!s)} style={{background:"#ffffff22",border:"none",color:"#fff",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:16,lineHeight:1,position:"relative"}}>
@@ -774,12 +807,12 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       {showChangePass && <ChangePasswordModal currentUser={currentUser} users={users} setUsers={setUsers} onClose={(updated)=>{setShowChangePass(false);}}/>}
       <div style={{maxWidth:1200,margin:"0 auto",padding:"20px 16px"}}>
         {tab==="central"    && <Central orders={orders} products={products} onStage={setStage} onDel={delOrder}/>}
-        {tab==="nuevo"      && <Nuevo products={products} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser}/>}
-        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={products} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onTabChange={setTab} currentUser={currentUser}/>}
-        {tab==="precios"    && <Precios products={products}/>}
+        {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser}/>}
+        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onTabChange={setTab} currentUser={currentUser}/>}
+        {tab==="precios"    && <Precios products={pricedProducts}/>}
         {tab==="stock"      && <Stock products={products} onUpd={updProd} onDel={pid=>setProducts(p=>p.filter(x=>x.id!==pid))} onAdjust={(pid,qty)=>setProducts(p=>p.map(x=>x.id===pid?{...x,stock:x.stock+qty}:x))} isAdmin={isAdmin} addLog={addLog} stockLog={stockLog} setStockLog={setStockLog}/>}
         {tab==="compras"    && <Compras products={products} onStock={addStock}/>}
-        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders}/>}
+        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} priceLists={priceLists} setPriceLists={setPriceLists}/>}
       </div>
     </div>
   );
@@ -1986,16 +2019,17 @@ function Compras({products,onStock}) {
 }
 
 // ─── ADMIN PANEL ──────────────────────────────────────────────────────────────
-function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders}) {
+function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,priceLists,setPriceLists}) {
   const [section, setSection] = useState("vendors");
 
   const SECTIONS = [
-    {k:"ventas",   label:"Ventas",           icon:"📈"},
-    {k:"activity", label:"Actividad",        icon:"📝"},
-    {k:"vendors",  label:"Vendedores",       icon:"👥"},
-    {k:"users",    label:"Usuarios",         icon:"🔐"},
-    {k:"excel",    label:"Lista de Precios", icon:"📊"},
-    {k:"notifcfg", label:"Notificaciones",   icon:"🔔"},
+    {k:"ventas",      label:"Ventas",           icon:"📈"},
+    {k:"activity",    label:"Actividad",        icon:"📝"},
+    {k:"vendors",     label:"Vendedores",       icon:"👥"},
+    {k:"users",       label:"Usuarios",         icon:"🔐"},
+    {k:"pricelists",  label:"Listas de Precio", icon:"💲"},
+    {k:"excel",       label:"Importar Precios", icon:"📊"},
+    {k:"notifcfg",    label:"Notificaciones",   icon:"🔔"},
   ];
 
   return (
@@ -2007,12 +2041,13 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
           </button>
         ))}
       </div>
-      {section==="ventas"    && <VentasPanel   orders={orders}/>}
-      {section==="activity"  && <ActivityPanel activity={activity} setActivity={setActivity}/>}
-      {section==="vendors"   && <VendorsPanel  vendors={vendors} setVendors={setVendors}/>}
-      {section==="users"     && <UsersPanel    users={users}     setUsers={setUsers} vendors={vendors}/>}
-      {section==="excel"     && <ExcelPanel    products={products} setProducts={setProducts}/>}
-      {section==="notifcfg"  && <NotifConfig   users={users} setUsers={setUsers} notifs={notifs} setNotifs={setNotifs}/>}
+      {section==="ventas"      && <VentasPanel    orders={orders}/>}
+      {section==="activity"    && <ActivityPanel  activity={activity} setActivity={setActivity}/>}
+      {section==="vendors"     && <VendorsPanel   vendors={vendors} setVendors={setVendors}/>}
+      {section==="users"       && <UsersPanel     users={users} setUsers={setUsers} vendors={vendors} priceLists={priceLists}/>}
+      {section==="pricelists"  && <PriceListsPanel priceLists={priceLists} setPriceLists={setPriceLists}/>}
+      {section==="excel"       && <ExcelPanel     products={products} setProducts={setProducts}/>}
+      {section==="notifcfg"    && <NotifConfig    users={users} setUsers={setUsers} notifs={notifs} setNotifs={setNotifs}/>}
     </div>
   );
 }
@@ -2292,6 +2327,98 @@ function ActivityPanel({activity, setActivity}) {
 // ── Vendors ───────────────────────────────────────────────────────────────────
 // FIX: DB-first pattern - primero persistir en Supabase, luego actualizar estado local.
 // Esto evita que la UI quede desincronizada si Supabase falla.
+// -- Price Lists -----------------------------------------------------------------
+function PriceListsPanel({priceLists, setPriceLists}) {
+  const [form, setForm] = useState({name:"", discount:""});
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if(!form.name.trim()) { alert("Ingresá un nombre"); return; }
+    const disc = parseFloat(form.discount)||0;
+    if(disc < 0 || disc >= 100) { alert("El descuento debe ser entre 0 y 99"); return; }
+    setSaving(true);
+    const pl = {id: editing || genId(), name: form.name.trim(), discount: disc};
+    setPriceLists(list => editing ? list.map(x=>x.id===editing?pl:x) : [...list, pl]);
+    await db.savePriceList(pl);
+    setForm({name:"", discount:""}); setEditing(null); setSaving(false);
+  };
+
+  const del = async (id) => {
+    if(id==="default") { alert("No se puede eliminar la lista Normal"); return; }
+    if(!window.confirm("¿Eliminar esta lista?")) return;
+    setPriceLists(list=>list.filter(x=>x.id!==id));
+    await db.deletePriceList(id);
+  };
+
+  const startEdit = (pl) => { setEditing(pl.id); setForm({name:pl.name, discount:pl.discount}); };
+  const cancel = () => { setEditing(null); setForm({name:"", discount:""}); };
+
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,alignItems:"start"}}>
+      {/* Form */}
+      <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 1px 4px #0001"}}>
+        <div style={{fontWeight:800,fontSize:15,marginBottom:16}}>
+          {editing ? "✏️ Editar lista" : "➕ Nueva lista de precios"}
+        </div>
+        <Field label="Nombre de la lista">
+          <input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}
+            placeholder="Ej: Mayorista, Revendedor..." style={inputStyle}/>
+        </Field>
+        <Field label="Descuento sobre precio normal (%)">
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <input type="number" min="0" max="99" value={form.discount} onChange={e=>setForm(f=>({...f,discount:e.target.value}))}
+              placeholder="0" style={{...inputStyle,width:100}}/>
+            <span style={{fontSize:13,color:"#888"}}>%</span>
+            {parseFloat(form.discount)>0&&(
+              <span style={{fontSize:12,color:"#1e8449",fontWeight:600}}>
+                Precio de $1000 → {fARS(1000*(1-parseFloat(form.discount)/100))}
+              </span>
+            )}
+          </div>
+          <div style={{fontSize:11,color:"#888",marginTop:4}}>0% = precios normales sin cambios</div>
+        </Field>
+        <div style={{display:"flex",gap:8,marginTop:8}}>
+          <button onClick={save} disabled={saving||!form.name.trim()}
+            style={{flex:1,padding:"10px",borderRadius:9,border:"none",fontWeight:800,fontSize:13,cursor:"pointer",
+              background:(!form.name.trim())?"#e5e5e5":`linear-gradient(135deg,${REDD},${RED})`,
+              color:(!form.name.trim())?"#aaa":"#fff"}}>
+            {saving ? "Guardando..." : editing ? "Guardar cambios" : "Crear lista"}
+          </button>
+          {editing&&<button onClick={cancel} style={{padding:"10px 16px",borderRadius:9,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,cursor:"pointer"}}>Cancelar</button>}
+        </div>
+      </div>
+
+      {/* List */}
+      <div>
+        <div style={{fontWeight:700,fontSize:13,color:"#888",marginBottom:10,textTransform:"uppercase",letterSpacing:.5}}>
+          Listas existentes ({priceLists.length})
+        </div>
+        {priceLists.map(pl=>(
+          <div key={pl.id} style={{background:"#fff",borderRadius:10,padding:"14px 16px",marginBottom:8,boxShadow:"0 1px 4px #0001",display:"flex",alignItems:"center",gap:12}}>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:700,fontSize:14}}>{pl.name}</div>
+              <div style={{fontSize:12,color:"#888",marginTop:2}}>
+                {pl.discount===0
+                  ? <span style={{color:"#1e8449",fontWeight:600}}>Precios normales (sin descuento)</span>
+                  : <span style={{color:"#c0392b",fontWeight:600}}>-{pl.discount}% sobre precio normal</span>
+                }
+              </div>
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              {pl.id!=="default"&&<>
+                <button onClick={()=>startEdit(pl)} style={{padding:"5px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12}}>✏️</button>
+                <button onClick={()=>del(pl.id)} style={{padding:"5px 10px",borderRadius:6,border:"1.5px solid #fcc",background:"#fff",cursor:"pointer",fontSize:12,color:RED}}>🗑</button>
+              </>}
+              {pl.id==="default"&&<span style={{fontSize:11,color:"#aaa",padding:"5px 8px"}}>predeterminada</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function VendorsPanel({vendors,setVendors}) {
   const [newName, setNewName] = useState("");
   const [editing, setEditing] = useState(null);
@@ -2383,23 +2510,23 @@ function VendorsPanel({vendors,setVendors}) {
 }
 
 // ── Users ─────────────────────────────────────────────────────────────────────
-function UsersPanel({users,setUsers,vendors}) {
-  const [form, setForm] = useState({username:"",password:"",name:"",role:"vendedor",vendedor:""});
+function UsersPanel({users,setUsers,vendors,priceLists}) {
+  const [form, setForm] = useState({username:"",password:"",name:"",role:"vendedor",vendedor:"",priceList:"default"});
   const [editing, setEditing] = useState(null);
   const [showPass, setShowPass] = useState({});
 
-  const startEdit = (u) => { setEditing(u.id); setForm({username:u.username,password:u.password,name:u.name,role:u.role,email:u.email||"",vendedor:u.vendedor||""}); };
+  const startEdit = (u) => { setEditing(u.id); setForm({username:u.username,password:u.password,name:u.name,role:u.role,email:u.email||"",vendedor:u.vendedor||"",priceList:u.priceList||"default"}); };
   const cancelEdit = () => { setEditing(null); setForm({username:"",password:"",name:"",role:"vendedor"}); };
 
   const save = async () => {
     if(!form.username.trim()||!form.password.trim()||!form.name.trim()){alert("Completa todos los campos");return;}
     if(editing) {
-      const updated = {...users.find(u=>u.id===editing), ...form};
+      const updated = {...users.find(u=>u.id===editing), ...form, priceList:form.priceList||"default"};
       setUsers(us=>us.map(u=>u.id===editing?updated:u));
       await db.saveUser(updated);
     } else {
       if(users.find(u=>u.username===form.username.trim())){alert("Ese usuario ya existe");return;}
-      const newUser = {id:genId(),...form,username:form.username.trim(),name:form.name.trim()};
+      const newUser = {id:genId(),...form,username:form.username.trim(),name:form.name.trim(),priceList:form.priceList||"default"};
       setUsers(us=>[...us,newUser]);
       await db.saveUser(newUser);
     }
@@ -2446,6 +2573,14 @@ function UsersPanel({users,setUsers,vendors}) {
           </select>
           <div style={{fontSize:10,color:"#888",marginTop:3}}>El pedido se asignará automáticamente a este vendedor cuando inicie sesión</div>
         </Field>
+        <Field label="Lista de precios">
+          <select value={form.priceList||"default"} onChange={e=>setForm(f=>({...f,priceList:e.target.value}))} style={{...inputStyle,cursor:"pointer"}}>
+            {(priceLists||[{id:"default",name:"Normal",discount:0}]).map(pl=>(
+              <option key={pl.id} value={pl.id}>{pl.name}{pl.discount>0?` (-${pl.discount}%)`:""}</option>
+            ))}
+          </select>
+          <div style={{fontSize:10,color:"#888",marginTop:3}}>El usuario verá los precios según esta lista</div>
+        </Field>
         <div style={{display:"flex",gap:8,marginTop:4}}>
           <button onClick={save} style={{flex:1,padding:"9px",borderRadius:8,border:"none",background:RED,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13}}>{editing?"Guardar cambios":"Crear usuario"}</button>
           {editing&&<button onClick={cancelEdit} style={{padding:"9px 14px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontWeight:600,color:"#666",fontSize:13}}>Cancelar</button>}
@@ -2459,7 +2594,13 @@ function UsersPanel({users,setUsers,vendors}) {
               <span style={{fontSize:22}}>{u.role==="admin"?"👑":"👤"}</span>
               <div style={{flex:1}}>
                 <div style={{fontWeight:700,fontSize:13}}>{u.name}</div>
-                <div style={{fontSize:11,color:"#888"}}>@{u.username} . <span style={{color:u.role==="admin"?RED:"#1a5276",fontWeight:600}}>{u.role==="admin"?"Admin":"Vendedor"}</span>{u.vendedor&&<span style={{color:"#6c3483",marginLeft:6,fontWeight:600}}>. 👤 {u.vendedor}</span>}{u.email&&<span style={{color:"#aaa",marginLeft:6}}>. {u.email}</span>}</div>
+                <div style={{fontSize:11,color:"#888",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                  <span>@{u.username}</span>
+                  <span style={{color:u.role==="admin"?RED:"#1a5276",fontWeight:600}}>{u.role==="admin"?"Admin":"Vendedor"}</span>
+                  {u.vendedor&&<span style={{color:"#6c3483",fontWeight:600}}>. 👤 {u.vendedor}</span>}
+                  {u.priceList&&u.priceList!=="default"&&<span style={{background:"#fef9e7",color:"#e67e22",borderRadius:6,padding:"1px 6px",fontWeight:700,fontSize:10}}>💲 {(priceLists||[]).find(pl=>pl.id===u.priceList)?.name||u.priceList}</span>}
+                  {u.email&&<span style={{color:"#aaa"}}>. {u.email}</span>}
+                </div>
               </div>
               <button onClick={()=>startEdit(u)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11}}>✏️️</button>
               <button onClick={()=>remove(u.id)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:11}}>🗑</button>
