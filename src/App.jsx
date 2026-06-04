@@ -1580,14 +1580,25 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
   const [cat,setCat]=useState("todos");
   const [editing,setEditing]=useState(null);
   const [stockTab,setStockTab]=useState("lista");
+  const [page,setPage]=useState(0);
+  const PAGE_SIZE = 100;
+
   const CATS=useMemo(()=>["todos",...new Set(products.map(p=>p.category))].sort(),[products]);
   const q=search.toLowerCase();
-  const shown=useMemo(()=>products.filter(p=>{
+
+  // Reset page when filters change
+  useEffect(()=>setPage(0),[search,cat]);
+
+  const filtered=useMemo(()=>products.filter(p=>{
     if(cat!=="todos"&&p.category!==cat) return false;
     if(q) return norm(p.name).includes(norm(q))||p.id.toLowerCase().includes(q.toLowerCase());
     return true;
-  }).slice(0,150),[products,cat,q]);
+  }),[products,cat,q]);
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const shown = filtered.slice(page*PAGE_SIZE, (page+1)*PAGE_SIZE);
   const low=products.filter(p=>p.stock>0&&p.stock<=5);
+
   return (
     <div>
       {isAdmin && (
@@ -1604,13 +1615,17 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
       {stockTab==="lista" && <>
         {low.length>0&&<StockAlert low={low}/>}
         <div style={{background:"#fff",borderRadius:12,padding:14,marginBottom:14,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",boxShadow:"0 1px 4px #0001"}}>
-          <div style={{fontWeight:800,fontSize:15,flex:1}}>📦 Stock ({products.filter(p=>p.stock>0).length} productos con stock)</div>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar..."
-            style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:12,outline:"none",width:180}}/>
+          <div style={{fontWeight:800,fontSize:15,flex:1}}>
+            📦 Stock — <span style={{color:RED}}>{filtered.length.toLocaleString("es-AR")}</span> productos
+            {q||cat!=="todos" ? <span style={{fontSize:12,color:"#888",fontWeight:400,marginLeft:6}}>de {products.length.toLocaleString("es-AR")} total</span> : null}
+          </div>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar por nombre o código..."
+            style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:12,outline:"none",width:220}} autoFocus={false}/>
           <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
             {CATS.map(c=><button key={c} onClick={()=>setCat(c)} style={{padding:"4px 10px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:cat===c?RED:"#e5e5e5",background:cat===c?"#fdecea":"#fff",color:cat===c?RED:"#666"}}>{c==="todos"?"Todos":c}</button>)}
           </div>
         </div>
+
         <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 4px #0001",overflow:"auto"}}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
             <thead><tr style={{background:"#f9f9f9"}}>
@@ -1629,13 +1644,57 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
                       <td style={{padding:"9px 12px",fontWeight:700,color:RED}}>{fARS(p.salePrice)}</td>
                       {isAdmin&&<td style={{padding:"9px 12px",color:"#666"}}>{fARS(p.costPrice)}</td>}
                       {isAdmin&&<td style={{padding:"9px 12px",fontWeight:700,color:+m>=40?"#1e8449":"#e67e22"}}>{m}%</td>}
-                      <td style={{padding:"9px 12px"}}>{isAdmin&&<button onClick={()=>setEditing(p)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11,fontWeight:600}}>✏️️</button>}</td>
+                      <td style={{padding:"9px 12px"}}>{isAdmin&&<button onClick={()=>setEditing(p)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11,fontWeight:600}}>✏️</button>}</td>
                     </tr>;
                   })
               }
             </tbody>
           </table>
         </div>
+
+        {/* Paginación */}
+        {totalPages > 1 && (
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 4px",flexWrap:"wrap",gap:8}}>
+            <div style={{fontSize:12,color:"#888"}}>
+              Mostrando {page*PAGE_SIZE+1}–{Math.min((page+1)*PAGE_SIZE, filtered.length)} de {filtered.length.toLocaleString("es-AR")} productos
+            </div>
+            <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
+              <button onClick={()=>setPage(0)} disabled={page===0}
+                style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:page===0?"not-allowed":"pointer",color:page===0?"#ccc":"#555",fontSize:12,fontWeight:600}}>
+                «
+              </button>
+              <button onClick={()=>setPage(p=>Math.max(0,p-1))} disabled={page===0}
+                style={{padding:"5px 12px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:page===0?"not-allowed":"pointer",color:page===0?"#ccc":"#555",fontSize:12,fontWeight:600}}>
+                ← Anterior
+              </button>
+              {/* Page numbers — show at most 7 around current */}
+              {Array.from({length:totalPages},(_,i)=>i)
+                .filter(i=>i===0||i===totalPages-1||Math.abs(i-page)<=2)
+                .reduce((acc,i,idx,arr)=>{
+                  if(idx>0&&i-arr[idx-1]>1) acc.push("...");
+                  acc.push(i);
+                  return acc;
+                },[])
+                .map((item,i)=>
+                  item==="..." ? <span key={`e${i}`} style={{padding:"5px 4px",fontSize:12,color:"#aaa"}}>…</span>
+                  : <button key={item} onClick={()=>setPage(item)}
+                      style={{padding:"5px 10px",borderRadius:7,border:`1.5px solid ${page===item?RED:"#e5e5e5"}`,background:page===item?"#fdecea":"#fff",cursor:"pointer",color:page===item?RED:"#555",fontSize:12,fontWeight:page===item?800:600,minWidth:34}}>
+                      {item+1}
+                    </button>
+                )
+              }
+              <button onClick={()=>setPage(p=>Math.min(totalPages-1,p+1))} disabled={page===totalPages-1}
+                style={{padding:"5px 12px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:page===totalPages-1?"not-allowed":"pointer",color:page===totalPages-1?"#ccc":"#555",fontSize:12,fontWeight:600}}>
+                Siguiente →
+              </button>
+              <button onClick={()=>setPage(totalPages-1)} disabled={page===totalPages-1}
+                style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:page===totalPages-1?"not-allowed":"pointer",color:page===totalPages-1?"#ccc":"#555",fontSize:12,fontWeight:600}}>
+                »
+              </button>
+            </div>
+          </div>
+        )}
+
         {editing&&<EditModal p={editing} onSave={p=>{onUpd(p);setEditing(null);}} onClose={()=>setEditing(null)}/>}
       </>}
     </div>
