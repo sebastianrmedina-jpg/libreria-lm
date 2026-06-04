@@ -29,8 +29,8 @@ const TEST_VENDOR = "Prueba";
 const isTestOrder = (vendedor) => vendedor === TEST_VENDOR;
 
 const db = {
-  getUsers:     async () => { const {data,error} = await supabase.from("lm_users").select("*").order("name"); if(error) throw error; return (data||[]).map(u=>({...u,priceList:u.price_list||"default",vendedor:u.vendedor||""})); },
-  saveUser:     async (u) => { const {error} = await supaAdmin.from("lm_users").upsert({...u, price_list: u.priceList||"default"}); if(error) throw error; },
+  getUsers:     async () => { const {data,error} = await supabase.from("lm_users").select("*").order("name"); if(error) throw error; return (data||[]).map(u=>({...u,priceList:u.price_list||"default",vendedor:u.vendedor||"",canSeeAll:u.can_see_all!==false})); },
+  saveUser:     async (u) => { const {error} = await supaAdmin.from("lm_users").upsert({...u, price_list: u.priceList||"default", can_see_all: u.canSeeAll!==false}); if(error) throw error; },
   deleteUser:   async (id) => { const {error} = await supaAdmin.from("lm_users").delete().eq("id",id); if(error) throw error; },
 
   getVendors:   async () => { const {data,error} = await supabase.from("lm_vendors").select("name").order("name"); if(error) throw error; return (data||[]).map(v=>v.name); },
@@ -806,7 +806,11 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       {compPopup && <CompPopup order={compPopup} onClose={()=>setCompPopup(null)}/>}
       {showChangePass && <ChangePasswordModal currentUser={currentUser} users={users} setUsers={setUsers} onClose={(updated)=>{setShowChangePass(false);}}/>}
       <div style={{maxWidth:1200,margin:"0 auto",padding:"20px 16px"}}>
-        {tab==="central"    && <Central orders={orders} products={products} onStage={setStage} onDel={delOrder}/>}
+        {tab==="central"    && <Central
+          orders={isAdmin || currentUser.canSeeAll!==false
+            ? orders
+            : orders.filter(o=>o.vendedor===currentUser.vendedor||o.vendedor===currentUser.name)}
+          products={products} onStage={setStage} onDel={delOrder}/>}
         {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser}/>}
         {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onTabChange={setTab} currentUser={currentUser}/>}
         {tab==="precios"    && <Precios products={pricedProducts}/>}
@@ -2511,22 +2515,22 @@ function VendorsPanel({vendors,setVendors}) {
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 function UsersPanel({users,setUsers,vendors,priceLists}) {
-  const [form, setForm] = useState({username:"",password:"",name:"",role:"vendedor",vendedor:"",priceList:"default"});
+  const [form, setForm] = useState({username:"",password:"",name:"",role:"vendedor",vendedor:"",priceList:"default",canSeeAll:true});
   const [editing, setEditing] = useState(null);
   const [showPass, setShowPass] = useState({});
 
-  const startEdit = (u) => { setEditing(u.id); setForm({username:u.username,password:u.password,name:u.name,role:u.role,email:u.email||"",vendedor:u.vendedor||"",priceList:u.priceList||"default"}); };
+  const startEdit = (u) => { setEditing(u.id); setForm({username:u.username,password:u.password,name:u.name,role:u.role,email:u.email||"",vendedor:u.vendedor||"",priceList:u.priceList||"default",canSeeAll:u.canSeeAll!==false}); };
   const cancelEdit = () => { setEditing(null); setForm({username:"",password:"",name:"",role:"vendedor"}); };
 
   const save = async () => {
     if(!form.username.trim()||!form.password.trim()||!form.name.trim()){alert("Completa todos los campos");return;}
     if(editing) {
-      const updated = {...users.find(u=>u.id===editing), ...form, priceList:form.priceList||"default"};
+      const updated = {...users.find(u=>u.id===editing), ...form, priceList:form.priceList||"default", canSeeAll:form.canSeeAll!==false};
       setUsers(us=>us.map(u=>u.id===editing?updated:u));
       await db.saveUser(updated);
     } else {
       if(users.find(u=>u.username===form.username.trim())){alert("Ese usuario ya existe");return;}
-      const newUser = {id:genId(),...form,username:form.username.trim(),name:form.name.trim(),priceList:form.priceList||"default"};
+      const newUser = {id:genId(),...form,username:form.username.trim(),name:form.name.trim(),priceList:form.priceList||"default",canSeeAll:form.canSeeAll!==false};
       setUsers(us=>[...us,newUser]);
       await db.saveUser(newUser);
     }
@@ -2581,6 +2585,19 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
           </select>
           <div style={{fontSize:10,color:"#888",marginTop:3}}>El usuario verá los precios según esta lista</div>
         </Field>
+        <div style={{background:"#f9f9f9",borderRadius:8,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+          <div>
+            <div style={{fontWeight:700,fontSize:13}}>Ver todos los pedidos</div>
+            <div style={{fontSize:11,color:"#888",marginTop:2}}>
+              {form.canSeeAll ? "Ve todos los pedidos de todos los vendedores" : "Solo ve sus propios pedidos"}
+            </div>
+          </div>
+          <button onClick={()=>setForm(f=>({...f,canSeeAll:!f.canSeeAll}))}
+            style={{padding:"6px 14px",borderRadius:20,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,
+              background:form.canSeeAll?"#1e8449":"#e5e5e5",color:form.canSeeAll?"#fff":"#888",transition:"all .2s",whiteSpace:"nowrap"}}>
+            {form.canSeeAll ? "✅ Habilitado" : "🔒 Solo los suyos"}
+          </button>
+        </div>
         <div style={{display:"flex",gap:8,marginTop:4}}>
           <button onClick={save} style={{flex:1,padding:"9px",borderRadius:8,border:"none",background:RED,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13}}>{editing?"Guardar cambios":"Crear usuario"}</button>
           {editing&&<button onClick={cancelEdit} style={{padding:"9px 14px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontWeight:600,color:"#666",fontSize:13}}>Cancelar</button>}
@@ -2599,6 +2616,7 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
                   <span style={{color:u.role==="admin"?RED:"#1a5276",fontWeight:600}}>{u.role==="admin"?"Admin":"Vendedor"}</span>
                   {u.vendedor&&<span style={{color:"#6c3483",fontWeight:600}}>. 👤 {u.vendedor}</span>}
                   {u.priceList&&u.priceList!=="default"&&<span style={{background:"#fef9e7",color:"#e67e22",borderRadius:6,padding:"1px 6px",fontWeight:700,fontSize:10}}>💲 {(priceLists||[]).find(pl=>pl.id===u.priceList)?.name||u.priceList}</span>}
+                  {u.canSeeAll===false&&<span style={{background:"#fdecea",color:"#c0392b",borderRadius:6,padding:"1px 6px",fontWeight:700,fontSize:10}}>🔒 Solo sus pedidos</span>}
                   {u.email&&<span style={{color:"#aaa"}}>. {u.email}</span>}
                 </div>
               </div>
