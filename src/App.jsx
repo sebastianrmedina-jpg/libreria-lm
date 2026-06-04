@@ -145,6 +145,11 @@ const fmtDisc = (disc) => {
   return disc.type === "%" ? `-${v}%` : `-${fARS(v)}`;
 };
 
+// Normaliza texto para búsqueda: minúsculas + sin acentos
+// "Bolígrafo" -> "boligrafo", "Ñoño" -> "nono"
+const norm = (s) => String(s||"").toLowerCase()
+  .normalize("NFD").replace(/[̀-ͯ]/g, "");
+
 // ─── PDF / PRINT ──────────────────────────────────────────────────────────────
 // tipo: "reserva" | "confirmado" | "cotizacion"
 // doc must have: docNum, compNum (orders), client, vendedor, date, items, total, notes, validity
@@ -803,7 +808,7 @@ function Central({orders,products,onStage,onDel}) {
   const getP = id=>products.find(p=>p.id===id);
   const filtered = orders.filter(o=>{
     if(fStage!=="todos"&&o.stage!==fStage) return false;
-    if(search&&!o.client.toLowerCase().includes(search.toLowerCase())&&!o.id.includes(search)) return false;
+    if(search&&!norm(o.client).includes(norm(search))&&!o.id.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
   const deliv = orders.filter(o=>o.stage==="entregado").reduce((s,o)=>s+o.total,0);
@@ -896,7 +901,7 @@ function Precios({products}) {
     const q = search.toLowerCase();
     let list = products.filter(p=>{
       if(cat!=="todos" && p.category!==cat) return false;
-      if(q) return p.name.toLowerCase().includes(q) || p.id.includes(q);
+      if(q) return norm(p.name).includes(norm(q)) || p.id.toLowerCase().includes(q.toLowerCase());
       return true;
     });
     if(sortBy==="precio_asc")  list=[...list].sort((a,b)=>a.salePrice-b.salePrice);
@@ -955,7 +960,7 @@ function ProductSelector({products,cart,setCart}) {
   const CATS=useMemo(()=>["todos",...new Set(products.map(p=>p.category))].sort(),[products]);
   const shown=useMemo(()=>{
     const q=search.toLowerCase();
-    return products.filter(p=>{if(cat!=="todos"&&p.category!==cat)return false;if(q)return p.name.toLowerCase().includes(q)||p.id.includes(q);return true;}).slice(0,80);
+    return products.filter(p=>{if(cat!=="todos"&&p.category!==cat)return false;if(q)return norm(p.name).includes(norm(q))||p.id.toLowerCase().includes(q.toLowerCase());return true;}).slice(0,80);
   },[products,search,cat]);
   const addC=p=>setCart(c=>{const ex=c.find(i=>i.pid===p.id);return ex?c.map(i=>i.pid===p.id?{...i,qty:i.qty+1}:i):[...c,{pid:p.id,qty:1,price:p.salePrice,name:p.name,disc:{type:"%",value:""}}];});
   const setQ=(pid,qty)=>{if(qty<=0){setCart(c=>c.filter(i=>i.pid!==pid));setDiscOpen(null);}else setCart(c=>c.map(i=>i.pid===pid?{...i,qty}:i));};
@@ -1326,7 +1331,7 @@ function StockLog({log, onClear}) {
     if(filter!=="todos" && e.tipo!==filter) return false;
     if(search){
       const q=search.toLowerCase();
-      return e.producto?.toLowerCase().includes(q)||e.usuario?.toLowerCase().includes(q)||e.motivo?.toLowerCase().includes(q)||e.productoId?.toLowerCase().includes(q);
+      return norm(e.producto).includes(norm(q))||norm(e.usuario).includes(norm(q))||norm(e.motivo).includes(norm(q))||e.productoId?.toLowerCase().includes(q);
     }
     return true;
   });
@@ -1425,7 +1430,7 @@ function StockAdjust({products,onDel,onAdjust,addLog}) {
 
   const q=search.toLowerCase();
   const found = useMemo(()=>
-    q.length>1 ? products.filter(p=>p.name.toLowerCase().includes(q)||p.id.includes(q)).slice(0,40) : []
+    q.length>1 ? products.filter(p=>norm(p.name).includes(norm(q))||p.id.toLowerCase().includes(q.toLowerCase())).slice(0,40) : []
   ,[products,search,q]);
 
   const reset = () => { setSelected(null); setQty(0); setReason(""); setSearch(""); };
@@ -1579,7 +1584,7 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
   const q=search.toLowerCase();
   const shown=useMemo(()=>products.filter(p=>{
     if(cat!=="todos"&&p.category!==cat) return false;
-    if(q) return p.name.toLowerCase().includes(q)||p.id.includes(q);
+    if(q) return norm(p.name).includes(norm(q))||p.id.toLowerCase().includes(q.toLowerCase());
     return true;
   }).slice(0,150),[products,cat,q]);
   const low=products.filter(p=>p.stock>0&&p.stock<=5);
@@ -1674,7 +1679,7 @@ function Compras({products,onStock}) {
   const [ok,setOk]=useState(false);
   const found=useMemo(()=>{
     const q=search.toLowerCase();
-    return q?products.filter(p=>p.name.toLowerCase().includes(q)||p.id.includes(q)).slice(0,50):[];
+    return q?products.filter(p=>norm(p.name).includes(norm(q))||p.id.toLowerCase().includes(q.toLowerCase())).slice(0,50):[];
   },[products,search]);
   const addI=p=>{if(!items.find(i=>i.pid===p.id))setItems(x=>[...x,{pid:p.id,name:p.name,qty:1,cost:p.costPrice}]);};
   const remI=pid=>setItems(x=>x.filter(i=>i.pid!==pid));
@@ -1950,7 +1955,7 @@ function ActivityPanel({activity, setActivity}) {
     if(filterTipo!=="todos" && a.accion!==filterTipo) return false;
     if(search){
       const q=search.toLowerCase();
-      return a.usuario?.toLowerCase().includes(q)||a.accion?.toLowerCase().includes(q)||a.detalle?.toLowerCase().includes(q);
+      return norm(a.usuario).includes(norm(q))||norm(a.accion).includes(norm(q))||norm(a.detalle).includes(norm(q));
     }
     return true;
   });
