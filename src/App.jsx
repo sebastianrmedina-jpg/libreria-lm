@@ -72,10 +72,10 @@ const db = {
 const RED = "#c0392b", REDD = "#922b21";
 const STAGES = ["reserva","confirmado","en armado","entregado"];
 const SCFG = {
-  reserva:     {label:"Reserva",    color:"#c0392b", bg:"#fdecea", icon:"\u{1F550}"},
+  reserva:     {label:"Reserva",    color:"#c0392b", bg:"#fdecea", icon:"🕐"},
   confirmado:  {label:"Confirmado", color:"#1a5276", bg:"#d6eaf8", icon:"\u2705"},
-  "en armado": {label:"En Armado",  color:"#6c3483", bg:"#e8daef", icon:"\u{1F4E6}"},
-  entregado:   {label:"Entregado",  color:"#1e8449", bg:"#d5f5e3", icon:"\u{1F389}"},
+  "en armado": {label:"En Armado",  color:"#6c3483", bg:"#e8daef", icon:"📦"},
+  entregado:   {label:"Entregado",  color:"#1e8449", bg:"#d5f5e3", icon:"🎉"},
 };
 
 const LOGO = "/logo.png";
@@ -113,6 +113,29 @@ function Field({label,children}) {
 }
 const inputStyle = {width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",boxSizing:"border-box",background:"#fff"};
 
+// ─── DISCOUNT HELPERS ────────────────────────────────────────────────────────
+// Returns discounted price for one item
+const applyItemDiscount = (price, qty, disc) => {
+  if(!disc || (!disc.value)) return price * qty;
+  const v = parseFloat(disc.value) || 0;
+  if(disc.type === "%") return Math.max(0, price - price * v / 100) * qty;
+  return Math.max(0, price * qty - v);
+};
+// Returns final total after global discount
+const applyGlobalDiscount = (subtotal, disc) => {
+  if(!disc || (!disc.value)) return subtotal;
+  const v = parseFloat(disc.value) || 0;
+  if(disc.type === "%") return Math.max(0, subtotal - subtotal * v / 100);
+  return Math.max(0, subtotal - v);
+};
+// Format discount label for display
+const fmtDisc = (disc) => {
+  if(!disc || !disc.value) return null;
+  const v = parseFloat(disc.value) || 0;
+  if(!v) return null;
+  return disc.type === "%" ? `-${v}%` : `-${fARS(v)}`;
+};
+
 // ─── PDF / PRINT ──────────────────────────────────────────────────────────────
 // tipo: "reserva" | "confirmado" | "cotizacion"
 // doc must have: docNum, compNum (orders), client, vendedor, date, items, total, notes, validity
@@ -135,14 +158,36 @@ function printDoc(doc, tipo) {
       docNumDisplay = doc.docNum || "Reserva-------";
     }
 
-    const itemRows = doc.items.map(it =>
-      `<tr>
+    const itemRows = doc.items.map(it => {
+      const hasDisc = it.disc && parseFloat(it.disc.value) > 0;
+      const lineTotal = applyItemDiscount(it.price, it.qty, it.disc);
+      const originalTotal = it.price * it.qty;
+      const discLabel = hasDisc ? fmtDisc(it.disc) : "";
+      return `<tr>
         <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;font-size:15px;">${it.name||""}</td>
         <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;text-align:center;font-size:15px;">${it.qty}</td>
-        <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;text-align:right;font-size:15px;">${fARS(it.price)}</td>
-        <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:700;font-size:15px;">${fARS(it.price*it.qty)}</td>
-      </tr>`
-    ).join("");
+        <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;text-align:right;font-size:15px;">
+          ${fARS(it.price)}
+          ${hasDisc?`<div style="font-size:11px;color:#1e8449;font-weight:700;">${discLabel}</div>`:""}
+        </td>
+        <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:700;font-size:15px;">
+          ${hasDisc?`<div style="font-size:11px;color:#aaa;text-decoration:line-through;">${fARS(originalTotal)}</div>`:""}
+          <span style="color:${hasDisc?"#1e8449":"inherit"}">${fARS(lineTotal)}</span>
+        </td>
+      </tr>`;
+    }).join("");
+
+    // Build discount summary rows for the total box
+    const subtotalVal = doc.items.reduce((s,it)=>s+applyItemDiscount(it.price,it.qty,it.disc),0);
+    const hasItemDiscs = doc.items.some(it=>it.disc&&parseFloat(it.disc.value)>0);
+    const hasGlobalDisc = doc.globalDisc && parseFloat(doc.globalDisc.value)>0;
+    const globalDiscAmt = hasGlobalDisc ? subtotalVal - applyGlobalDiscount(subtotalVal, doc.globalDisc) : 0;
+    const discountRows = (hasItemDiscs || hasGlobalDisc) ? `
+      ${hasItemDiscs ? `<div style="display:flex;justify-content:space-between;font-size:13px;color:#888;margin-bottom:4px;"><span>Subtotal s/dto</span><span>${fARS(doc.items.reduce((s,it)=>s+it.price*it.qty,0))}</span></div>` : ""}
+      ${hasItemDiscs ? `<div style="display:flex;justify-content:space-between;font-size:13px;color:#1e8449;margin-bottom:4px;"><span>Dto. por item</span><span>-${fARS(doc.items.reduce((s,it)=>s+it.price*it.qty,0)-subtotalVal)}</span></div>` : ""}
+      ${hasGlobalDisc ? `<div style="display:flex;justify-content:space-between;font-size:13px;color:#1e8449;margin-bottom:4px;"><span>Dto. global (${fmtDisc(doc.globalDisc)})</span><span>-${fARS(globalDiscAmt)}</span></div>` : ""}
+      <div style="border-top:1px solid #e0e0e0;margin:6px 0;"></div>
+    ` : "";
 
     const validityHtml = (tipo==="cotizacion" && doc.validity)
       ? `<div style="background:#fef9e7;border-left:3px solid #f1c40f;padding:8px 14px;border-radius:0 8px 8px 0;font-size:13px;color:#7d6608;margin-bottom:16px;">
@@ -212,9 +257,12 @@ function printDoc(doc, tipo) {
       <tbody>${itemRows}</tbody>
     </table>
     <div class="total-wrap">
-      <div class="total-box">
-        <span class="total-label">TOTAL</span>
-        <span class="total-amount">${fARS(doc.total)}</span>
+      <div class="total-box" style="flex-direction:column;align-items:stretch;gap:0;">
+        ${discountRows}
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span class="total-label">TOTAL</span>
+          <span class="total-amount">${fARS(doc.total)}</span>
+        </div>
       </div>
     </div>
     ${doc.notes?`<div class="notes"><strong>Notas:</strong> ${doc.notes}</div>`:""}
@@ -249,9 +297,9 @@ function printDoc(doc, tipo) {
 
 // ─── NOTIFICATION TYPES CONFIG ───────────────────────────────────────────────
 const NOTIF_TYPES = {
-  NUEVO_PEDIDO:   {label:"Nuevo pedido",         icon:"\u{1F6D2}", color:"#1a5276", bg:"#d6eaf8"},
-  CAMBIO_ESTADO:  {label:"Cambio de estado",      icon:"\u{1F4CB}", color:"#6c3483", bg:"#e8daef"},
-  ALTA_MERCADERIA:{label:"Alta de mercader\u00eda",    icon:"\u{1F4E6}", color:"#1e8449", bg:"#d5f5e3"},
+  NUEVO_PEDIDO:   {label:"Nuevo pedido",         icon:"🛒", color:"#1a5276", bg:"#d6eaf8"},
+  CAMBIO_ESTADO:  {label:"Cambio de estado",      icon:"📋", color:"#6c3483", bg:"#e8daef"},
+  ALTA_MERCADERIA:{label:"Alta de mercader\u00eda",    icon:"📦", color:"#1e8449", bg:"#d5f5e3"},
   PEDIDOS_PEND:   {label:"Pedidos pendientes",    icon:"\u23F0", color:"#e67e22", bg:"#fef9e7"},
 };
 
@@ -275,7 +323,7 @@ function NotifPanel({notifs,setNotifs,currentUser,users,onClose,onMarkAllRead,pu
       <div onClick={e=>e.stopPropagation()} style={{position:"fixed",top:70,right:16,width:380,maxHeight:"80vh",background:"#fff",borderRadius:16,boxShadow:"0 12px 40px #0003",border:"1px solid #f0f0f0",display:"flex",flexDirection:"column",zIndex:999,overflow:"hidden"}}>
         <div style={{padding:"14px 18px",borderBottom:"1px solid #f5f5f5",display:"flex",alignItems:"center",justifyContent:"space-between",background:`linear-gradient(135deg,${REDD},${RED})`,borderRadius:"16px 16px 0 0"}}>
           <div style={{color:"#fff",fontWeight:800,fontSize:15}}>
-            \u{1F514} Notificaciones {unread.length>0&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:10,fontSize:11,padding:"1px 6px",marginLeft:6,fontWeight:800}}>{unread.length}</span>}
+            🔔 Notificaciones {unread.length>0&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:10,fontSize:11,padding:"1px 6px",marginLeft:6,fontWeight:800}}>{unread.length}</span>}
           </div>
           <div style={{display:"flex",gap:6}}>
             {unread.length>0&&<button onClick={onMarkAllRead} style={{padding:"4px 10px",borderRadius:6,border:"none",background:"#ffffff33",color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}}>Marcar todas le\u00eddas</button>}
@@ -293,7 +341,7 @@ function NotifPanel({notifs,setNotifs,currentUser,users,onClose,onMarkAllRead,pu
         )}
         <div style={{overflowY:"auto",flex:1}}>
           {myNotifs.length===0
-            ? <div style={{textAlign:"center",padding:40,color:"#aaa"}}><div style={{fontSize:36,marginBottom:8}}>\u{1F515}</div><div>No ten\u00e9s notificaciones</div></div>
+            ? <div style={{textAlign:"center",padding:40,color:"#aaa"}}><div style={{fontSize:36,marginBottom:8}}>🔕</div><div>No ten\u00e9s notificaciones</div></div>
             : myNotifs.map(n=>{
                 const cfg = NOTIF_TYPES[n.tipo]||{icon:"\u2022",color:"#666",bg:"#f5f5f5"};
                 const isRead = n.leida.includes(currentUser.id);
@@ -335,7 +383,7 @@ function NotifConfig({users,setUsers,notifs,setNotifs}) {
   return (
     <div>
       <div style={{background:"#d6eaf8",border:"1px solid #aed6f1",borderRadius:12,padding:"12px 16px",marginBottom:16,fontSize:13,color:"#1a5276"}}>
-        <strong>\u{1F514} Centro de notificaciones</strong> &mdash; Configur\u00e1 qu\u00e9 alertas recibe cada usuario dentro de la app.<br/>
+        <strong>🔔 Centro de notificaciones</strong> &mdash; Configur\u00e1 qu\u00e9 alertas recibe cada usuario dentro de la app.<br/>
         <span style={{fontSize:11,marginTop:4,display:"block",color:"#1a5276bb"}}>Para env\u00edo de emails autom\u00e1ticos conect\u00e1 <strong>EmailJS</strong> cuando la app est\u00e9 en producci\u00f3n.</span>
       </div>
       {users.map(u=>{
@@ -343,10 +391,10 @@ function NotifConfig({users,setUsers,notifs,setNotifs}) {
         return (
           <div key={u.id} style={{background:"#fff",borderRadius:12,padding:18,marginBottom:12,boxShadow:"0 1px 4px #0001"}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-              <span style={{fontSize:24}}>{u.role==="admin"?"\u{1F451}":"\u{1F464}"}</span>
+              <span style={{fontSize:24}}>{u.role==="admin"?"👑":"👤"}</span>
               <div>
                 <div style={{fontWeight:800,fontSize:14}}>{u.name}</div>
-                <div style={{fontSize:11,color:"#888"}}>@{u.username} \u00b7 <span style={{color:u.role==="admin"?RED:"#1a5276",fontWeight:600}}>{u.role==="admin"?"Admin":"Vendedor"}</span>{u.email&&<span style={{marginLeft:6,color:"#aaa"}}>\u00b7 \u{1F4E7} {u.email}</span>}{!u.email&&<span style={{marginLeft:6,color:"#e67e22",fontSize:10}}>\u26a0 Sin email configurado</span>}</div>
+                <div style={{fontSize:11,color:"#888"}}>@{u.username} \u00b7 <span style={{color:u.role==="admin"?RED:"#1a5276",fontWeight:600}}>{u.role==="admin"?"Admin":"Vendedor"}</span>{u.email&&<span style={{marginLeft:6,color:"#aaa"}}>\u00b7 📧 {u.email}</span>}{!u.email&&<span style={{marginLeft:6,color:"#e67e22",fontSize:10}}>\u26a0 Sin email configurado</span>}</div>
               </div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:8}}>
@@ -366,7 +414,7 @@ function NotifConfig({users,setUsers,notifs,setNotifs}) {
           </div>
         );
       })}
-      {notifs.length>0&&(<div style={{marginTop:8,textAlign:"right"}}><button onClick={async()=>{setNotifs([]);await db.clearNotifs();}} style={{padding:"7px 14px",borderRadius:8,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:12,fontWeight:600}}>\u{1F5D1} Limpiar todas las notificaciones ({notifs.length})</button></div>)}
+      {notifs.length>0&&(<div style={{marginTop:8,textAlign:"right"}}><button onClick={async()=>{setNotifs([]);await db.clearNotifs();}} style={{padding:"7px 14px",borderRadius:8,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:12,fontWeight:600}}>🗑 Limpiar todas las notificaciones ({notifs.length})</button></div>)}
     </div>
   );
 }
@@ -406,7 +454,7 @@ function Login({users, onLogin}) {
         <Field label="Contrase\u00f1a">
           <div style={{position:"relative"}}>
             <input type={showPass?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()} placeholder="Tu contrase\u00f1a" style={{...inputStyle,paddingRight:40}}/>
-            <button onClick={()=>setShowPass(s=>!s)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:16,color:"#aaa"}}>{showPass?"\u{1F648}":"\u{1F441}"}</button>
+            <button onClick={()=>setShowPass(s=>!s)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:16,color:"#aaa"}}>{showPass?"🙈":"👁"}</button>
           </div>
         </Field>
         {error && <div style={{background:"#fdecea",color:RED,borderRadius:8,padding:"8px 12px",fontSize:13,marginBottom:12,textAlign:"center"}}>{error}</div>}
@@ -510,7 +558,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     setProducts(updatedProds); setOrders(o=>[orderWithNum,...o]);
     await db.upsertOrder(orderWithNum);
     for(const p of updatedProds.filter(p=>orderWithNum.items.find(i=>i.pid===p.id))) await db.upsertProduct(p);
-    const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"NUEVO_PEDIDO",para:"admin",icono:"\u{1F6D2}",titulo:"Nuevo pedido registrado",cuerpo:`${orderWithNum.client} \u2014 ${fARS(orderWithNum.total)} \u2014 ${orderWithNum.docNum}`,ref:orderWithNum.id};
+    const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"NUEVO_PEDIDO",para:"admin",icono:"🛒",titulo:"Nuevo pedido registrado",cuerpo:`${orderWithNum.client} \u2014 ${fARS(orderWithNum.total)} \u2014 ${orderWithNum.docNum}`,ref:orderWithNum.id};
     await db.addNotif(notif); setNotifs(n=>[notif,...n]);
     // Auto-print Reserva document
     setTimeout(() => printDoc(orderWithNum, "reserva"), 400);
@@ -537,11 +585,11 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
 
     if(ord){
       const cfg=SCFG[stage]||{};
-      const n1={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"CAMBIO_ESTADO",para:"admin",icono:cfg.icon||"\u{1F4CB}",titulo:`Pedido paso a ${cfg.label}`,cuerpo:`${ord.client} \u2014 ${fARS(ord.total)} \u2014 ${updated.compNum||""}`,ref:id};
+      const n1={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"CAMBIO_ESTADO",para:"admin",icono:cfg.icon||"📋",titulo:`Pedido paso a ${cfg.label}`,cuerpo:`${ord.client} \u2014 ${fARS(ord.total)} \u2014 ${updated.compNum||""}`,ref:id};
       await db.addNotif(n1); setNotifs(n=>[n1,...n]);
       const vendUser=users.find(u=>u.name===ord.vendedor||u.username===ord.vendedor);
       if(vendUser&&vendUser.id!==currentUser.id){
-        const n2={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"CAMBIO_ESTADO",para:vendUser.id,icono:cfg.icon||"\u{1F4CB}",titulo:`Tu pedido paso a ${cfg.label}`,cuerpo:`${ord.client} \u2014 ${fARS(ord.total)}`,ref:id};
+        const n2={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"CAMBIO_ESTADO",para:vendUser.id,icono:cfg.icon||"📋",titulo:`Tu pedido paso a ${cfg.label}`,cuerpo:`${ord.client} \u2014 ${fARS(ord.total)}`,ref:id};
         await db.addNotif(n2); setNotifs(n=>[n2,...n]);
       }
     }
@@ -570,19 +618,19 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const updProd=updatedProds.find(p=>p.id===pid);
     if(updProd)await db.upsertProduct(updProd);
     if(prod){
-      const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"ALTA_MERCADERIA",para:"admin",icono:"\u{1F4E6}",titulo:"Alta de mercaderia",cuerpo:`${prod.name} \u2014 +${qty} unidades${newCost?` \u2014 Nuevo costo: ${fARS(newCost)}`:""}`,ref:pid};
+      const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"ALTA_MERCADERIA",para:"admin",icono:"📦",titulo:"Alta de mercaderia",cuerpo:`${prod.name} \u2014 +${qty} unidades${newCost?` \u2014 Nuevo costo: ${fARS(newCost)}`:""}`,ref:pid};
       await db.addNotif(notif); setNotifs(n=>[notif,...n]);
     }
   };
 
   const pending = orders.filter(o=>o.stage!=="entregado").length;
   const TABS = [
-    {k:"central",   label:"Central",           icon:"\u{1F4CB}", roles:["admin","vendedor"]},
-    {k:"nuevo",     label:"Nuevo Pedido",       icon:"\u{1F6D2}", roles:["admin","vendedor"]},
-    {k:"cotizacion",label:"Cotizaciones",       icon:"\u{1F4C4}", roles:["admin","vendedor"]},
-    {k:"precios",   label:"Precios",            icon:"\u{1F4B2}", roles:["admin","vendedor"]},
-    {k:"stock",     label:"Stock",              icon:"\u{1F4E6}", roles:["admin","vendedor"]},
-    {k:"compras",   label:"Alta de Mercanc\u00eda",icon:"\u{1F3EA}", roles:["admin","vendedor"]},
+    {k:"central",   label:"Central",           icon:"📋", roles:["admin","vendedor"]},
+    {k:"nuevo",     label:"Nuevo Pedido",       icon:"🛒", roles:["admin","vendedor"]},
+    {k:"cotizacion",label:"Cotizaciones",       icon:"📄", roles:["admin","vendedor"]},
+    {k:"precios",   label:"Precios",            icon:"💲", roles:["admin","vendedor"]},
+    {k:"stock",     label:"Stock",              icon:"📦", roles:["admin","vendedor"]},
+    {k:"compras",   label:"Alta de Mercanc\u00eda",icon:"🏪", roles:["admin","vendedor"]},
     {k:"admin",     label:"Administracion",     icon:"\u2605",   roles:["admin"]},
   ].filter(t=>t.roles.includes(currentUser.role));
 
@@ -607,10 +655,10 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
               ))}
             </nav>
             <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 8px",borderLeft:"1px solid #ffffff33",marginLeft:4}}>
-              <span style={{color:"#ffeeee",fontSize:12}}>\u{1F464} {currentUser.name}</span>
+              <span style={{color:"#ffeeee",fontSize:12}}>👤 {currentUser.name}</span>
               <div style={{position:"relative"}}>
                 <button onClick={()=>setShowNotifs(s=>!s)} style={{background:"#ffffff22",border:"none",color:"#fff",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:16,lineHeight:1,position:"relative"}}>
-                  \u{1F514}
+                  🔔
                   {unreadCount>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#f1c40f",color:"#1a1a1a",borderRadius:10,fontSize:9,padding:"1px 4px",fontWeight:800,minWidth:14,textAlign:"center"}}>{unreadCount}</span>}
                 </button>
               </div>
@@ -686,17 +734,17 @@ function Central({orders,products,onStage,onDel}) {
         {STAGES.map(s=>{const c=SCFG[s],cnt=orders.filter(o=>o.stage===s).length;return <div key={s} onClick={()=>setFStage(fStage===s?"todos":s)} style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 6px #0001",borderLeft:`4px solid ${c.color}`,cursor:"pointer",outline:fStage===s?`2px solid ${c.color}`:"none"}}><div style={{fontSize:26,fontWeight:800,color:c.color}}>{cnt}</div><div style={{fontSize:12,color:"#666",fontWeight:600}}>{c.icon} {c.label}</div></div>;})}
         <div style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 6px #0001",borderLeft:`4px solid ${RED}`}}>
           <div style={{fontSize:14,fontWeight:800,color:RED}}>{fARS(deliv)}</div>
-          <div style={{fontSize:12,color:"#666",fontWeight:600}}>\u{1F4B0} Entregado</div>
+          <div style={{fontSize:12,color:"#666",fontWeight:600}}>💰 Entregado</div>
         </div>
       </div>
       <div style={{background:"#fff",borderRadius:12,padding:14,marginBottom:14,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",boxShadow:"0 1px 4px #0001"}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="\u{1F50D} Buscar cliente o N\u00b0 pedido..." style={{flex:1,minWidth:180,padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none"}}/>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar cliente o N\u00b0 pedido..." style={{flex:1,minWidth:180,padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none"}}/>
         <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
           {["todos",...STAGES].map(s=>{const c=SCFG[s];return <button key={s} onClick={()=>setFStage(s)} style={{padding:"5px 11px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:fStage===s?(c?.color||RED):"#e5e5e5",background:fStage===s?(c?.bg||"#fdecea"):"#fff",color:fStage===s?(c?.color||RED):"#666"}}>{s==="todos"?"Todos":c.label}</button>;})}
         </div>
       </div>
       {filtered.length===0
-        ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{fontSize:48}}>\u{1F4ED}</div><div style={{marginTop:8}}>No hay pedidos. \u00a1Cre\u00e1 uno desde "Nuevo Pedido"!</div></div>
+        ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{fontSize:48}}>📭</div><div style={{marginTop:8}}>No hay pedidos. \u00a1Cre\u00e1 uno desde "Nuevo Pedido"!</div></div>
         : filtered.map(o=><OCard key={o.id} o={o} exp={expanded===o.id} toggle={()=>setExpanded(expanded===o.id?null:o.id)} getP={getP} onStage={onStage} onDel={onDel}/>)
       }
     </div>
@@ -712,7 +760,7 @@ function DelBtn({onConfirm}) {
       <button onClick={()=>setConfirm(false)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12}}>No</button>
     </div>
   );
-  return <button onClick={()=>setConfirm(true)} style={{marginLeft:"auto",padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>\u{1F5D1} Eliminar</button>;
+  return <button onClick={()=>setConfirm(true)} style={{marginLeft:"auto",padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>🗑 Eliminar</button>;
 }
 
 function OCard({o,exp,toggle,getP,onStage,onDel}) {
@@ -726,7 +774,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel}) {
             {o.docNum&&<span style={{fontWeight:700,color:"#c0392b"}}>{o.docNum}</span>}
             {o.compNum&&<span style={{fontWeight:700,color:"#1a5276"}}>{o.compNum}</span>}
             <span>{o.date}</span>
-            {o.vendedor&&<span>\u00b7 \u{1F464} {o.vendedor}</span>}
+            {o.vendedor&&<span>\u00b7 👤 {o.vendedor}</span>}
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
@@ -742,12 +790,12 @@ function OCard({o,exp,toggle,getP,onStage,onDel}) {
           </div>
           {o.items.map((it,i)=>{const p=getP(it.pid);return <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f9f9f9",fontSize:13}}><span style={{color:"#444"}}>{p?.name||it.name} \u00d7 {it.qty}</span><span style={{fontWeight:600}}>{fARS(it.price*it.qty)}</span></div>;})}
           <div style={{display:"flex",justifyContent:"flex-end",fontWeight:800,fontSize:16,color:RED,margin:"8px 0 12px"}}>{fARS(o.total)}</div>
-          {o.notes&&<div style={{background:"#f9f9f9",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#555",marginBottom:12}}>\u{1F4AC} {o.notes}</div>}
+          {o.notes&&<div style={{background:"#f9f9f9",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#555",marginBottom:12}}>💬 {o.notes}</div>}
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             {next&&<button onClick={()=>onStage(o.id,next)} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",background:SCFG[next].color,color:"#fff",fontWeight:700,fontSize:13}}>{SCFG[next].icon} Pasar a {SCFG[next].label}</button>}
             {idx>0&&o.stage!=="entregado"&&<button onClick={()=>onStage(o.id,STAGES[idx-1])} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",cursor:"pointer",background:"#fff",color:"#666",fontWeight:600,fontSize:13}}>\u2190 Retroceder</button>}
             <button onClick={()=>printDoc(o, o.stage==="reserva" ? "reserva" : "confirmado")} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #d6eaf8",cursor:"pointer",background:"#fff",color:"#1a5276",fontWeight:600,fontSize:13}}>
-              \u{1F5A8} {o.stage==="reserva" ? (o.docNum||"Imprimir") : (o.compNum||"Imprimir")}
+              🖨 {o.stage==="reserva" ? (o.docNum||"Imprimir") : (o.compNum||"Imprimir")}
             </button>
             <DelBtn onConfirm={()=>onDel(o.id)}/>
           </div>
@@ -779,12 +827,12 @@ function Precios({products}) {
   return (
     <div>
       <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:14,boxShadow:"0 1px 4px #0001"}}>
-        <div style={{fontWeight:800,fontSize:16,marginBottom:12,color:"#1a1a1a"}}>\u{1F3F7}\ufe0f Buscador de Precios</div>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="\u{1F50D} Busc\u00e1 por nombre o c\u00f3digo..." style={{width:"100%",padding:"10px 14px",borderRadius:10,border:"1.5px solid #e5e5e5",fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:10}} autoFocus/>
+        <div style={{fontWeight:800,fontSize:16,marginBottom:12,color:"#1a1a1a"}}>🏷\ufe0f Buscador de Precios</div>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Busc\u00e1 por nombre o c\u00f3digo..." style={{width:"100%",padding:"10px 14px",borderRadius:10,border:"1.5px solid #e5e5e5",fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:10}} autoFocus/>
         <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
           <div style={{position:"relative",flex:1,minWidth:200}}>
             <button onClick={()=>setCatOpen(o=>!o)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"8px 12px",borderRadius:8,border:`1.5px solid ${catOpen?RED:"#e5e5e5"}`,background:cat!=="todos"?"#fdecea":"#fff",color:cat!=="todos"?RED:"#666",cursor:"pointer",fontSize:13,fontWeight:600}}>
-              <span>\u{1F3F7}\ufe0f {cat==="todos"?"Todas las categor\u00edas":cat}</span><span style={{fontSize:10}}>{catOpen?"\u25b2":"\u25bc"}</span>
+              <span>🏷\ufe0f {cat==="todos"?"Todas las categor\u00edas":cat}</span><span style={{fontSize:10}}>{catOpen?"\u25b2":"\u25bc"}</span>
             </button>
             {catOpen&&(<div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#fff",borderRadius:10,border:"1.5px solid #e5e5e5",boxShadow:"0 8px 24px #0002",zIndex:50,padding:8,display:"flex",flexWrap:"wrap",gap:5,maxHeight:220,overflowY:"auto"}}>
               {CATS.map(c=>(<button key={c} onClick={()=>{setCat(c);setCatOpen(false);}} style={{padding:"4px 11px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:cat===c?RED:"#e5e5e5",background:cat===c?"#fdecea":"#fff",color:cat===c?RED:"#666"}}>{c==="todos"?"Todos":c}</button>))}
@@ -799,7 +847,7 @@ function Precios({products}) {
         </div>
       </div>
       {shown.length===0
-        ? <div style={{textAlign:"center",padding:60,color:"#aaa",background:"#fff",borderRadius:12}}><div style={{fontSize:48,marginBottom:8}}>\u{1F50D}</div><div>No se encontraron productos</div></div>
+        ? <div style={{textAlign:"center",padding:60,color:"#aaa",background:"#fff",borderRadius:12}}><div style={{fontSize:48,marginBottom:8}}>🔍</div><div>No se encontraron productos</div></div>
         : <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 4px #0001",overflow:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
               <thead><tr style={{background:"#f9f9f9",position:"sticky",top:0}}>{["C\u00f3digo","Descripci\u00f3n","Categor\u00eda","Precio"].map(h=>(<th key={h} style={{padding:"11px 14px",textAlign:"left",fontWeight:700,color:"#888",fontSize:11,textTransform:"uppercase",letterSpacing:.5,whiteSpace:"nowrap"}}>{h}</th>))}</tr></thead>
@@ -823,20 +871,22 @@ function ProductSelector({products,cart,setCart}) {
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("todos");
   const [catOpen,setCatOpen]=useState(false);
+  const [discOpen,setDiscOpen]=useState(null);
   const CATS=useMemo(()=>["todos",...new Set(products.map(p=>p.category))].sort(),[products]);
   const shown=useMemo(()=>{
     const q=search.toLowerCase();
     return products.filter(p=>{if(cat!=="todos"&&p.category!==cat)return false;if(q)return p.name.toLowerCase().includes(q)||p.id.includes(q);return true;}).slice(0,80);
   },[products,search,cat]);
-  const addC=p=>setCart(c=>{const ex=c.find(i=>i.pid===p.id);return ex?c.map(i=>i.pid===p.id?{...i,qty:i.qty+1}:i):[...c,{pid:p.id,qty:1,price:p.salePrice,name:p.name}];});
-  const setQ=(pid,qty)=>{if(qty<=0)setCart(c=>c.filter(i=>i.pid!==pid));else setCart(c=>c.map(i=>i.pid===pid?{...i,qty}:i));};
+  const addC=p=>setCart(c=>{const ex=c.find(i=>i.pid===p.id);return ex?c.map(i=>i.pid===p.id?{...i,qty:i.qty+1}:i):[...c,{pid:p.id,qty:1,price:p.salePrice,name:p.name,disc:{type:"%",value:""}}];});
+  const setQ=(pid,qty)=>{if(qty<=0){setCart(c=>c.filter(i=>i.pid!==pid));setDiscOpen(null);}else setCart(c=>c.map(i=>i.pid===pid?{...i,qty}:i));};
+  const setDisc=(pid,field,val)=>setCart(c=>c.map(i=>i.pid===pid?{...i,disc:{...(i.disc||{type:"%",value:""}),[field]:val}}:i));
   return (
     <div>
       <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px #0001"}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="\u{1F50D} Buscar por nombre o c\u00f3digo..." style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",marginBottom:10,boxSizing:"border-box"}}/>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar por nombre o c\u00f3digo..." style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",marginBottom:10,boxSizing:"border-box"}}/>
         <div style={{position:"relative"}}>
           <button onClick={()=>setCatOpen(o=>!o)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"8px 12px",borderRadius:8,border:`1.5px solid ${catOpen?RED:"#e5e5e5"}`,background:cat!=="todos"?"#fdecea":"#fff",color:cat!=="todos"?RED:"#666",cursor:"pointer",fontSize:13,fontWeight:600}}>
-            <span>\u{1F3F7}\ufe0f {cat==="todos"?"Todas las categor\u00edas":cat}</span><span style={{fontSize:10,marginLeft:6}}>{catOpen?"\u25b2":"\u25bc"}</span>
+            <span>🏷\ufe0f {cat==="todos"?"Todas las categor\u00edas":cat}</span><span style={{fontSize:10,marginLeft:6}}>{catOpen?"\u25b2":"\u25bc"}</span>
           </button>
           {catOpen&&(<div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#fff",borderRadius:10,border:"1.5px solid #e5e5e5",boxShadow:"0 8px 24px #0002",zIndex:50,padding:8,display:"flex",flexWrap:"wrap",gap:5,maxHeight:220,overflowY:"auto"}}>
             {CATS.map(c=><button key={c} onClick={()=>{setCat(c);setCatOpen(false);}} style={{padding:"4px 11px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:cat===c?RED:"#e5e5e5",background:cat===c?"#fdecea":"#fff",color:cat===c?RED:"#666"}}>{c==="todos"?"Todos":c}</button>)}
@@ -845,19 +895,53 @@ function ProductSelector({products,cart,setCart}) {
         {search&&<div style={{fontSize:11,color:"#aaa",marginTop:6}}>{shown.length} resultados</div>}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(195px,1fr))",gap:10}}>
-        {shown.map(p=>{const ic=cart.find(i=>i.pid===p.id);return <div key={p.id} style={{background:"#fff",borderRadius:10,padding:14,border:ic?`2px solid ${RED}`:"2px solid transparent",boxShadow:"0 1px 4px #0001"}}>
-          <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",marginBottom:3,lineHeight:1.3}}>{p.name}</div>
-          <div style={{fontSize:12,color:"#666",marginBottom:7,fontWeight:500}}>{p.id} \u00b7 {p.category}</div>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <span style={{fontSize:17,fontWeight:800,color:RED}}>{fARS(p.salePrice)}</span><SPill n={p.stock}/>
-          </div>
-          {ic?<div style={{display:"flex",alignItems:"center",gap:5}}>
-            <button onClick={()=>setQ(p.id,ic.qty-1)} style={{width:27,height:27,borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:15,fontWeight:700}}>\u2212</button>
-            <input type="number" value={ic.qty} onChange={e=>setQ(p.id,+e.target.value||0)} style={{width:40,textAlign:"center",padding:3,borderRadius:6,border:`1.5px solid ${RED}`,fontWeight:700,fontSize:13,outline:"none"}}/>
-            <button onClick={()=>setQ(p.id,ic.qty+1)} style={{width:27,height:27,borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:15,fontWeight:700}}>+</button>
-            <span style={{color:"#1e8449",fontSize:12,fontWeight:700}}>\u2713</span>
-          </div>:<button onClick={()=>addC(p)} style={{width:"100%",padding:"7px",borderRadius:7,border:"none",cursor:"pointer",background:RED,color:"#fff",fontWeight:700,fontSize:12}}>+ Agregar</button>}
-        </div>;})}
+        {shown.map(p=>{
+          const ic=cart.find(i=>i.pid===p.id);
+          const hasDisc=ic&&parseFloat(ic.disc?.value)>0;
+          const discLabel=ic?fmtDisc(ic.disc):null;
+          const finalPrice=ic?applyItemDiscount(ic.price,ic.qty,ic.disc):0;
+          return <div key={p.id} style={{background:"#fff",borderRadius:10,padding:14,border:ic?`2px solid ${RED}`:"2px solid transparent",boxShadow:"0 1px 4px #0001"}}>
+            <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",marginBottom:3,lineHeight:1.3}}>{p.name}</div>
+            <div style={{fontSize:12,color:"#666",marginBottom:7,fontWeight:500}}>{p.id} \u00b7 {p.category}</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <div>
+                <span style={{fontSize:17,fontWeight:800,color:RED}}>{fARS(p.salePrice)}</span>
+                {hasDisc&&<span style={{fontSize:10,color:"#1e8449",marginLeft:5,fontWeight:700,background:"#d5f5e3",borderRadius:4,padding:"1px 4px"}}>{discLabel}</span>}
+              </div>
+              <SPill n={p.stock}/>
+            </div>
+            {ic?<>
+              <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:discOpen===p.id?6:0}}>
+                <button onClick={()=>setQ(p.id,ic.qty-1)} style={{width:27,height:27,borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:15,fontWeight:700}}>\u2212</button>
+                <input type="number" value={ic.qty} onChange={e=>setQ(p.id,+e.target.value||0)} style={{width:38,textAlign:"center",padding:3,borderRadius:6,border:`1.5px solid ${RED}`,fontWeight:700,fontSize:13,outline:"none"}}/>
+                <button onClick={()=>setQ(p.id,ic.qty+1)} style={{width:27,height:27,borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:15,fontWeight:700}}>+</button>
+                <button onClick={()=>setDiscOpen(discOpen===p.id?null:p.id)}
+                  style={{marginLeft:"auto",padding:"3px 7px",borderRadius:6,border:`1.5px solid ${hasDisc?"#1e8449":"#e5e5e5"}`,background:hasDisc?"#d5f5e3":"#fff",color:hasDisc?"#1e8449":"#888",cursor:"pointer",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>
+                  {hasDisc?discLabel:"% $"}
+                </button>
+              </div>
+              {discOpen===p.id&&(
+                <div style={{background:"#f0fdf4",border:"1.5px solid #1e8449",borderRadius:8,padding:"8px 10px"}}>
+                  <div style={{fontSize:10,color:"#166534",fontWeight:700,marginBottom:6}}>DESCUENTO POR ITEM</div>
+                  <div style={{display:"flex",gap:5,alignItems:"center"}}>
+                    <select value={ic.disc?.type||"%"} onChange={e=>setDisc(p.id,"type",e.target.value)}
+                      style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48}}>
+                      <option value="%">%</option>
+                      <option value="$">$</option>
+                    </select>
+                    <input type="number" min="0" value={ic.disc?.value||""} onChange={e=>setDisc(p.id,"value",e.target.value)}
+                      placeholder="0" style={{flex:1,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}
+                      autoFocus/>
+                    <button onClick={()=>setDiscOpen(null)} style={{padding:"5px 10px",borderRadius:6,border:"none",background:"#1e8449",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:700}}>OK</button>
+                  </div>
+                  {hasDisc&&<div style={{fontSize:11,color:"#166534",marginTop:5,fontWeight:600,textAlign:"center"}}>
+                    Subtotal con dto: <strong>{fARS(finalPrice)}</strong>
+                  </div>}
+                </div>
+              )}
+            </>:<button onClick={()=>addC(p)} style={{width:"100%",padding:"7px",borderRadius:7,border:"none",cursor:"pointer",background:RED,color:"#fff",fontWeight:700,fontSize:12}}>+ Agregar</button>}
+          </div>;
+        })}
       </div>
     </div>
   );
@@ -868,33 +952,66 @@ function Nuevo({products,vendors,onAdd,onDone}) {
   const [notes,setNotes]=useState("");
   const [vendedor,setVendedor]=useState("");
   const [cart,setCart]=useState([]);
+  const [globalDisc,setGlobalDisc]=useState({type:"%",value:""});
   const [ok,setOk]=useState(false);
-  const total=cart.reduce((s,i)=>s+i.price*i.qty,0);
+
+  const subtotal = cart.reduce((s,i)=>s+applyItemDiscount(i.price,i.qty,i.disc),0);
+  const total    = applyGlobalDiscount(subtotal, globalDisc);
+  const globalDiscAmt = subtotal - total;
+
   const submit=()=>{
     if(!client.trim()){alert("Ingres\u00e1 el cliente");return;}
-    if(!vendedor){alert("Selecci\u00f3n\u00e1 un vendedor");return;}
+    if(!vendedor){alert("Seleccion\u00e1 un vendedor");return;}
     if(!cart.length){alert("Agreg\u00e1 productos");return;}
-    onAdd({id:genId(),client:client.trim(),notes,vendedor,items:cart,total,stage:"reserva",date:today()});
+    onAdd({id:genId(),client:client.trim(),notes,vendedor,items:cart,total,subtotal,globalDisc,stage:"reserva",date:today()});
     setOk(true); setTimeout(()=>onDone(),1400);
   };
-  if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>\u2705</div><div style={{fontWeight:800,color:"#1e8449",fontSize:20,marginTop:12}}>\u00a1Pedido registrado!</div></div>;
+  if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>\u2705</div><div style={{fontWeight:800,color:"#1e8449",fontSize:20,marginTop:12}}>¡Pedido registrado!</div></div>;
   return (
     <div style={{display:"grid",gridTemplateColumns:"1fr 330px",gap:18,alignItems:"start"}}>
       <div>
-        <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>\u{1F6D2} Nuevo Pedido \u2014 Selecci\u00f3n\u00e1 productos</div>
+        <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>🛒 Nuevo Pedido \u2014 Seleccion\u00e1 productos</div>
         <ProductSelector products={products} cart={cart} setCart={setCart}/>
       </div>
       <div style={{position:"sticky",top:16}}>
         <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 2px 12px #0002"}}>
-          <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>\u{1F4CB} Resumen del Pedido</div>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>📋 Resumen del Pedido</div>
           <Field label="Cliente *"><input value={client} onChange={e=>setClient(e.target.value)} placeholder="Nombre del cliente" style={inputStyle}/></Field>
-          <Field label="Vendedor *"><select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,color:vendedor?"#1a1a1a":"#aaa",cursor:"pointer"}}><option value="">\u2014 Selecci\u00f3n\u00e1 vendedor \u2014</option>{vendors.map(v=><option key={v} value={v}>{v}</option>)}</select></Field>
+          <Field label="Vendedor *"><select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,color:vendedor?"#1a1a1a":"#aaa",cursor:"pointer"}}><option value="">\u2014 Seleccion\u00e1 vendedor \u2014</option>{vendors.map(v=><option key={v} value={v}>{v}</option>)}</select></Field>
           <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
-          <div style={{borderTop:"1px solid #f5f5f5",margin:"4px 0 10px",paddingTop:10}}>
+          <div style={{borderTop:"1px solid #f5f5f5",margin:"4px 0 8px",paddingTop:10}}>
             {cart.length===0?<div style={{textAlign:"center",color:"#aaa",fontSize:12,padding:"10px 0"}}>Agreg\u00e1 productos al pedido</div>
-            :cart.map(i=><div key={i.pid} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"3px 0",color:"#555"}}><span style={{flex:1,marginRight:6,lineHeight:1.3}}>{i.name} \u00d7 {i.qty}</span><span style={{fontWeight:600,whiteSpace:"nowrap"}}>{fARS(i.price*i.qty)}</span></div>)}
+            :cart.map(i=>{
+              const lineTotal=applyItemDiscount(i.price,i.qty,i.disc);
+              const hasD=parseFloat(i.disc?.value)>0;
+              return <div key={i.pid} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:"1px solid #f9f9f9",color:"#555",gap:6}}>
+                <span style={{flex:1,lineHeight:1.3}}>{i.name} \u00d7 {i.qty}</span>
+                <div style={{textAlign:"right",whiteSpace:"nowrap"}}>
+                  {hasD&&<div style={{fontSize:10,color:"#aaa",textDecoration:"line-through"}}>{fARS(i.price*i.qty)}</div>}
+                  <span style={{fontWeight:600,color:hasD?"#1e8449":undefined}}>{fARS(lineTotal)}</span>
+                  {hasD&&<span style={{fontSize:10,color:"#1e8449",marginLeft:3}}>{fmtDisc(i.disc)}</span>}
+                </div>
+              </div>;
+            })}
           </div>
-          <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:17,color:RED,padding:"8px 0",borderTop:"2px solid #f5f5f5",marginBottom:14}}><span>Total</span><span>{fARS(total)}</span></div>
+          {/* Global discount */}
+          <div style={{background:"#f9fdf9",border:"1.5px solid #e5e5e5",borderRadius:8,padding:"10px 12px",marginBottom:8}}>
+            <div style={{fontSize:11,color:"#555",fontWeight:700,marginBottom:6}}>DESCUENTO GLOBAL</div>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <select value={globalDisc.type} onChange={e=>setGlobalDisc(d=>({...d,type:e.target.value}))}
+                style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48}}>
+                <option value="%">%</option>
+                <option value="$">$</option>
+              </select>
+              <input type="number" min="0" value={globalDisc.value} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))}
+                placeholder="0" style={{flex:1,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
+              {globalDiscAmt>0&&<span style={{fontSize:11,color:"#1e8449",fontWeight:700,whiteSpace:"nowrap"}}>\u2212{fARS(globalDiscAmt)}</span>}
+            </div>
+          </div>
+          {globalDiscAmt>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#888",padding:"2px 0"}}>
+            <span>Subtotal</span><span>{fARS(subtotal)}</span>
+          </div>}
+          <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:17,color:RED,padding:"8px 0",borderTop:"2px solid #f5f5f5",margin:"6px 0 14px"}}><span>Total</span><span>{fARS(total)}</span></div>
           <button onClick={submit} disabled={!cart.length||!client.trim()||!vendedor} style={{width:"100%",padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:(!cart.length||!client.trim()||!vendedor)?"#e5e5e5":`linear-gradient(135deg,${REDD},${RED})`,color:(!cart.length||!client.trim()||!vendedor)?"#aaa":"#fff"}}>
             \u2705 Registrar como Reserva
           </button>
@@ -919,7 +1036,7 @@ function Cotizaciones({quotes,products,vendors,onAdd,onDel}) {
     <div>
       <div style={{background:"#fff",borderRadius:12,padding:4,marginBottom:16,display:"flex",gap:4,boxShadow:"0 1px 4px #0001"}}>
         <button onClick={()=>setView("lista")} style={{flex:1,padding:"10px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="lista"?`linear-gradient(135deg,#6c3483,#9b59b6)`:"transparent",color:view==="lista"?"#fff":"#555"}}>
-          \u{1F4C4} Lista de Cotizaciones ({quotes.length})
+          📄 Lista de Cotizaciones ({quotes.length})
         </button>
         <button onClick={()=>setView("nueva")} style={{flex:1,padding:"10px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="nueva"?`linear-gradient(135deg,#6c3483,#9b59b6)`:"transparent",color:view==="nueva"?"#fff":"#555"}}>
           \u2795 Nueva Cotizaci\u00f3n
@@ -929,7 +1046,7 @@ function Cotizaciones({quotes,products,vendors,onAdd,onDel}) {
       {view==="lista" && (
         quotes.length===0
           ? <div style={{textAlign:"center",padding:60,color:"#aaa",background:"#fff",borderRadius:12}}>
-              <div style={{fontSize:48,marginBottom:8}}>\u{1F4C4}</div>
+              <div style={{fontSize:48,marginBottom:8}}>📄</div>
               <div>No hay cotizaciones. \u00a1Cre\u00e1 una!</div>
             </div>
           : quotes.map(q=><QuoteCard key={q.id} q={q} exp={expanded===q.id} toggle={()=>setExpanded(expanded===q.id?null:q.id)} getP={getP} onDel={onDel}/>)
@@ -948,11 +1065,11 @@ function QuoteCard({q,exp,toggle,getP,onDel}) {
           <div style={{fontSize:11,color:"#aaa",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
             {q.docNum&&<span style={{fontWeight:700,color:"#6c3483"}}>{q.docNum}</span>}
             <span>{q.date}</span>
-            {q.vendedor&&<span>\u00b7 \u{1F464} {q.vendedor}</span>}
+            {q.vendedor&&<span>\u00b7 👤 {q.vendedor}</span>}
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-          <span style={{background:PURPLEBG,color:PURPLE,border:`1px solid ${PURPLE}44`,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>\u{1F4C4} Cotizaci\u00f3n</span>
+          <span style={{background:PURPLEBG,color:PURPLE,border:`1px solid ${PURPLE}44`,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>📄 Cotizaci\u00f3n</span>
           <span style={{fontWeight:800,color:PURPLE,fontSize:15}}>{fARS(q.total)}</span>
           <span style={{color:"#ccc"}}>{exp?"\u25b2":"\u25bc"}</span>
         </div>
@@ -962,9 +1079,9 @@ function QuoteCard({q,exp,toggle,getP,onDel}) {
           {q.validity&&<div style={{background:"#fef9e7",borderRadius:8,padding:"7px 12px",fontSize:12,color:"#7d6608",marginBottom:12}}>\u23F3 Validez: <strong>{q.validity}</strong></div>}
           {q.items.map((it,i)=>{const p=getP(it.pid);return <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f9f9f9",fontSize:13}}><span style={{color:"#444"}}>{p?.name||it.name} \u00d7 {it.qty}</span><span style={{fontWeight:600}}>{fARS(it.price*it.qty)}</span></div>;})}
           <div style={{display:"flex",justifyContent:"flex-end",fontWeight:800,fontSize:16,color:PURPLE,margin:"8px 0 12px"}}>{fARS(q.total)}</div>
-          {q.notes&&<div style={{background:"#f9f9f9",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#555",marginBottom:12}}>\u{1F4AC} {q.notes}</div>}
+          {q.notes&&<div style={{background:"#f9f9f9",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#555",marginBottom:12}}>💬 {q.notes}</div>}
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            <button onClick={()=>printDoc(q,"cotizacion")} style={{padding:"8px 12px",borderRadius:8,border:`1.5px solid ${PURPLEBG}`,cursor:"pointer",background:"#fff",color:PURPLE,fontWeight:600,fontSize:13}}>\u{1F5A8} Imprimir</button>
+            <button onClick={()=>printDoc(q,"cotizacion")} style={{padding:"8px 12px",borderRadius:8,border:`1.5px solid ${PURPLEBG}`,cursor:"pointer",background:"#fff",color:PURPLE,fontWeight:600,fontSize:13}}>🖨 Imprimir</button>
             <div style={{marginLeft:"auto",display:"flex",gap:8}}>
               <QuoteDelBtn onConfirm={()=>onDel(q.id)}/>
             </div>
@@ -982,7 +1099,7 @@ function QuoteDelBtn({onConfirm}) {
     <button onClick={onConfirm} style={{padding:"4px 10px",borderRadius:6,border:"none",background:RED,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:12}}>S\u00ed</button>
     <button onClick={()=>setC(false)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12}}>No</button>
   </div>;
-  return <button onClick={()=>setC(true)} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>\u{1F5D1} Eliminar</button>;
+  return <button onClick={()=>setC(true)} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>🗑 Eliminar</button>;
 }
 
 function NuevaCotizacion({products,vendors,onAdd}) {
@@ -991,44 +1108,77 @@ function NuevaCotizacion({products,vendors,onAdd}) {
   const [vendedor,setVendedor]=useState("");
   const [validity,setValidity]=useState("48 horas");
   const [cart,setCart]=useState([]);
+  const [globalDisc,setGlobalDisc]=useState({type:"%",value:""});
   const [ok,setOk]=useState(false);
-  const total=cart.reduce((s,i)=>s+i.price*i.qty,0);
+
+  const subtotal = cart.reduce((s,i)=>s+applyItemDiscount(i.price,i.qty,i.disc),0);
+  const total    = applyGlobalDiscount(subtotal, globalDisc);
+  const globalDiscAmt = subtotal - total;
+
   const submit=async()=>{
     if(!client.trim()){alert("Ingres\u00e1 el cliente");return;}
     if(!cart.length){alert("Agreg\u00e1 productos");return;}
-    const q={id:genId(),client:client.trim(),notes,vendedor,validity,items:cart,total,date:today()};
+    const q={id:genId(),client:client.trim(),notes,vendedor,validity,items:cart,total,subtotal,globalDisc,date:today()};
     setOk(true);
     await onAdd(q);
   };
-  if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>\u{1F4C4}</div><div style={{fontWeight:800,color:"#6c3483",fontSize:20,marginTop:12}}>\u00a1Cotizaci\u00f3n guardada!</div></div>;
+  if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>📄</div><div style={{fontWeight:800,color:"#6c3483",fontSize:20,marginTop:12}}>¡Cotizaci\u00f3n guardada!</div></div>;
   return (
     <div style={{display:"grid",gridTemplateColumns:"1fr 330px",gap:18,alignItems:"start"}}>
       <div>
-        <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>\u{1F4C4} Nueva Cotizaci\u00f3n \u2014 Selecci\u00f3n\u00e1 productos</div>
+        <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>📄 Nueva Cotizaci\u00f3n \u2014 Seleccion\u00e1 productos</div>
         <ProductSelector products={products} cart={cart} setCart={setCart}/>
       </div>
       <div style={{position:"sticky",top:16}}>
         <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 2px 12px #0002",border:"2px solid #e8daef"}}>
-          <div style={{fontWeight:800,fontSize:15,marginBottom:14,color:"#6c3483"}}>\u{1F4C4} Resumen de Cotizaci\u00f3n</div>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:14,color:"#6c3483"}}>📄 Resumen de Cotizaci\u00f3n</div>
           <div style={{background:"#e8daef",borderRadius:8,padding:"7px 12px",fontSize:12,color:"#6c3483",marginBottom:14}}>
-            \u2139\ufe0f Las cotizaciones <strong>no descuentan stock</strong>. Son solo presupuestos para el cliente.
+            ℹ️ Las cotizaciones <strong>no descuentan stock</strong>. Son solo presupuestos para el cliente.
           </div>
           <Field label="Cliente *"><input value={client} onChange={e=>setClient(e.target.value)} placeholder="Nombre del cliente" style={inputStyle}/></Field>
           <Field label="Vendedor">
             <select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,color:vendedor?"#1a1a1a":"#aaa",cursor:"pointer"}}>
-              <option value="">\u2014 Selecci\u00f3n\u00e1 vendedor \u2014</option>
+              <option value="">\u2014 Seleccion\u00e1 vendedor \u2014</option>
               {vendors.map(v=><option key={v} value={v}>{v}</option>)}
             </select>
           </Field>
-          <Field label="V\u00e1lida hasta (opcional)"><input value={validity} onChange={e=>setValidity(e.target.value)} placeholder="Ej: 30/06/2025" style={inputStyle}/></Field>
+          <Field label="V\u00e1lida hasta"><input value={validity} onChange={e=>setValidity(e.target.value)} placeholder="Ej: 48 horas" style={inputStyle}/></Field>
           <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones, condiciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
-          <div style={{borderTop:"1px solid #f5f5f5",margin:"4px 0 10px",paddingTop:10}}>
+          <div style={{borderTop:"1px solid #f5f5f5",margin:"4px 0 8px",paddingTop:10}}>
             {cart.length===0?<div style={{textAlign:"center",color:"#aaa",fontSize:12,padding:"10px 0"}}>Agreg\u00e1 productos a la cotizaci\u00f3n</div>
-            :cart.map(i=><div key={i.pid} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"3px 0",color:"#555"}}><span style={{flex:1,marginRight:6,lineHeight:1.3}}>{i.name} \u00d7 {i.qty}</span><span style={{fontWeight:600,whiteSpace:"nowrap"}}>{fARS(i.price*i.qty)}</span></div>)}
+            :cart.map(i=>{
+              const lineTotal=applyItemDiscount(i.price,i.qty,i.disc);
+              const hasD=parseFloat(i.disc?.value)>0;
+              return <div key={i.pid} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:"1px solid #f9f9f9",color:"#555",gap:6}}>
+                <span style={{flex:1,lineHeight:1.3}}>{i.name} \u00d7 {i.qty}</span>
+                <div style={{textAlign:"right",whiteSpace:"nowrap"}}>
+                  {hasD&&<div style={{fontSize:10,color:"#aaa",textDecoration:"line-through"}}>{fARS(i.price*i.qty)}</div>}
+                  <span style={{fontWeight:600,color:hasD?"#6c3483":undefined}}>{fARS(lineTotal)}</span>
+                  {hasD&&<span style={{fontSize:10,color:"#6c3483",marginLeft:3}}>{fmtDisc(i.disc)}</span>}
+                </div>
+              </div>;
+            })}
           </div>
-          <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:17,color:"#6c3483",padding:"8px 0",borderTop:"2px solid #f5f5f5",marginBottom:14}}><span>Total</span><span>{fARS(total)}</span></div>
+          {/* Global discount */}
+          <div style={{background:"#f5f0fa",border:"1.5px solid #e8daef",borderRadius:8,padding:"10px 12px",marginBottom:8}}>
+            <div style={{fontSize:11,color:"#6c3483",fontWeight:700,marginBottom:6}}>DESCUENTO GLOBAL</div>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <select value={globalDisc.type} onChange={e=>setGlobalDisc(d=>({...d,type:e.target.value}))}
+                style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48}}>
+                <option value="%">%</option>
+                <option value="$">$</option>
+              </select>
+              <input type="number" min="0" value={globalDisc.value} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))}
+                placeholder="0" style={{flex:1,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
+              {globalDiscAmt>0&&<span style={{fontSize:11,color:"#6c3483",fontWeight:700,whiteSpace:"nowrap"}}>\u2212{fARS(globalDiscAmt)}</span>}
+            </div>
+          </div>
+          {globalDiscAmt>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#888",padding:"2px 0"}}>
+            <span>Subtotal</span><span>{fARS(subtotal)}</span>
+          </div>}
+          <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:17,color:"#6c3483",padding:"8px 0",borderTop:"2px solid #f5f5f5",margin:"6px 0 14px"}}><span>Total</span><span>{fARS(total)}</span></div>
           <button onClick={submit} disabled={!cart.length||!client.trim()} style={{width:"100%",padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:(!cart.length||!client.trim())?"#e5e5e5":"linear-gradient(135deg,#6c3483,#9b59b6)",color:(!cart.length||!client.trim())?"#aaa":"#fff"}}>
-            \u{1F4C4} Guardar Cotizaci\u00f3n
+            📄 Guardar Cotizaci\u00f3n
           </button>
         </div>
       </div>
