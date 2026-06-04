@@ -38,7 +38,21 @@ const db = {
   deleteVendor: async (name) => { const {error} = await supaAdmin.from("lm_vendors").delete().eq("name",name); if(error) throw error; },
   updateVendor: async (old,nw) => { const {error} = await supaAdmin.from("lm_vendors").update({name:nw}).eq("name",old); if(error) throw error; },
 
-  getProducts:  async () => { const {data,error} = await supabase.from("lm_products").select("*").order("name"); if(error) throw error; return (data||[]).map(mapProduct); },
+  getProducts:  async () => {
+    // Supabase tiene limite de 1000 filas por query — traemos paginas hasta tener todos
+    let all = [];
+    let from = 0;
+    const pageSize = 1000;
+    while(true) {
+      const {data,error} = await supabase.from("lm_products").select("*").order("name").range(from, from+pageSize-1);
+      if(error) throw error;
+      if(!data || data.length===0) break;
+      all = all.concat(data);
+      if(data.length < pageSize) break;
+      from += pageSize;
+    }
+    return all.map(mapProduct);
+  },
   upsertProduct: async (p) => { const {error} = await supaAdmin.from("lm_products").upsert({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0}); if(error) throw error; },
   upsertProducts: async (arr) => { const {error} = await supaAdmin.from("lm_products").upsert(arr.map(p=>({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0}))); if(error) throw error; },
   deleteProduct: async (id) => { const {error} = await supaAdmin.from("lm_products").delete().eq("id",id); if(error) throw error; },
