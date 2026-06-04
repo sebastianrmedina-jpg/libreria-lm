@@ -629,7 +629,8 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     // Auto-print Reserva document
     setTimeout(() => printDoc(orderWithNum, "reserva"), 400);
   };
-  const [compPopup, setCompPopup] = useState(null); // {order, compNum}
+  const [compPopup, setCompPopup] = useState(null);
+  const [showChangePass, setShowChangePass] = useState(false);
 
   const setStage = async (id,stage) => {
     const ord = orders.find(o=>o.id===id);
@@ -753,7 +754,10 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
               ))}
             </nav>
             <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 8px",borderLeft:"1px solid #ffffff33",marginLeft:4}}>
-              <span style={{color:"#ffeeee",fontSize:12}}>👤 {currentUser.name}</span>
+              <button onClick={()=>setShowChangePass(true)}
+                style={{background:"#ffffff15",border:"1px solid #ffffff33",color:"#ffeeee",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:5}}>
+                👤 {currentUser.name} <span style={{fontSize:10,opacity:.7}}>🔑</span>
+              </button>
               <div style={{position:"relative"}}>
                 <button onClick={()=>setShowNotifs(s=>!s)} style={{background:"#ffffff22",border:"none",color:"#fff",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:16,lineHeight:1,position:"relative"}}>
                   🔔
@@ -767,6 +771,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
         </div>
       </div>
       {compPopup && <CompPopup order={compPopup} onClose={()=>setCompPopup(null)}/>}
+      {showChangePass && <ChangePasswordModal currentUser={currentUser} users={users} setUsers={setUsers} onClose={(updated)=>{setShowChangePass(false);}}/>}
       <div style={{maxWidth:1200,margin:"0 auto",padding:"20px 16px"}}>
         {tab==="central"    && <Central orders={orders} products={products} onStage={setStage} onDel={delOrder}/>}
         {tab==="nuevo"      && <Nuevo products={products} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser}/>}
@@ -780,6 +785,83 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   );
 }
 
+
+// ─── CHANGE PASSWORD MODAL ───────────────────────────────────────────────────
+function ChangePasswordModal({currentUser, users, setUsers, onClose}) {
+  const [current, setCurrent] = useState("");
+  const [newPass, setNewPass] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [error, setError] = useState("");
+  const [ok, setOk] = useState(false);
+
+  const save = async () => {
+    setError("");
+    if(current !== currentUser.password) { setError("La contraseña actual es incorrecta"); return; }
+    if(newPass.length < 4) { setError("La nueva contraseña debe tener al menos 4 caracteres"); return; }
+    if(newPass !== confirm) { setError("Las contraseñas no coinciden"); return; }
+    const updated = {...currentUser, password: newPass};
+    setUsers(us=>us.map(u=>u.id===currentUser.id?updated:u));
+    await db.saveUser(updated);
+    // Update currentUser in parent — force re-login with new password
+    setOk(true);
+    setTimeout(()=>onClose(updated), 1500);
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"#0007",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,padding:16}}>
+      <div style={{background:"#fff",borderRadius:20,padding:32,maxWidth:400,width:"100%",boxShadow:"0 24px 64px #0005"}}>
+        {ok
+          ? <div style={{textAlign:"center",padding:"16px 0"}}>
+              <div style={{fontSize:52,marginBottom:8}}>✅</div>
+              <div style={{fontWeight:800,fontSize:18,color:"#1e8449"}}>Contraseña actualizada</div>
+            </div>
+          : <>
+            <div style={{fontWeight:800,fontSize:18,marginBottom:6}}>🔑 Cambiar contraseña</div>
+            <div style={{fontSize:12,color:"#888",marginBottom:20}}>Usuario: <strong>{currentUser.name}</strong></div>
+
+            <Field label="Contraseña actual">
+              <div style={{position:"relative"}}>
+                <input type={showCurrent?"text":"password"} value={current} onChange={e=>setCurrent(e.target.value)}
+                  placeholder="Tu contraseña actual" style={{...inputStyle,paddingRight:40}}/>
+                <button onClick={()=>setShowCurrent(s=>!s)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:15,color:"#aaa"}}>{showCurrent?"🙈":"👁️"}</button>
+              </div>
+            </Field>
+            <Field label="Nueva contraseña">
+              <div style={{position:"relative"}}>
+                <input type={showNew?"text":"password"} value={newPass} onChange={e=>setNewPass(e.target.value)}
+                  placeholder="Mínimo 4 caracteres" style={{...inputStyle,paddingRight:40}}/>
+                <button onClick={()=>setShowNew(s=>!s)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:15,color:"#aaa"}}>{showNew?"🙈":"👁️"}</button>
+              </div>
+            </Field>
+            <Field label="Confirmar nueva contraseña">
+              <input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)}
+                placeholder="Repetí la nueva contraseña" style={{
+                  ...inputStyle,
+                  borderColor: confirm && newPass && confirm!==newPass ? "#e74c3c" : confirm && confirm===newPass ? "#1e8449" : undefined
+                }}/>
+              {confirm && newPass && confirm===newPass && <div style={{fontSize:11,color:"#1e8449",marginTop:3}}>✅ Las contraseñas coinciden</div>}
+            </Field>
+
+            {error && <div style={{background:"#fdecea",color:"#c0392b",borderRadius:8,padding:"8px 12px",fontSize:13,marginBottom:12}}>{error}</div>}
+
+            <div style={{display:"flex",gap:8,marginTop:4}}>
+              <button onClick={save}
+                disabled={!current||!newPass||!confirm}
+                style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:(!current||!newPass||!confirm)?"#e5e5e5":"linear-gradient(135deg,#922b21,#c0392b)",color:(!current||!newPass||!confirm)?"#aaa":"#fff",fontWeight:800,fontSize:14,cursor:(!current||!newPass||!confirm)?"not-allowed":"pointer"}}>
+                Guardar contraseña
+              </button>
+              <button onClick={()=>onClose(null)} style={{padding:"10px 16px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,cursor:"pointer"}}>
+                Cancelar
+              </button>
+            </div>
+          </>
+        }
+      </div>
+    </div>
+  );
+}
 
 // ─── COMP POPUP ───────────────────────────────────────────────────────────────
 // Shown when a pedido is confirmed - shows Comp number and print button
