@@ -971,30 +971,69 @@ function ProductSelector({products,cart,setCart}) {
   const [cat,setCat]=useState("todos");
   const [catOpen,setCatOpen]=useState(false);
   const [discOpen,setDiscOpen]=useState(null);
+  const [page,setPage]=useState(0);
+  const PAGE_SIZE = 50;
+
   const CATS=useMemo(()=>["todos",...new Set(products.map(p=>p.category))].sort(),[products]);
-  const shown=useMemo(()=>{
+
+  // Reset page when search or category changes
+  useEffect(()=>setPage(0),[search,cat]);
+
+  const filtered=useMemo(()=>{
     const q=search.toLowerCase();
-    return products.filter(p=>{if(cat!=="todos"&&p.category!==cat)return false;if(q)return norm(p.name).includes(norm(q))||p.id.toLowerCase().includes(q.toLowerCase());return true;}).slice(0,80);
+    return products.filter(p=>{
+      if(cat!=="todos"&&p.category!==cat) return false;
+      if(q) return norm(p.name).includes(norm(q))||p.id.toLowerCase().includes(q.toLowerCase());
+      return true;
+    });
   },[products,search,cat]);
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const shown = filtered.slice(page*PAGE_SIZE, (page+1)*PAGE_SIZE);
+
   const addC=p=>setCart(c=>{const ex=c.find(i=>i.pid===p.id);return ex?c.map(i=>i.pid===p.id?{...i,qty:i.qty+1}:i):[...c,{pid:p.id,qty:1,price:p.salePrice,name:p.name,disc:{type:"%",value:""}}];});
   const setQ=(pid,qty)=>{if(qty<=0){setCart(c=>c.filter(i=>i.pid!==pid));setDiscOpen(null);}else setCart(c=>c.map(i=>i.pid===pid?{...i,qty}:i));};
   const setDisc=(pid,field,val)=>setCart(c=>c.map(i=>i.pid===pid?{...i,disc:{...(i.disc||{type:"%",value:""}),[field]:val}}:i));
+
   return (
     <div>
       <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px #0001"}}>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar por nombre o código..." style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",marginBottom:10,boxSizing:"border-box"}}/>
-        <div style={{position:"relative"}}>
-          <button onClick={()=>setCatOpen(o=>!o)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"8px 12px",borderRadius:8,border:`1.5px solid ${catOpen?RED:"#e5e5e5"}`,background:cat!=="todos"?"#fdecea":"#fff",color:cat!=="todos"?RED:"#666",cursor:"pointer",fontSize:13,fontWeight:600}}>
-            <span>🏷️️ {cat==="todos"?"Todas las categorías":cat}</span><span style={{fontSize:10,marginLeft:6}}>{catOpen?"^":"v"}</span>
-          </button>
-          {catOpen&&(<div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#fff",borderRadius:10,border:"1.5px solid #e5e5e5",boxShadow:"0 8px 24px #0002",zIndex:50,padding:8,display:"flex",flexWrap:"wrap",gap:5,maxHeight:220,overflowY:"auto"}}>
-            {CATS.map(c=><button key={c} onClick={()=>{setCat(c);setCatOpen(false);}} style={{padding:"4px 11px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:cat===c?RED:"#e5e5e5",background:cat===c?"#fdecea":"#fff",color:cat===c?RED:"#666"}}>{c==="todos"?"Todos":c}</button>)}
-          </div>)}
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{position:"relative",flex:1,minWidth:180}}>
+            <button onClick={()=>setCatOpen(o=>!o)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"8px 12px",borderRadius:8,border:`1.5px solid ${catOpen?RED:"#e5e5e5"}`,background:cat!=="todos"?"#fdecea":"#fff",color:cat!=="todos"?RED:"#666",cursor:"pointer",fontSize:13,fontWeight:600}}>
+              <span>🏷️ {cat==="todos"?"Todas las categorías":cat}</span><span style={{fontSize:10,marginLeft:6}}>{catOpen?"^":"v"}</span>
+            </button>
+            {catOpen&&(<div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#fff",borderRadius:10,border:"1.5px solid #e5e5e5",boxShadow:"0 8px 24px #0002",zIndex:50,padding:8,display:"flex",flexWrap:"wrap",gap:5,maxHeight:220,overflowY:"auto"}}>
+              {CATS.map(c=><button key={c} onClick={()=>{setCat(c);setCatOpen(false);}} style={{padding:"4px 11px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:cat===c?RED:"#e5e5e5",background:cat===c?"#fdecea":"#fff",color:cat===c?RED:"#666"}}>{c==="todos"?"Todos":c}</button>)}
+            </div>)}
+          </div>
+          <div style={{fontSize:12,color:"#888",whiteSpace:"nowrap"}}>
+            <span style={{fontWeight:700,color:RED}}>{filtered.length.toLocaleString("es-AR")}</span> productos
+            {(search||cat!=="todos")&&<span style={{color:"#aaa"}}> de {products.length.toLocaleString("es-AR")}</span>}
+          </div>
         </div>
-        {search&&<div style={{fontSize:11,color:"#aaa",marginTop:6}}>{shown.length} resultados</div>}
       </div>
+
+      {/* Items en carrito — siempre visibles arriba */}
+      {cart.length>0&&(
+        <div style={{background:"#d5f5e3",border:"1.5px solid #1e8449",borderRadius:10,padding:"8px 14px",marginBottom:12,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+          <span style={{fontSize:12,fontWeight:700,color:"#1e8449"}}>✅ {cart.length} producto{cart.length!==1?"s":""} en el carrito</span>
+          {cart.map(i=>(
+            <span key={i.pid} style={{background:"#fff",borderRadius:6,padding:"2px 8px",fontSize:11,color:"#1a1a1a",border:"1px solid #a9dfbf"}}>
+              {i.name.slice(0,20)}{i.name.length>20?"...":""} ×{i.qty}
+            </span>
+          ))}
+        </div>
+      )}
+
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(195px,1fr))",gap:10}}>
-        {shown.map(p=>{
+        {shown.length===0
+          ? <div style={{gridColumn:"1/-1",textAlign:"center",padding:40,color:"#aaa",background:"#fff",borderRadius:12}}>
+              <div style={{fontSize:36,marginBottom:8}}>🔍</div>
+              <div>Sin resultados. Probá con otra búsqueda.</div>
+            </div>
+          : shown.map(p=>{
           const ic=cart.find(i=>i.pid===p.id);
           const hasDisc=ic&&parseFloat(ic.disc?.value)>0;
           const discLabel=ic?fmtDisc(ic.disc):null;
@@ -1029,8 +1068,7 @@ function ProductSelector({products,cart,setCart}) {
                       <option value="$">$</option>
                     </select>
                     <input type="number" min="0" value={ic.disc?.value||""} onChange={e=>setDisc(p.id,"value",e.target.value)}
-                      placeholder="0" style={{flex:1,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}
-                      autoFocus/>
+                      placeholder="0" style={{flex:1,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
                     <button onClick={()=>setDiscOpen(null)} style={{padding:"5px 10px",borderRadius:6,border:"none",background:"#1e8449",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:700}}>OK</button>
                   </div>
                   {hasDisc&&<div style={{fontSize:11,color:"#166534",marginTop:5,fontWeight:600,textAlign:"center"}}>
@@ -1042,6 +1080,36 @@ function ProductSelector({products,cart,setCart}) {
           </div>;
         })}
       </div>
+
+      {/* Paginación */}
+      {totalPages>1&&(
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 4px",flexWrap:"wrap",gap:8,marginTop:8}}>
+          <div style={{fontSize:12,color:"#888"}}>
+            Mostrando {page*PAGE_SIZE+1}–{Math.min((page+1)*PAGE_SIZE,filtered.length)} de {filtered.length.toLocaleString("es-AR")}
+          </div>
+          <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
+            <button onClick={()=>setPage(0)} disabled={page===0}
+              style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:page===0?"not-allowed":"pointer",color:page===0?"#ccc":"#555",fontSize:12,fontWeight:600}}>«</button>
+            <button onClick={()=>setPage(p=>Math.max(0,p-1))} disabled={page===0}
+              style={{padding:"5px 12px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:page===0?"not-allowed":"pointer",color:page===0?"#ccc":"#555",fontSize:12,fontWeight:600}}>← Ant.</button>
+            {Array.from({length:totalPages},(_,i)=>i)
+              .filter(i=>i===0||i===totalPages-1||Math.abs(i-page)<=2)
+              .reduce((acc,i,idx,arr)=>{if(idx>0&&i-arr[idx-1]>1)acc.push("...");acc.push(i);return acc;},[])
+              .map((item,i)=>item==="..."
+                ?<span key={`e${i}`} style={{padding:"5px 4px",fontSize:12,color:"#aaa"}}>…</span>
+                :<button key={item} onClick={()=>setPage(item)}
+                    style={{padding:"5px 10px",borderRadius:7,border:`1.5px solid ${page===item?RED:"#e5e5e5"}`,background:page===item?"#fdecea":"#fff",cursor:"pointer",color:page===item?RED:"#555",fontSize:12,fontWeight:page===item?800:600,minWidth:34}}>
+                    {item+1}
+                  </button>
+              )
+            }
+            <button onClick={()=>setPage(p=>Math.min(totalPages-1,p+1))} disabled={page===totalPages-1}
+              style={{padding:"5px 12px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:page===totalPages-1?"not-allowed":"pointer",color:page===totalPages-1?"#ccc":"#555",fontSize:12,fontWeight:600}}>Sig. →</button>
+            <button onClick={()=>setPage(totalPages-1)} disabled={page===totalPages-1}
+              style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:page===totalPages-1?"not-allowed":"pointer",color:page===totalPages-1?"#ccc":"#555",fontSize:12,fontWeight:600}}>»</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
