@@ -72,10 +72,10 @@ const db = {
 const RED = "#c0392b", REDD = "#922b21";
 const STAGES = ["reserva","confirmado","en armado","entregado"];
 const SCFG = {
-  reserva:     {label:"Reserva",    color:"#c0392b", bg:"#fdecea", icon:"[time]"},
-  confirmado:  {label:"Confirmado", color:"#1a5276", bg:"#d6eaf8", icon:"[ok]"},
-  "en armado": {label:"En Armado",  color:"#6c3483", bg:"#e8daef", icon:"[pkg]"},
-  entregado:   {label:"Entregado",  color:"#1e8449", bg:"#d5f5e3", icon:"[!]"},
+  reserva:     {label:"Reserva",    color:"#c0392b", bg:"#fdecea", icon:"🕐"},
+  confirmado:  {label:"Confirmado", color:"#1a5276", bg:"#d6eaf8", icon:"✅"},
+  "en armado": {label:"En Armado",  color:"#6c3483", bg:"#e8daef", icon:"📦"},
+  entregado:   {label:"Entregado",  color:"#1e8449", bg:"#d5f5e3", icon:"🎉"},
 };
 
 const LOGO = "/logo.png";
@@ -99,7 +99,7 @@ function useLocalData(key, initial) {
 
 function SPill({n}) {
   const [c,b] = n===0?["#c0392b","#fdecea"]:n<=5?["#e67e22","#fef9e7"]:["#1e8449","#d5f5e3"];
-  return <span style={{background:b,color:c,borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:700}}>{n===0?"Sin stock":n<=5?`[!] ${n}`:n}</span>;
+  return <span style={{background:b,color:c,borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:700}}>{n===0?"Sin stock":n<=5?`🎉 ${n}`:n}</span>;
 }
 function Bdg({stage}) {
   const c=SCFG[stage]||{};
@@ -191,7 +191,7 @@ function printDoc(doc, tipo) {
 
     const validityHtml = (tipo==="cotizacion" && doc.validity)
       ? `<div style="background:#fef9e7;border-left:3px solid #f1c40f;padding:8px 14px;border-radius:0 8px 8px 0;font-size:13px;color:#7d6608;margin-bottom:16px;">
-          [timer] <strong>Válida hasta:</strong> ${doc.validity}
+          ⏳ <strong>Válida hasta:</strong> ${doc.validity}
         </div>` : "";
 
     const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"/>
@@ -226,7 +226,7 @@ function printDoc(doc, tipo) {
   .footer{border-top:1px solid #f0f0f0;padding-top:14px;margin:0 48px;text-align:center;font-size:11px;color:#bbb;display:flex;justify-content:space-between;}
   .footer-brand{color:#c0392b;font-weight:700;}
 </style></head><body>
-<button class="no-print print-btn" onclick="window.print()">[print]️ Imprimir / Guardar PDF</button>
+<button class="no-print print-btn" onclick="window.print()">🖨️️ Imprimir / Guardar PDF</button>
 <div class="pdf-wrap">
   <img class="header-img" src="${logoSrc}" alt="Libreria Madrid" onerror="this.style.display='none'"/>
   <div class="content">
@@ -297,10 +297,10 @@ function printDoc(doc, tipo) {
 
 // ─── NOTIFICATION TYPES CONFIG ───────────────────────────────────────────────
 const NOTIF_TYPES = {
-  NUEVO_PEDIDO:   {label:"Nuevo pedido",         icon:"[+]", color:"#1a5276", bg:"#d6eaf8"},
-  CAMBIO_ESTADO:  {label:"Cambio de estado",      icon:"[=]", color:"#6c3483", bg:"#e8daef"},
-  ALTA_MERCADERIA:{label:"Alta de mercadería",    icon:"[pkg]", color:"#1e8449", bg:"#d5f5e3"},
-  PEDIDOS_PEND:   {label:"Pedidos pendientes",    icon:"[clock]", color:"#e67e22", bg:"#fef9e7"},
+  NUEVO_PEDIDO:   {label:"Nuevo pedido",         icon:"🛒", color:"#1a5276", bg:"#d6eaf8"},
+  CAMBIO_ESTADO:  {label:"Cambio de estado",      icon:"📋", color:"#6c3483", bg:"#e8daef"},
+  ALTA_MERCADERIA:{label:"Alta de mercadería",    icon:"📦", color:"#1e8449", bg:"#d5f5e3"},
+  PEDIDOS_PEND:   {label:"Pedidos pendientes",    icon:"⏰", color:"#e67e22", bg:"#fef9e7"},
 };
 
 // ─── NOTIF PANEL ─────────────────────────────────────────────────────────────
@@ -323,7 +323,7 @@ function NotifPanel({notifs,setNotifs,currentUser,users,onClose,onMarkAllRead,pu
       <div onClick={e=>e.stopPropagation()} style={{position:"fixed",top:70,right:16,width:380,maxHeight:"80vh",background:"#fff",borderRadius:16,boxShadow:"0 12px 40px #0003",border:"1px solid #f0f0f0",display:"flex",flexDirection:"column",zIndex:999,overflow:"hidden"}}>
         <div style={{padding:"14px 18px",borderBottom:"1px solid #f5f5f5",display:"flex",alignItems:"center",justifyContent:"space-between",background:`linear-gradient(135deg,${REDD},${RED})`,borderRadius:"16px 16px 0 0"}}>
           <div style={{color:"#fff",fontWeight:800,fontSize:15}}>
-            [bell] Notificaciones {unread.length>0&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:10,fontSize:11,padding:"1px 6px",marginLeft:6,fontWeight:800}}>{unread.length}</span>}
+            🔔 Notificaciones {unread.length>0&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:10,fontSize:11,padding:"1px 6px",marginLeft:6,fontWeight:800}}>{unread.length}</span>}
           </div>
           <div style={{display:"flex",gap:6}}>
             {unread.length>0&&<button onClick={onMarkAllRead} style={{padding:"4px 10px",borderRadius:6,border:"none",background:"#ffffff33",color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}}>Marcar todas leídas</button>}
@@ -332,7 +332,7 @@ function NotifPanel({notifs,setNotifs,currentUser,users,onClose,onMarkAllRead,pu
         </div>
         {currentUser.role==="vendedor" && pendingOrders.filter(o=>o.vendedor===currentUser.name).length>0&&(
           <div style={{background:"#fef9e7",borderBottom:"1px solid #f1c40f22",padding:"10px 16px",display:"flex",gap:8,alignItems:"center"}}>
-            <span style={{fontSize:18}}>[clock]</span>
+            <span style={{fontSize:18}}>⏰</span>
             <div>
               <div style={{fontWeight:700,fontSize:12,color:"#7d6608"}}>Tenés {pendingOrders.filter(o=>o.vendedor===currentUser.name).length} pedido(s) pendiente(s)</div>
               <div style={{fontSize:11,color:"#9a7d0a"}}>Revisá el estado de tus pedidos en Central</div>
@@ -341,7 +341,7 @@ function NotifPanel({notifs,setNotifs,currentUser,users,onClose,onMarkAllRead,pu
         )}
         <div style={{overflowY:"auto",flex:1}}>
           {myNotifs.length===0
-            ? <div style={{textAlign:"center",padding:40,color:"#aaa"}}><div style={{fontSize:36,marginBottom:8}}>[muted]</div><div>No tenés notificaciones</div></div>
+            ? <div style={{textAlign:"center",padding:40,color:"#aaa"}}><div style={{fontSize:36,marginBottom:8}}>🔕</div><div>No tenés notificaciones</div></div>
             : myNotifs.map(n=>{
                 const cfg = NOTIF_TYPES[n.tipo]||{icon:"-",color:"#666",bg:"#f5f5f5"};
                 const isRead = n.leida.includes(currentUser.id);
@@ -383,7 +383,7 @@ function NotifConfig({users,setUsers,notifs,setNotifs}) {
   return (
     <div>
       <div style={{background:"#d6eaf8",border:"1px solid #aed6f1",borderRadius:12,padding:"12px 16px",marginBottom:16,fontSize:13,color:"#1a5276"}}>
-        <strong>[bell] Centro de notificaciones</strong> &mdash; Configurá qué alertas recibe cada usuario dentro de la app.<br/>
+        <strong>🔔 Centro de notificaciones</strong> &mdash; Configurá qué alertas recibe cada usuario dentro de la app.<br/>
         <span style={{fontSize:11,marginTop:4,display:"block",color:"#1a5276bb"}}>Para envío de emails automáticos conectá <strong>EmailJS</strong> cuando la app esté en producción.</span>
       </div>
       {users.map(u=>{
@@ -391,10 +391,10 @@ function NotifConfig({users,setUsers,notifs,setNotifs}) {
         return (
           <div key={u.id} style={{background:"#fff",borderRadius:12,padding:18,marginBottom:12,boxShadow:"0 1px 4px #0001"}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-              <span style={{fontSize:24}}>{u.role==="admin"?"[admin]":"[user]"}</span>
+              <span style={{fontSize:24}}>{u.role==="admin"?"👑":"👤"}</span>
               <div>
                 <div style={{fontWeight:800,fontSize:14}}>{u.name}</div>
-                <div style={{fontSize:11,color:"#888"}}>@{u.username} . <span style={{color:u.role==="admin"?RED:"#1a5276",fontWeight:600}}>{u.role==="admin"?"Admin":"Vendedor"}</span>{u.email&&<span style={{marginLeft:6,color:"#aaa"}}>. [email] {u.email}</span>}{!u.email&&<span style={{marginLeft:6,color:"#e67e22",fontSize:10}}>[!] Sin email configurado</span>}</div>
+                <div style={{fontSize:11,color:"#888"}}>@{u.username} . <span style={{color:u.role==="admin"?RED:"#1a5276",fontWeight:600}}>{u.role==="admin"?"Admin":"Vendedor"}</span>{u.email&&<span style={{marginLeft:6,color:"#aaa"}}>. 📧 {u.email}</span>}{!u.email&&<span style={{marginLeft:6,color:"#e67e22",fontSize:10}}>🎉 Sin email configurado</span>}</div>
               </div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:8}}>
@@ -414,7 +414,7 @@ function NotifConfig({users,setUsers,notifs,setNotifs}) {
           </div>
         );
       })}
-      {notifs.length>0&&(<div style={{marginTop:8,textAlign:"right"}}><button onClick={async()=>{setNotifs([]);await db.clearNotifs();}} style={{padding:"7px 14px",borderRadius:8,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:12,fontWeight:600}}>[del] Limpiar todas las notificaciones ({notifs.length})</button></div>)}
+      {notifs.length>0&&(<div style={{marginTop:8,textAlign:"right"}}><button onClick={async()=>{setNotifs([]);await db.clearNotifs();}} style={{padding:"7px 14px",borderRadius:8,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:12,fontWeight:600}}>🗑 Limpiar todas las notificaciones ({notifs.length})</button></div>)}
     </div>
   );
 }
@@ -454,7 +454,7 @@ function Login({users, onLogin}) {
         <Field label="Contraseña">
           <div style={{position:"relative"}}>
             <input type={showPass?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()} placeholder="Tu contraseña" style={{...inputStyle,paddingRight:40}}/>
-            <button onClick={()=>setShowPass(s=>!s)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:16,color:"#aaa"}}>{showPass?"[hide]":"[show]"}</button>
+            <button onClick={()=>setShowPass(s=>!s)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:16,color:"#aaa"}}>{showPass?"🙈":"👁️"}</button>
           </div>
         </Field>
         {error && <div style={{background:"#fdecea",color:RED,borderRadius:8,padding:"8px 12px",fontSize:13,marginBottom:12,textAlign:"center"}}>{error}</div>}
@@ -506,7 +506,7 @@ export default function App() {
   if(error) return (
     <div style={{minHeight:"100vh",background:"#f5f5f5",display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{background:"#fff",borderRadius:16,padding:32,maxWidth:400,textAlign:"center",boxShadow:"0 4px 20px #0002"}}>
-        <div style={{fontSize:48,marginBottom:12}}>[!]️</div>
+        <div style={{fontSize:48,marginBottom:12}}>🎉️</div>
         <div style={{fontWeight:800,fontSize:16,marginBottom:8}}>Error de conexión</div>
         <div style={{color:"#666",fontSize:13,marginBottom:20}}>{error}</div>
         <button onClick={()=>window.location.reload()} style={{padding:"10px 24px",borderRadius:8,border:"none",background:"#c0392b",color:"#fff",fontWeight:700,cursor:"pointer"}}>Reintentar</button>
@@ -558,7 +558,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     setProducts(updatedProds); setOrders(o=>[orderWithNum,...o]);
     await db.upsertOrder(orderWithNum);
     for(const p of updatedProds.filter(p=>orderWithNum.items.find(i=>i.pid===p.id))) await db.upsertProduct(p);
-    const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"NUEVO_PEDIDO",para:"admin",icono:"[+]",titulo:"Nuevo pedido registrado",cuerpo:`${orderWithNum.client} - ${fARS(orderWithNum.total)} - ${orderWithNum.docNum}`,ref:orderWithNum.id};
+    const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"NUEVO_PEDIDO",para:"admin",icono:"🛒",titulo:"Nuevo pedido registrado",cuerpo:`${orderWithNum.client} - ${fARS(orderWithNum.total)} - ${orderWithNum.docNum}`,ref:orderWithNum.id};
     await db.addNotif(notif); setNotifs(n=>[notif,...n]);
     // Auto-print Reserva document
     setTimeout(() => printDoc(orderWithNum, "reserva"), 400);
@@ -585,11 +585,11 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
 
     if(ord){
       const cfg=SCFG[stage]||{};
-      const n1={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"CAMBIO_ESTADO",para:"admin",icono:cfg.icon||"[=]",titulo:`Pedido paso a ${cfg.label}`,cuerpo:`${ord.client} - ${fARS(ord.total)} - ${updated.compNum||""}`,ref:id};
+      const n1={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"CAMBIO_ESTADO",para:"admin",icono:cfg.icon||"📋",titulo:`Pedido paso a ${cfg.label}`,cuerpo:`${ord.client} - ${fARS(ord.total)} - ${updated.compNum||""}`,ref:id};
       await db.addNotif(n1); setNotifs(n=>[n1,...n]);
       const vendUser=users.find(u=>u.name===ord.vendedor||u.username===ord.vendedor);
       if(vendUser&&vendUser.id!==currentUser.id){
-        const n2={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"CAMBIO_ESTADO",para:vendUser.id,icono:cfg.icon||"[=]",titulo:`Tu pedido paso a ${cfg.label}`,cuerpo:`${ord.client} - ${fARS(ord.total)}`,ref:id};
+        const n2={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"CAMBIO_ESTADO",para:vendUser.id,icono:cfg.icon||"📋",titulo:`Tu pedido paso a ${cfg.label}`,cuerpo:`${ord.client} - ${fARS(ord.total)}`,ref:id};
         await db.addNotif(n2); setNotifs(n=>[n2,...n]);
       }
     }
@@ -618,20 +618,20 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const updProd=updatedProds.find(p=>p.id===pid);
     if(updProd)await db.upsertProduct(updProd);
     if(prod){
-      const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"ALTA_MERCADERIA",para:"admin",icono:"[pkg]",titulo:"Alta de mercaderia",cuerpo:`${prod.name} - +${qty} unidades${newCost?` - Nuevo costo: ${fARS(newCost)}`:""}`,ref:pid};
+      const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"ALTA_MERCADERIA",para:"admin",icono:"📦",titulo:"Alta de mercaderia",cuerpo:`${prod.name} - +${qty} unidades${newCost?` - Nuevo costo: ${fARS(newCost)}`:""}`,ref:pid};
       await db.addNotif(notif); setNotifs(n=>[notif,...n]);
     }
   };
 
   const pending = orders.filter(o=>o.stage!=="entregado").length;
   const TABS = [
-    {k:"central",   label:"Central",           icon:"[=]", roles:["admin","vendedor"]},
-    {k:"nuevo",     label:"Nuevo Pedido",       icon:"[+]", roles:["admin","vendedor"]},
-    {k:"cotizacion",label:"Cotizaciones",       icon:"[doc]", roles:["admin","vendedor"]},
-    {k:"precios",   label:"Precios",            icon:"[$]", roles:["admin","vendedor"]},
-    {k:"stock",     label:"Stock",              icon:"[pkg]", roles:["admin","vendedor"]},
-    {k:"compras",   label:"Alta de Mercancía",icon:"[shop]", roles:["admin","vendedor"]},
-    {k:"admin",     label:"Administracion",     icon:"[*]",   roles:["admin"]},
+    {k:"central",   label:"Central",           icon:"📋", roles:["admin","vendedor"]},
+    {k:"nuevo",     label:"Nuevo Pedido",       icon:"🛒", roles:["admin","vendedor"]},
+    {k:"cotizacion",label:"Cotizaciones",       icon:"📄", roles:["admin","vendedor"]},
+    {k:"precios",   label:"Precios",            icon:"💲", roles:["admin","vendedor"]},
+    {k:"stock",     label:"Stock",              icon:"📦", roles:["admin","vendedor"]},
+    {k:"compras",   label:"Alta de Mercancía",icon:"🏪", roles:["admin","vendedor"]},
+    {k:"admin",     label:"Administracion",     icon:"★",   roles:["admin"]},
   ].filter(t=>t.roles.includes(currentUser.role));
 
   return (
@@ -655,10 +655,10 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
               ))}
             </nav>
             <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 8px",borderLeft:"1px solid #ffffff33",marginLeft:4}}>
-              <span style={{color:"#ffeeee",fontSize:12}}>[user] {currentUser.name}</span>
+              <span style={{color:"#ffeeee",fontSize:12}}>👤 {currentUser.name}</span>
               <div style={{position:"relative"}}>
                 <button onClick={()=>setShowNotifs(s=>!s)} style={{background:"#ffffff22",border:"none",color:"#fff",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:16,lineHeight:1,position:"relative"}}>
-                  [bell]
+                  🔔
                   {unreadCount>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#f1c40f",color:"#1a1a1a",borderRadius:10,fontSize:9,padding:"1px 4px",fontWeight:800,minWidth:14,textAlign:"center"}}>{unreadCount}</span>}
                 </button>
               </div>
@@ -690,7 +690,7 @@ function CompPopup({order, onClose}) {
   return (
     <div style={{position:"fixed",inset:0,background:"#0007",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,padding:16}}>
       <div style={{background:"#fff",borderRadius:20,padding:32,maxWidth:420,width:"100%",boxShadow:"0 24px 64px #0005",textAlign:"center"}}>
-        <div style={{fontSize:52,marginBottom:8}}>[ok]</div>
+        <div style={{fontSize:52,marginBottom:8}}>✅</div>
         <div style={{fontWeight:800,fontSize:20,color:"#1a5276",marginBottom:6}}>Pedido Confirmado</div>
         <div style={{fontSize:13,color:"#666",marginBottom:20}}>Se generó el comprobante para <strong>{order.client}</strong></div>
 
@@ -703,7 +703,7 @@ function CompPopup({order, onClose}) {
         <div style={{display:"flex",gap:10}}>
           <button onClick={()=>{ printDoc(order,"confirmado"); onClose(); }}
             style={{flex:1,padding:"12px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#1a5276,#2980b9)",color:"#fff",fontWeight:800,fontSize:14,cursor:"pointer"}}>
-            [print]️ Imprimir Comp.
+            🖨️️ Imprimir Comp.
           </button>
           <button onClick={onClose}
             style={{padding:"12px 16px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer"}}>
@@ -734,17 +734,17 @@ function Central({orders,products,onStage,onDel}) {
         {STAGES.map(s=>{const c=SCFG[s],cnt=orders.filter(o=>o.stage===s).length;return <div key={s} onClick={()=>setFStage(fStage===s?"todos":s)} style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 6px #0001",borderLeft:`4px solid ${c.color}`,cursor:"pointer",outline:fStage===s?`2px solid ${c.color}`:"none"}}><div style={{fontSize:26,fontWeight:800,color:c.color}}>{cnt}</div><div style={{fontSize:12,color:"#666",fontWeight:600}}>{c.icon} {c.label}</div></div>;})}
         <div style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 6px #0001",borderLeft:`4px solid ${RED}`}}>
           <div style={{fontSize:14,fontWeight:800,color:RED}}>{fARS(deliv)}</div>
-          <div style={{fontSize:12,color:"#666",fontWeight:600}}>[money] Entregado</div>
+          <div style={{fontSize:12,color:"#666",fontWeight:600}}>💰 Entregado</div>
         </div>
       </div>
       <div style={{background:"#fff",borderRadius:12,padding:14,marginBottom:14,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",boxShadow:"0 1px 4px #0001"}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="[search] Buscar cliente o No pedido..." style={{flex:1,minWidth:180,padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none"}}/>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar cliente o No pedido..." style={{flex:1,minWidth:180,padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none"}}/>
         <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
           {["todos",...STAGES].map(s=>{const c=SCFG[s];return <button key={s} onClick={()=>setFStage(s)} style={{padding:"5px 11px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:fStage===s?(c?.color||RED):"#e5e5e5",background:fStage===s?(c?.bg||"#fdecea"):"#fff",color:fStage===s?(c?.color||RED):"#666"}}>{s==="todos"?"Todos":c.label}</button>;})}
         </div>
       </div>
       {filtered.length===0
-        ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{fontSize:48}}>[empty]</div><div style={{marginTop:8}}>No hay pedidos. !Creá uno desde "Nuevo Pedido"!</div></div>
+        ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{fontSize:48}}>📭</div><div style={{marginTop:8}}>No hay pedidos. !Creá uno desde "Nuevo Pedido"!</div></div>
         : filtered.map(o=><OCard key={o.id} o={o} exp={expanded===o.id} toggle={()=>setExpanded(expanded===o.id?null:o.id)} getP={getP} onStage={onStage} onDel={onDel}/>)
       }
     </div>
@@ -760,7 +760,7 @@ function DelBtn({onConfirm}) {
       <button onClick={()=>setConfirm(false)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12}}>No</button>
     </div>
   );
-  return <button onClick={()=>setConfirm(true)} style={{marginLeft:"auto",padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>[del] Eliminar</button>;
+  return <button onClick={()=>setConfirm(true)} style={{marginLeft:"auto",padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>🗑 Eliminar</button>;
 }
 
 function OCard({o,exp,toggle,getP,onStage,onDel}) {
@@ -774,7 +774,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel}) {
             {o.docNum&&<span style={{fontWeight:700,color:"#c0392b"}}>{o.docNum}</span>}
             {o.compNum&&<span style={{fontWeight:700,color:"#1a5276"}}>{o.compNum}</span>}
             <span>{o.date}</span>
-            {o.vendedor&&<span>. [user] {o.vendedor}</span>}
+            {o.vendedor&&<span>. 👤 {o.vendedor}</span>}
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
@@ -790,12 +790,12 @@ function OCard({o,exp,toggle,getP,onStage,onDel}) {
           </div>
           {o.items.map((it,i)=>{const p=getP(it.pid);return <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f9f9f9",fontSize:13}}><span style={{color:"#444"}}>{p?.name||it.name} x {it.qty}</span><span style={{fontWeight:600}}>{fARS(it.price*it.qty)}</span></div>;})}
           <div style={{display:"flex",justifyContent:"flex-end",fontWeight:800,fontSize:16,color:RED,margin:"8px 0 12px"}}>{fARS(o.total)}</div>
-          {o.notes&&<div style={{background:"#f9f9f9",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#555",marginBottom:12}}>[note] {o.notes}</div>}
+          {o.notes&&<div style={{background:"#f9f9f9",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#555",marginBottom:12}}>💬 {o.notes}</div>}
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             {next&&<button onClick={()=>onStage(o.id,next)} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",background:SCFG[next].color,color:"#fff",fontWeight:700,fontSize:13}}>{SCFG[next].icon} Pasar a {SCFG[next].label}</button>}
-            {idx>0&&o.stage!=="entregado"&&<button onClick={()=>onStage(o.id,STAGES[idx-1])} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",cursor:"pointer",background:"#fff",color:"#666",fontWeight:600,fontSize:13}}>{"<"}- Retroceder</button>}
+            {idx>0&&o.stage!=="entregado"&&<button onClick={()=>onStage(o.id,STAGES[idx-1])} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",cursor:"pointer",background:"#fff",color:"#666",fontWeight:600,fontSize:13}}>← Retroceder</button>}
             <button onClick={()=>printDoc(o, o.stage==="reserva" ? "reserva" : "confirmado")} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #d6eaf8",cursor:"pointer",background:"#fff",color:"#1a5276",fontWeight:600,fontSize:13}}>
-              [print] {o.stage==="reserva" ? (o.docNum||"Imprimir") : (o.compNum||"Imprimir")}
+              🖨️ {o.stage==="reserva" ? (o.docNum||"Imprimir") : (o.compNum||"Imprimir")}
             </button>
             <DelBtn onConfirm={()=>onDel(o.id)}/>
           </div>
@@ -827,12 +827,12 @@ function Precios({products}) {
   return (
     <div>
       <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:14,boxShadow:"0 1px 4px #0001"}}>
-        <div style={{fontWeight:800,fontSize:16,marginBottom:12,color:"#1a1a1a"}}>[tag]️ Buscador de Precios</div>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="[search] Buscá por nombre o código..." style={{width:"100%",padding:"10px 14px",borderRadius:10,border:"1.5px solid #e5e5e5",fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:10}} autoFocus/>
+        <div style={{fontWeight:800,fontSize:16,marginBottom:12,color:"#1a1a1a"}}>🏷️️ Buscador de Precios</div>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscá por nombre o código..." style={{width:"100%",padding:"10px 14px",borderRadius:10,border:"1.5px solid #e5e5e5",fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:10}} autoFocus/>
         <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
           <div style={{position:"relative",flex:1,minWidth:200}}>
             <button onClick={()=>setCatOpen(o=>!o)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"8px 12px",borderRadius:8,border:`1.5px solid ${catOpen?RED:"#e5e5e5"}`,background:cat!=="todos"?"#fdecea":"#fff",color:cat!=="todos"?RED:"#666",cursor:"pointer",fontSize:13,fontWeight:600}}>
-              <span>[tag]️ {cat==="todos"?"Todas las categorías":cat}</span><span style={{fontSize:10}}>{catOpen?"^":"v"}</span>
+              <span>🏷️️ {cat==="todos"?"Todas las categorías":cat}</span><span style={{fontSize:10}}>{catOpen?"^":"v"}</span>
             </button>
             {catOpen&&(<div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#fff",borderRadius:10,border:"1.5px solid #e5e5e5",boxShadow:"0 8px 24px #0002",zIndex:50,padding:8,display:"flex",flexWrap:"wrap",gap:5,maxHeight:220,overflowY:"auto"}}>
               {CATS.map(c=>(<button key={c} onClick={()=>{setCat(c);setCatOpen(false);}} style={{padding:"4px 11px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:cat===c?RED:"#e5e5e5",background:cat===c?"#fdecea":"#fff",color:cat===c?RED:"#666"}}>{c==="todos"?"Todos":c}</button>))}
@@ -847,7 +847,7 @@ function Precios({products}) {
         </div>
       </div>
       {shown.length===0
-        ? <div style={{textAlign:"center",padding:60,color:"#aaa",background:"#fff",borderRadius:12}}><div style={{fontSize:48,marginBottom:8}}>[search]</div><div>No se encontraron productos</div></div>
+        ? <div style={{textAlign:"center",padding:60,color:"#aaa",background:"#fff",borderRadius:12}}><div style={{fontSize:48,marginBottom:8}}>🔍</div><div>No se encontraron productos</div></div>
         : <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 4px #0001",overflow:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
               <thead><tr style={{background:"#f9f9f9",position:"sticky",top:0}}>{["Código","Descripción","Categoría","Precio"].map(h=>(<th key={h} style={{padding:"11px 14px",textAlign:"left",fontWeight:700,color:"#888",fontSize:11,textTransform:"uppercase",letterSpacing:.5,whiteSpace:"nowrap"}}>{h}</th>))}</tr></thead>
@@ -883,10 +883,10 @@ function ProductSelector({products,cart,setCart}) {
   return (
     <div>
       <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px #0001"}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="[search] Buscar por nombre o código..." style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",marginBottom:10,boxSizing:"border-box"}}/>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar por nombre o código..." style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",marginBottom:10,boxSizing:"border-box"}}/>
         <div style={{position:"relative"}}>
           <button onClick={()=>setCatOpen(o=>!o)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"8px 12px",borderRadius:8,border:`1.5px solid ${catOpen?RED:"#e5e5e5"}`,background:cat!=="todos"?"#fdecea":"#fff",color:cat!=="todos"?RED:"#666",cursor:"pointer",fontSize:13,fontWeight:600}}>
-            <span>[tag]️ {cat==="todos"?"Todas las categorías":cat}</span><span style={{fontSize:10,marginLeft:6}}>{catOpen?"^":"v"}</span>
+            <span>🏷️️ {cat==="todos"?"Todas las categorías":cat}</span><span style={{fontSize:10,marginLeft:6}}>{catOpen?"^":"v"}</span>
           </button>
           {catOpen&&(<div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#fff",borderRadius:10,border:"1.5px solid #e5e5e5",boxShadow:"0 8px 24px #0002",zIndex:50,padding:8,display:"flex",flexWrap:"wrap",gap:5,maxHeight:220,overflowY:"auto"}}>
             {CATS.map(c=><button key={c} onClick={()=>{setCat(c);setCatOpen(false);}} style={{padding:"4px 11px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:cat===c?RED:"#e5e5e5",background:cat===c?"#fdecea":"#fff",color:cat===c?RED:"#666"}}>{c==="todos"?"Todos":c}</button>)}
@@ -966,16 +966,16 @@ function Nuevo({products,vendors,onAdd,onDone}) {
     onAdd({id:genId(),client:client.trim(),notes,vendedor,items:cart,total,subtotal,globalDisc,stage:"reserva",date:today()});
     setOk(true); setTimeout(()=>onDone(),1400);
   };
-  if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>[ok]</div><div style={{fontWeight:800,color:"#1e8449",fontSize:20,marginTop:12}}>!Pedido registrado!</div></div>;
+  if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>✅</div><div style={{fontWeight:800,color:"#1e8449",fontSize:20,marginTop:12}}>!Pedido registrado!</div></div>;
   return (
     <div style={{display:"grid",gridTemplateColumns:"1fr 330px",gap:18,alignItems:"start"}}>
       <div>
-        <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>[+] Nuevo Pedido - Seleccioná productos</div>
+        <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>🛒 Nuevo Pedido - Seleccioná productos</div>
         <ProductSelector products={products} cart={cart} setCart={setCart}/>
       </div>
       <div style={{position:"sticky",top:16}}>
         <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 2px 12px #0002"}}>
-          <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>[=] Resumen del Pedido</div>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>📋 Resumen del Pedido</div>
           <Field label="Cliente *"><input value={client} onChange={e=>setClient(e.target.value)} placeholder="Nombre del cliente" style={inputStyle}/></Field>
           <Field label="Vendedor *"><select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,color:vendedor?"#1a1a1a":"#aaa",cursor:"pointer"}}><option value="">- Seleccioná vendedor -</option>{vendors.map(v=><option key={v} value={v}>{v}</option>)}</select></Field>
           <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
@@ -1013,7 +1013,7 @@ function Nuevo({products,vendors,onAdd,onDone}) {
           </div>}
           <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:17,color:RED,padding:"8px 0",borderTop:"2px solid #f5f5f5",margin:"6px 0 14px"}}><span>Total</span><span>{fARS(total)}</span></div>
           <button onClick={submit} disabled={!cart.length||!client.trim()||!vendedor} style={{width:"100%",padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:(!cart.length||!client.trim()||!vendedor)?"#e5e5e5":`linear-gradient(135deg,${REDD},${RED})`,color:(!cart.length||!client.trim()||!vendedor)?"#aaa":"#fff"}}>
-            [ok] Registrar como Reserva
+            ✅ Registrar como Reserva
           </button>
         </div>
       </div>
@@ -1036,7 +1036,7 @@ function Cotizaciones({quotes,products,vendors,onAdd,onDel}) {
     <div>
       <div style={{background:"#fff",borderRadius:12,padding:4,marginBottom:16,display:"flex",gap:4,boxShadow:"0 1px 4px #0001"}}>
         <button onClick={()=>setView("lista")} style={{flex:1,padding:"10px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="lista"?`linear-gradient(135deg,#6c3483,#9b59b6)`:"transparent",color:view==="lista"?"#fff":"#555"}}>
-          [doc] Lista de Cotizaciones ({quotes.length})
+          📄 Lista de Cotizaciones ({quotes.length})
         </button>
         <button onClick={()=>setView("nueva")} style={{flex:1,padding:"10px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="nueva"?`linear-gradient(135deg,#6c3483,#9b59b6)`:"transparent",color:view==="nueva"?"#fff":"#555"}}>
           + Nueva Cotización
@@ -1046,7 +1046,7 @@ function Cotizaciones({quotes,products,vendors,onAdd,onDel}) {
       {view==="lista" && (
         quotes.length===0
           ? <div style={{textAlign:"center",padding:60,color:"#aaa",background:"#fff",borderRadius:12}}>
-              <div style={{fontSize:48,marginBottom:8}}>[doc]</div>
+              <div style={{fontSize:48,marginBottom:8}}>📄</div>
               <div>No hay cotizaciones. !Creá una!</div>
             </div>
           : quotes.map(q=><QuoteCard key={q.id} q={q} exp={expanded===q.id} toggle={()=>setExpanded(expanded===q.id?null:q.id)} getP={getP} onDel={onDel}/>)
@@ -1065,23 +1065,23 @@ function QuoteCard({q,exp,toggle,getP,onDel}) {
           <div style={{fontSize:11,color:"#aaa",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
             {q.docNum&&<span style={{fontWeight:700,color:"#6c3483"}}>{q.docNum}</span>}
             <span>{q.date}</span>
-            {q.vendedor&&<span>. [user] {q.vendedor}</span>}
+            {q.vendedor&&<span>. 👤 {q.vendedor}</span>}
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-          <span style={{background:PURPLEBG,color:PURPLE,border:`1px solid ${PURPLE}44`,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>[doc] Cotización</span>
+          <span style={{background:PURPLEBG,color:PURPLE,border:`1px solid ${PURPLE}44`,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>📄 Cotización</span>
           <span style={{fontWeight:800,color:PURPLE,fontSize:15}}>{fARS(q.total)}</span>
           <span style={{color:"#ccc"}}>{exp?"^":"v"}</span>
         </div>
       </div>
       {exp && (
         <div style={{borderTop:"1px solid #f5f5f5",padding:18}}>
-          {q.validity&&<div style={{background:"#fef9e7",borderRadius:8,padding:"7px 12px",fontSize:12,color:"#7d6608",marginBottom:12}}>[timer] Validez: <strong>{q.validity}</strong></div>}
+          {q.validity&&<div style={{background:"#fef9e7",borderRadius:8,padding:"7px 12px",fontSize:12,color:"#7d6608",marginBottom:12}}>⏳ Validez: <strong>{q.validity}</strong></div>}
           {q.items.map((it,i)=>{const p=getP(it.pid);return <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f9f9f9",fontSize:13}}><span style={{color:"#444"}}>{p?.name||it.name} x {it.qty}</span><span style={{fontWeight:600}}>{fARS(it.price*it.qty)}</span></div>;})}
           <div style={{display:"flex",justifyContent:"flex-end",fontWeight:800,fontSize:16,color:PURPLE,margin:"8px 0 12px"}}>{fARS(q.total)}</div>
-          {q.notes&&<div style={{background:"#f9f9f9",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#555",marginBottom:12}}>[note] {q.notes}</div>}
+          {q.notes&&<div style={{background:"#f9f9f9",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#555",marginBottom:12}}>💬 {q.notes}</div>}
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            <button onClick={()=>printDoc(q,"cotizacion")} style={{padding:"8px 12px",borderRadius:8,border:`1.5px solid ${PURPLEBG}`,cursor:"pointer",background:"#fff",color:PURPLE,fontWeight:600,fontSize:13}}>[print] Imprimir</button>
+            <button onClick={()=>printDoc(q,"cotizacion")} style={{padding:"8px 12px",borderRadius:8,border:`1.5px solid ${PURPLEBG}`,cursor:"pointer",background:"#fff",color:PURPLE,fontWeight:600,fontSize:13}}>🖨️ Imprimir</button>
             <div style={{marginLeft:"auto",display:"flex",gap:8}}>
               <QuoteDelBtn onConfirm={()=>onDel(q.id)}/>
             </div>
@@ -1099,7 +1099,7 @@ function QuoteDelBtn({onConfirm}) {
     <button onClick={onConfirm} style={{padding:"4px 10px",borderRadius:6,border:"none",background:RED,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:12}}>Sí</button>
     <button onClick={()=>setC(false)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12}}>No</button>
   </div>;
-  return <button onClick={()=>setC(true)} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>[del] Eliminar</button>;
+  return <button onClick={()=>setC(true)} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>🗑 Eliminar</button>;
 }
 
 function NuevaCotizacion({products,vendors,onAdd}) {
@@ -1122,16 +1122,16 @@ function NuevaCotizacion({products,vendors,onAdd}) {
     setOk(true);
     await onAdd(q);
   };
-  if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>[doc]</div><div style={{fontWeight:800,color:"#6c3483",fontSize:20,marginTop:12}}>!Cotización guardada!</div></div>;
+  if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>📄</div><div style={{fontWeight:800,color:"#6c3483",fontSize:20,marginTop:12}}>!Cotización guardada!</div></div>;
   return (
     <div style={{display:"grid",gridTemplateColumns:"1fr 330px",gap:18,alignItems:"start"}}>
       <div>
-        <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>[doc] Nueva Cotización - Seleccioná productos</div>
+        <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>📄 Nueva Cotización - Seleccioná productos</div>
         <ProductSelector products={products} cart={cart} setCart={setCart}/>
       </div>
       <div style={{position:"sticky",top:16}}>
         <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 2px 12px #0002",border:"2px solid #e8daef"}}>
-          <div style={{fontWeight:800,fontSize:15,marginBottom:14,color:"#6c3483"}}>[doc] Resumen de Cotización</div>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:14,color:"#6c3483"}}>📄 Resumen de Cotización</div>
           <div style={{background:"#e8daef",borderRadius:8,padding:"7px 12px",fontSize:12,color:"#6c3483",marginBottom:14}}>
             ℹ️ Las cotizaciones <strong>no descuentan stock</strong>. Son solo presupuestos para el cliente.
           </div>
@@ -1178,7 +1178,7 @@ function NuevaCotizacion({products,vendors,onAdd}) {
           </div>}
           <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:17,color:"#6c3483",padding:"8px 0",borderTop:"2px solid #f5f5f5",margin:"6px 0 14px"}}><span>Total</span><span>{fARS(total)}</span></div>
           <button onClick={submit} disabled={!cart.length||!client.trim()} style={{width:"100%",padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:(!cart.length||!client.trim())?"#e5e5e5":"linear-gradient(135deg,#6c3483,#9b59b6)",color:(!cart.length||!client.trim())?"#aaa":"#fff"}}>
-            [doc] Guardar Cotización
+            📄 Guardar Cotización
           </button>
         </div>
       </div>
@@ -1193,7 +1193,7 @@ function StockAlert({low}) {
   return (
     <div style={{background:"#fef9e7",border:"1px solid #f1c40f",borderRadius:12,marginBottom:14,overflow:"hidden"}}>
       <div onClick={()=>setOpen(o=>!o)} style={{padding:"11px 16px",display:"flex",gap:10,alignItems:"center",cursor:"pointer",userSelect:"none"}}>
-        <span style={{fontSize:20}}>[!]️</span>
+        <span style={{fontSize:20}}>🎉️</span>
         <div style={{flex:1}}>
           <span style={{fontWeight:700,color:"#7d6608",fontSize:13}}>Stock bajo en {low.length} producto(s)</span>
           {!open && <span style={{fontSize:11,color:"#9a7d0a",marginLeft:8}}>- hacé clic para ver el detalle</span>}
@@ -1209,7 +1209,7 @@ function StockAlert({low}) {
                 <span style={{fontSize:11,color:"#aaa",marginLeft:8}}>{p.id}</span>
               </div>
               <span style={{background:p.stock===0?"#fdecea":"#fff3cd",color:p.stock===0?RED:"#856404",borderRadius:8,padding:"2px 8px",fontSize:12,fontWeight:700,border:`1px solid ${p.stock===0?"#f5c6cb":"#ffc107"}`}}>
-                {p.stock===0?"Sin stock":`[!] ${p.stock} u.`}
+                {p.stock===0?"Sin stock":`🎉 ${p.stock} u.`}
               </span>
             </div>
           ))}
@@ -1224,9 +1224,9 @@ function StockLog({log, onClear}) {
   const [search,setSearch] = useState("");
 
   const TIPOS = {
-    "ENTRADA": {color:"#1e8449", bg:"#d5f5e3", icon:"[in]"},
-    "SALIDA":  {color:"#e67e22", bg:"#fef9e7", icon:"[out]"},
-    "BAJA":    {color:"#c0392b", bg:"#fdecea", icon:"[del]"},
+    "ENTRADA": {color:"#1e8449", bg:"#d5f5e3", icon:"📥"},
+    "SALIDA":  {color:"#e67e22", bg:"#fef9e7", icon:"📤"},
+    "BAJA":    {color:"#c0392b", bg:"#fdecea", icon:"🗑"},
   };
 
   const filtered = log.filter(e=>{
@@ -1252,11 +1252,11 @@ function StockLog({log, onClear}) {
         })}
         <div style={{background:"#fff",borderRadius:10,padding:"12px 14px",boxShadow:"0 1px 4px #0001",borderLeft:"4px solid #1a5276"}}>
           <div style={{fontSize:22,fontWeight:800,color:"#1a5276"}}>{log.length}</div>
-          <div style={{fontSize:12,color:"#666",fontWeight:600}}>[log] Total movimientos</div>
+          <div style={{fontSize:12,color:"#666",fontWeight:600}}>📜 Total movimientos</div>
         </div>
       </div>
       <div style={{background:"#fff",borderRadius:12,padding:12,marginBottom:12,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",boxShadow:"0 1px 4px #0001"}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="[search] Buscar por producto, usuario o motivo..."
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar por producto, usuario o motivo..."
           style={{flex:1,minWidth:200,padding:"7px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none"}}/>
         <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
           {["todos","ENTRADA","SALIDA","BAJA"].map(t=>{
@@ -1273,12 +1273,12 @@ function StockLog({log, onClear}) {
                 <button onClick={()=>{onClear();setConfirmClear(false);}} style={{padding:"3px 10px",borderRadius:6,border:"none",background:RED,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:12}}>Sí</button>
                 <button onClick={()=>setConfirmClear(false)} style={{padding:"3px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12}}>No</button>
               </div>
-            : <button onClick={()=>setConfirmClear(true)} style={{padding:"5px 12px",borderRadius:8,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:11,fontWeight:600,whiteSpace:"nowrap"}}>[del] Limpiar historial</button>
+            : <button onClick={()=>setConfirmClear(true)} style={{padding:"5px 12px",borderRadius:8,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:11,fontWeight:600,whiteSpace:"nowrap"}}>🗑 Limpiar historial</button>
         )}
       </div>
       {filtered.length===0
         ? <div style={{textAlign:"center",padding:50,color:"#aaa",background:"#fff",borderRadius:12}}>
-            <div style={{fontSize:40,marginBottom:8}}>[empty]</div>
+            <div style={{fontSize:40,marginBottom:8}}>📭</div>
             <div>{log.length===0?"No hay movimientos registrados aún.":"No hay movimientos que coincidan con el filtro."}</div>
           </div>
         : <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 4px #0001",overflow:"auto"}}>
@@ -1351,7 +1351,7 @@ function StockAdjust({products,onDel,onAdjust,addLog}) {
         cambio:       -selected.stock,
         motivo:       reason.trim(),
       });
-      setDone({msg:`[ok] Producto "${selected.name}" dado de baja.`, color:"#c0392b"});
+      setDone({msg:`✅ Producto "${selected.name}" dado de baja.`, color:"#c0392b"});
     } else {
       if(qty===0){alert("El ajuste no puede ser 0");return;}
       const stockDespues = Math.max(0, selected.stock + qty);
@@ -1366,7 +1366,7 @@ function StockAdjust({products,onDel,onAdjust,addLog}) {
         motivo:       reason.trim(),
       });
       const signo = qty>0?"+":"";
-      setDone({msg:`[ok] Stock de "${selected.name}" ajustado en ${signo}${qty} unidades. Nuevo stock: ${stockDespues}`, color:"#1e8449"});
+      setDone({msg:`✅ Stock de "${selected.name}" ajustado en ${signo}${qty} unidades. Nuevo stock: ${stockDespues}`, color:"#1e8449"});
     }
     reset();
     setTimeout(()=>setDone(null),5000);
@@ -1375,7 +1375,7 @@ function StockAdjust({products,onDel,onAdjust,addLog}) {
   return (
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,alignItems:"start"}}>
       <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 1px 4px #0001"}}>
-        <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>[search] Buscar producto</div>
+        <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>🔍 Buscar producto</div>
         <input value={search} onChange={e=>{setSearch(e.target.value);setSelected(null);}}
           placeholder="Nombre o código del producto..."
           style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:10}}/>
@@ -1413,7 +1413,7 @@ function StockAdjust({products,onDel,onAdjust,addLog}) {
                 </div>
               </div>
               <div style={{display:"flex",gap:8,marginBottom:16}}>
-                {[{v:"ajuste",l:"⚖️ Ajustar stock",c:"#1a5276",bg:"#d6eaf8"},{v:"baja",l:"[del] Dar de baja",c:RED,bg:"#fdecea"}].map(opt=>(
+                {[{v:"ajuste",l:"⚖️ Ajustar stock",c:"#1a5276",bg:"#d6eaf8"},{v:"baja",l:"🗑 Dar de baja",c:RED,bg:"#fdecea"}].map(opt=>(
                   <button key={opt.v} onClick={()=>setMode(opt.v)} style={{flex:1,padding:"9px",borderRadius:9,border:`2px solid ${mode===opt.v?opt.c:"#e5e5e5"}`,background:mode===opt.v?opt.bg:"#fff",color:mode===opt.v?opt.c:"#666",fontWeight:700,fontSize:12,cursor:"pointer"}}>
                     {opt.l}
                   </button>
@@ -1437,12 +1437,12 @@ function StockAdjust({products,onDel,onAdjust,addLog}) {
                   <div style={{fontSize:11,color:"#aaa",marginTop:3}}>Obligatorio - quedará registrado en el historial de movimientos</div>
                 </div>
                 <button onClick={confirmAction} disabled={qty===0||!reason.trim()} style={{width:"100%",padding:"10px",borderRadius:9,border:"none",background:(qty===0||!reason.trim())?"#e5e5e5":"linear-gradient(135deg,#1a5e20,#1e8449)",color:(qty===0||!reason.trim())?"#aaa":"#fff",fontWeight:800,fontSize:14,cursor:(qty===0||!reason.trim())?"not-allowed":"pointer"}}>
-                  [ok] Confirmar ajuste
+                  ✅ Confirmar ajuste
                 </button>
               </>}
               {mode==="baja" && <>
                 <div style={{background:"#fdecea",border:"1px solid #f5c6cb",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
-                  <div style={{fontWeight:700,color:RED,fontSize:13,marginBottom:4}}>[!]️ Dar de baja elimina el producto del catálogo</div>
+                  <div style={{fontWeight:700,color:RED,fontSize:13,marginBottom:4}}>🎉️ Dar de baja elimina el producto del catálogo</div>
                   <div style={{fontSize:12,color:"#666"}}>Esta acción no se puede deshacer. El producto dejará de aparecer en Nuevo Pedido y Stock.</div>
                 </div>
                 <div style={{marginBottom:14}}>
@@ -1472,7 +1472,7 @@ function BajaConfirm({onConfirm,disabled}) {
   );
   return (
     <button onClick={()=>setStep(true)} disabled={disabled} style={{width:"100%",padding:"10px",borderRadius:9,border:"none",background:disabled?"#e5e5e5":RED,color:disabled?"#aaa":"#fff",fontWeight:800,fontSize:14,cursor:disabled?"not-allowed":"pointer"}}>
-      [del] Dar de baja este producto
+      🗑 Dar de baja este producto
     </button>
   );
 }
@@ -1494,7 +1494,7 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
     <div>
       {isAdmin && (
         <div style={{background:"#fff",borderRadius:12,padding:4,marginBottom:14,display:"flex",gap:4,boxShadow:"0 1px 4px #0001"}}>
-          {[{k:"lista",l:"[=] Lista de Stock"},{k:"ajuste",l:"⚖️ Ajuste / Baja"},{k:"log",l:"[log] Movimientos"}].map(t=>(
+          {[{k:"lista",l:"📋 Lista de Stock"},{k:"ajuste",l:"⚖️ Ajuste / Baja"},{k:"log",l:"📜 Movimientos"}].map(t=>(
             <button key={t.k} onClick={()=>setStockTab(t.k)} style={{flex:1,padding:"9px 14px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:stockTab===t.k?`linear-gradient(135deg,${REDD},${RED})`:"transparent",color:stockTab===t.k?"#fff":"#555"}}>
               {t.l}
             </button>
@@ -1506,8 +1506,8 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
       {stockTab==="lista" && <>
         {low.length>0&&<StockAlert low={low}/>}
         <div style={{background:"#fff",borderRadius:12,padding:14,marginBottom:14,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",boxShadow:"0 1px 4px #0001"}}>
-          <div style={{fontWeight:800,fontSize:15,flex:1}}>[pkg] Stock ({products.filter(p=>p.stock>0).length} productos con stock)</div>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="[search] Buscar..."
+          <div style={{fontWeight:800,fontSize:15,flex:1}}>📦 Stock ({products.filter(p=>p.stock>0).length} productos con stock)</div>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar..."
             style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:12,outline:"none",width:180}}/>
           <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
             {CATS.map(c=><button key={c} onClick={()=>setCat(c)} style={{padding:"4px 10px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:cat===c?RED:"#e5e5e5",background:cat===c?"#fdecea":"#fff",color:cat===c?RED:"#666"}}>{c==="todos"?"Todos":c}</button>)}
@@ -1531,7 +1531,7 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
                       <td style={{padding:"9px 12px",fontWeight:700,color:RED}}>{fARS(p.salePrice)}</td>
                       {isAdmin&&<td style={{padding:"9px 12px",color:"#666"}}>{fARS(p.costPrice)}</td>}
                       {isAdmin&&<td style={{padding:"9px 12px",fontWeight:700,color:+m>=40?"#1e8449":"#e67e22"}}>{m}%</td>}
-                      <td style={{padding:"9px 12px"}}>{isAdmin&&<button onClick={()=>setEditing(p)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11,fontWeight:600}}>[edit]️</button>}</td>
+                      <td style={{padding:"9px 12px"}}>{isAdmin&&<button onClick={()=>setEditing(p)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11,fontWeight:600}}>✏️️</button>}</td>
                     </tr>;
                   })
               }
@@ -1591,13 +1591,13 @@ function Compras({products,onStock}) {
     items.forEach(i=>onStock(i.pid,+i.qty,+i.cost));
     setItems([]); setOk(true); setTimeout(()=>{setOk(false);},2000);
   };
-  if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>[pkg]</div><div style={{fontWeight:800,color:"#1e8449",fontSize:20,marginTop:12}}>!Stock actualizado!</div></div>;
+  if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>📦</div><div style={{fontWeight:800,color:"#1e8449",fontSize:20,marginTop:12}}>!Stock actualizado!</div></div>;
   return (
     <div style={{display:"grid",gridTemplateColumns:"1fr 340px",gap:18,alignItems:"start"}}>
       <div>
         <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px #0001"}}>
-          <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>[in] Ingresar al Stock</div>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="[search] Buscá los productos que recibiste..."
+          <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>📥 Ingresar al Stock</div>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscá los productos que recibiste..."
             style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
           {search&&<div style={{fontSize:11,color:"#aaa",marginTop:6}}>{found.length} resultados</div>}
         </div>
@@ -1617,7 +1617,7 @@ function Compras({products,onStock}) {
       </div>
       <div style={{position:"sticky",top:16}}>
         <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 2px 12px #0002"}}>
-          <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>[receipt] Detalle de Compra</div>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>🧾 Detalle de Compra</div>
           {items.length===0
             ? <div style={{textAlign:"center",color:"#aaa",fontSize:12,padding:"16px 0"}}>Seleccioná productos</div>
             : items.map(it=>(
@@ -1639,7 +1639,7 @@ function Compras({products,onStock}) {
           <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:16,color:RED,padding:"10px 0",borderTop:"2px solid #f5f5f5",margin:"8px 0 14px"}}>
             <span>Total compra</span><span>{fARS(totalCost)}</span>
           </div>
-          <button onClick={submit} disabled={!items.length} style={{width:"100%",padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:!items.length?"#e5e5e5":"linear-gradient(135deg,#1a5e20,#1e8449)",color:!items.length?"#aaa":"#fff"}}>[pkg] Ingresar al Stock</button>
+          <button onClick={submit} disabled={!items.length} style={{width:"100%",padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:!items.length?"#e5e5e5":"linear-gradient(135deg,#1a5e20,#1e8449)",color:!items.length?"#aaa":"#fff"}}>📦 Ingresar al Stock</button>
         </div>
       </div>
     </div>
@@ -1651,10 +1651,10 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
   const [section, setSection] = useState("vendors");
 
   const SECTIONS = [
-    {k:"vendors", label:"Vendedores",       icon:"[users]"},
-    {k:"users",   label:"Usuarios",         icon:"[lock]"},
-    {k:"excel",   label:"Lista de Precios", icon:"[chart]"},
-    {k:"notifcfg",label:"Notificaciones",   icon:"[bell]"},
+    {k:"vendors", label:"Vendedores",       icon:"👥"},
+    {k:"users",   label:"Usuarios",         icon:"🔐"},
+    {k:"excel",   label:"Lista de Precios", icon:"📊"},
+    {k:"notifcfg",label:"Notificaciones",   icon:"🔔"},
   ];
 
   return (
@@ -1724,7 +1724,7 @@ function VendorsPanel({vendors,setVendors}) {
 
   return (
     <div style={{background:"#fff",borderRadius:12,padding:24,boxShadow:"0 1px 4px #0001",maxWidth:520}}>
-      <div style={{fontWeight:800,fontSize:16,marginBottom:16}}>[users] Gestión de Vendedores</div>
+      <div style={{fontWeight:800,fontSize:16,marginBottom:16}}>👥 Gestión de Vendedores</div>
       <div style={{display:"flex",gap:8,marginBottom:20}}>
         <input value={newName} onChange={e=>setNewName(e.target.value)}
           onKeyDown={e=>e.key==="Enter"&&add()}
@@ -1738,7 +1738,7 @@ function VendorsPanel({vendors,setVendors}) {
         ? <div style={{textAlign:"center",padding:30,color:"#aaa"}}>No hay vendedores cargados.</div>
         : vendors.map(v=>(
           <div key={v} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderRadius:10,border:"1.5px solid #f0f0f0",marginBottom:8,background:"#fafafa"}}>
-            <span style={{fontSize:20}}>[user]</span>
+            <span style={{fontSize:20}}>👤</span>
             {editing===v
               ? <>
                   <input value={editVal} onChange={e=>setEditVal(e.target.value)}
@@ -1749,14 +1749,14 @@ function VendorsPanel({vendors,setVendors}) {
                 </>
               : <>
                   <span style={{flex:1,fontWeight:600,fontSize:14}}>{v}</span>
-                  <button onClick={()=>{setEditing(v);setEditVal(v);}} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12}}>[edit]️ Editar</button>
+                  <button onClick={()=>{setEditing(v);setEditVal(v);}} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12}}>✏️️ Editar</button>
                   {confirmDel===v
                     ? <div style={{display:"flex",alignItems:"center",gap:5,background:"#fdecea",borderRadius:8,padding:"4px 8px",border:`1px solid ${RED}44`}}>
                         <span style={{fontSize:11,color:RED,fontWeight:600,whiteSpace:"nowrap"}}>?Eliminar?</span>
                         <button onClick={doRemove} style={{padding:"3px 9px",borderRadius:6,border:"none",background:RED,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:11}}>Sí</button>
                         <button onClick={()=>setConfirmDel(null)} style={{padding:"3px 8px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11}}>No</button>
                       </div>
-                    : <button onClick={()=>setConfirmDel(v)} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:12}}>[del]</button>
+                    : <button onClick={()=>setConfirmDel(v)} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:12}}>🗑</button>
                   }
                 </>
             }
@@ -1799,7 +1799,7 @@ function UsersPanel({users,setUsers}) {
   return (
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,alignItems:"start"}}>
       <div style={{background:"#fff",borderRadius:12,padding:24,boxShadow:"0 1px 4px #0001"}}>
-        <div style={{fontWeight:800,fontSize:15,marginBottom:16}}>{editing?"[edit]️ Editar usuario":"+ Nuevo usuario"}</div>
+        <div style={{fontWeight:800,fontSize:15,marginBottom:16}}>{editing?"✏️️ Editar usuario":"+ Nuevo usuario"}</div>
         <Field label="Nombre completo">
           <input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Ej: María García" style={inputStyle}/>
         </Field>
@@ -1811,7 +1811,7 @@ function UsersPanel({users,setUsers}) {
             <input type={showPass.form?"text":"password"} value={form.password}
               onChange={e=>setForm(f=>({...f,password:e.target.value}))}
               placeholder="Contraseña segura" style={{...inputStyle,paddingRight:40}}/>
-            <button onClick={()=>setShowPass(s=>({...s,form:!s.form}))} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:15,color:"#aaa"}}>{showPass.form?"[hide]":"[show]"}</button>
+            <button onClick={()=>setShowPass(s=>({...s,form:!s.form}))} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:15,color:"#aaa"}}>{showPass.form?"🙈":"👁️"}</button>
           </div>
         </Field>
         <Field label="Email (para notificaciones)">
@@ -1830,17 +1830,17 @@ function UsersPanel({users,setUsers}) {
         </div>
       </div>
       <div style={{background:"#fff",borderRadius:12,padding:24,boxShadow:"0 1px 4px #0001"}}>
-        <div style={{fontWeight:800,fontSize:15,marginBottom:16}}>[lock] Usuarios ({users.length})</div>
+        <div style={{fontWeight:800,fontSize:15,marginBottom:16}}>🔐 Usuarios ({users.length})</div>
         {users.map(u=>(
           <div key={u.id} style={{padding:"12px 14px",borderRadius:10,border:`1.5px solid ${editing===u.id?"#c0392b":"#f0f0f0"}`,marginBottom:8,background:editing===u.id?"#fdecea":"#fafafa"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <span style={{fontSize:22}}>{u.role==="admin"?"[admin]":"[user]"}</span>
+              <span style={{fontSize:22}}>{u.role==="admin"?"👑":"👤"}</span>
               <div style={{flex:1}}>
                 <div style={{fontWeight:700,fontSize:13}}>{u.name}</div>
                 <div style={{fontSize:11,color:"#888"}}>@{u.username} . <span style={{color:u.role==="admin"?RED:"#1a5276",fontWeight:600}}>{u.role==="admin"?"Admin":"Vendedor"}</span>{u.email&&<span style={{color:"#aaa",marginLeft:6}}>. {u.email}</span>}</div>
               </div>
-              <button onClick={()=>startEdit(u)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11}}>[edit]️</button>
-              <button onClick={()=>remove(u.id)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:11}}>[del]</button>
+              <button onClick={()=>startEdit(u)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11}}>✏️️</button>
+              <button onClick={()=>remove(u.id)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:11}}>🗑</button>
             </div>
           </div>
         ))}
@@ -2007,7 +2007,7 @@ function ExcelPanel({products,setProducts}) {
     let errorCount = 0;
     for(let i=0;i<batches.length;i++) {
       const pct = Math.round((i+1)/batches.length*100);
-      setStatus({type:"progress", msg:`[timer] Subiendo... ${uploadedCount}/${newProds.length} productos (${pct}%)`});
+      setStatus({type:"progress", msg:`⏳ Subiendo... ${uploadedCount}/${newProds.length} productos (${pct}%)`});
       try {
         await db.upsertProducts(batches[i]);
         uploadedCount += batches[i].length;
@@ -2018,7 +2018,7 @@ function ExcelPanel({products,setProducts}) {
       await new Promise(r=>setTimeout(r,100));
     }
     setProducts(newProds);
-    setStatus({type:"success",msg:`[ok] ${updated.length} productos actualizados.${notFound.length>0?` ${notFound.length} códigos no encontrados en el catálogo.`:""}`});
+    setStatus({type:"success",msg:`✅ ${updated.length} productos actualizados.${notFound.length>0?` ${notFound.length} códigos no encontrados en el catálogo.`:""}`});
     setPreview(null);
     if(fileRef.current) fileRef.current.value="";
   };
@@ -2026,7 +2026,7 @@ function ExcelPanel({products,setProducts}) {
   return (
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,alignItems:"start"}}>
       <div style={{background:"#fff",borderRadius:12,padding:24,boxShadow:"0 1px 4px #0001"}}>
-        <div style={{fontWeight:800,fontSize:16,marginBottom:6}}>[chart] Importar Lista de Precios</div>
+        <div style={{fontWeight:800,fontSize:16,marginBottom:6}}>📊 Importar Lista de Precios</div>
         <div style={{fontSize:13,color:"#666",marginBottom:16,lineHeight:1.6}}>
           El sistema lee automáticamente las columnas:<br/>
           <strong>CÓDIGO . DESCRIPCIÓN . PRECIO CON IVA . PRECIO OFERTA . FECHA ULTIMA ACTUALIZACIÓN . PRECIO FINAL</strong>
@@ -2045,7 +2045,7 @@ function ExcelPanel({products,setProducts}) {
         <div onClick={()=>fileRef.current?.click()} style={{border:"2px dashed #e5e5e5",borderRadius:12,padding:"28px 20px",textAlign:"center",cursor:"pointer",background:"#fafafa",marginBottom:14,transition:"border-color .2s"}}
           onMouseEnter={e=>e.currentTarget.style.borderColor=RED}
           onMouseLeave={e=>e.currentTarget.style.borderColor="#e5e5e5"}>
-          <div style={{fontSize:36,marginBottom:8}}>[folder]</div>
+          <div style={{fontSize:36,marginBottom:8}}>📂</div>
           <div style={{fontWeight:700,color:"#555",fontSize:14}}>Hacé clic o arrastrá tu archivo Excel</div>
           <div style={{fontSize:12,color:"#aaa",marginTop:4}}>.xlsx . .xls . .csv</div>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}}
@@ -2057,21 +2057,21 @@ function ExcelPanel({products,setProducts}) {
           fontSize:13,fontWeight:600,marginBottom:12}}>{status.msg}</div>}
         {preview&&(
           <button onClick={applyImport} disabled={status?.type==="progress"} style={{width:"100%",padding:"11px",borderRadius:10,border:"none",background:status?.type==="progress"?"#aaa":`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",fontWeight:800,fontSize:14,cursor:status?.type==="progress"?"not-allowed":"pointer"}}>
-            {status?.type==="progress"?"[timer] Importando, no cierres esta página...":"[in] Aplicar importación ("+preview.total+" productos)"}
+            {status?.type==="progress"?"⏳ Importando, no cierres esta página...":"📥 Aplicar importación ("+preview.total+" productos)"}
           </button>
         )}
       </div>
       <div style={{background:"#fff",borderRadius:12,padding:24,boxShadow:"0 1px 4px #0001"}}>
         <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>
-          {preview ? `[show] Vista previa (${preview.total} filas)` : "[=] Instrucciones"}
+          {preview ? `👁️ Vista previa (${preview.total} filas)` : "📋 Instrucciones"}
         </div>
         {preview?.detectedCols && (
           <div style={{background:"#f0fdf4",border:"1px solid #a7f3d0",borderRadius:8,padding:"10px 12px",marginBottom:12}}>
-            <div style={{fontWeight:700,fontSize:11,color:"#065f46",marginBottom:6}}>[ok] Columnas detectadas:</div>
+            <div style={{fontWeight:700,fontSize:11,color:"#065f46",marginBottom:6}}>✅ Columnas detectadas:</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
               {Object.entries(preview.detectedCols).map(([k,v])=>(
                 <span key={k} style={{background:"#fff",border:"1px solid #d1fae5",borderRadius:6,padding:"3px 8px",fontSize:11,color:"#065f46"}}>
-                  <strong>{v}</strong> {"->"} {k}
+                  <strong>{v}</strong> → {k}
                 </span>
               ))}
             </div>
