@@ -769,8 +769,8 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       {compPopup && <CompPopup order={compPopup} onClose={()=>setCompPopup(null)}/>}
       <div style={{maxWidth:1200,margin:"0 auto",padding:"20px 16px"}}>
         {tab==="central"    && <Central orders={orders} products={products} onStage={setStage} onDel={delOrder}/>}
-        {tab==="nuevo"      && <Nuevo products={products} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")}/>}
-        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={products} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onTabChange={setTab}/>}
+        {tab==="nuevo"      && <Nuevo products={products} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser}/>}
+        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={products} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onTabChange={setTab} currentUser={currentUser}/>}
         {tab==="precios"    && <Precios products={products}/>}
         {tab==="stock"      && <Stock products={products} onUpd={updProd} onDel={pid=>setProducts(p=>p.filter(x=>x.id!==pid))} onAdjust={(pid,qty)=>setProducts(p=>p.map(x=>x.id===pid?{...x,stock:x.stock+qty}:x))} isAdmin={isAdmin} addLog={addLog} stockLog={stockLog} setStockLog={setStockLog}/>}
         {tab==="compras"    && <Compras products={products} onStock={addStock}/>}
@@ -1046,10 +1046,11 @@ function ProductSelector({products,cart,setCart}) {
   );
 }
 
-function Nuevo({products,vendors,onAdd,onDone}) {
+function Nuevo({products,vendors,onAdd,onDone,currentUser}) {
   const [client,setClient]=useState("");
   const [notes,setNotes]=useState("");
-  const [vendedor,setVendedor]=useState("");
+  // Admin puede elegir vendedor; vendedores usan el suyo propio automaticamente
+  const [vendedor,setVendedor]=useState(currentUser?.role!=="admin" ? (currentUser?.vendedor||currentUser?.name||"") : "");
   const [cart,setCart]=useState([]);
   const [globalDisc,setGlobalDisc]=useState({type:"%",value:""});
   const [ok,setOk]=useState(false);
@@ -1076,7 +1077,18 @@ function Nuevo({products,vendors,onAdd,onDone}) {
         <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 2px 12px #0002"}}>
           <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>📋 Resumen del Pedido</div>
           <Field label="Cliente *"><input value={client} onChange={e=>setClient(e.target.value)} placeholder="Nombre del cliente" style={inputStyle}/></Field>
-          <Field label="Vendedor *"><select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,color:vendedor?"#1a1a1a":"#aaa",cursor:"pointer"}}><option value="">- Seleccioná vendedor -</option>{vendors.map(v=><option key={v} value={v}>{v}</option>)}</select></Field>
+          {currentUser?.role==="admin"
+            ? <Field label="Vendedor *">
+                <select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,color:vendedor?"#1a1a1a":"#aaa",cursor:"pointer"}}>
+                  <option value="">- Seleccioná vendedor -</option>
+                  {vendors.map(v=><option key={v} value={v}>{v}</option>)}
+                </select>
+              </Field>
+            : <div style={{marginBottom:12,background:"#f5f5f5",borderRadius:8,padding:"9px 12px",fontSize:13,color:"#555"}}>
+                <span style={{fontSize:11,fontWeight:700,color:"#888",display:"block",marginBottom:2}}>VENDEDOR</span>
+                <span style={{fontWeight:700}}>{vendedor||currentUser?.name}</span>
+              </div>
+          }
           <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
           <div style={{borderTop:"1px solid #f5f5f5",margin:"4px 0 8px",paddingTop:10}}>
             {cart.length===0?<div style={{textAlign:"center",color:"#aaa",fontSize:12,padding:"10px 0"}}>Agregá productos al pedido</div>
@@ -1127,7 +1139,7 @@ function Nuevo({products,vendors,onAdd,onDone}) {
 //   id TEXT PRIMARY KEY, client TEXT, vendedor TEXT, notes TEXT,
 //   total NUMERIC, date TEXT, items JSONB, validity TEXT
 // );
-function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onTabChange}) {
+function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onTabChange,currentUser}) {
   const [view,setView]=useState("lista"); // "lista" | "nueva"
   const [expanded,setExpanded]=useState(null);
   const getP=id=>products.find(p=>p.id===id);
@@ -1141,7 +1153,7 @@ function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onTabChange
           + Nueva Cotización
         </button>
       </div>
-      {view==="nueva" && <NuevaCotizacion products={products} vendors={vendors} onAdd={async(q)=>{await onAdd(q);setView("lista");}}/>}
+      {view==="nueva" && <NuevaCotizacion products={products} vendors={vendors} onAdd={async(q)=>{await onAdd(q);setView("lista");}} currentUser={currentUser}/>}
       {view==="lista" && (
         quotes.length===0
           ? <div style={{textAlign:"center",padding:60,color:"#aaa",background:"#fff",borderRadius:12}}>
@@ -1214,10 +1226,10 @@ function QuoteDelBtn({onConfirm}) {
   return <button onClick={()=>setC(true)} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>🗑 Eliminar</button>;
 }
 
-function NuevaCotizacion({products,vendors,onAdd}) {
+function NuevaCotizacion({products,vendors,onAdd,currentUser}) {
   const [client,setClient]=useState("");
   const [notes,setNotes]=useState("");
-  const [vendedor,setVendedor]=useState("");
+  const [vendedor,setVendedor]=useState(currentUser?.role!=="admin" ? (currentUser?.vendedor||currentUser?.name||"") : "");
   const [validity,setValidity]=useState("48 horas");
   const [cart,setCart]=useState([]);
   const [globalDisc,setGlobalDisc]=useState({type:"%",value:""});
@@ -1248,12 +1260,18 @@ function NuevaCotizacion({products,vendors,onAdd}) {
             ℹ️ Las cotizaciones <strong>no descuentan stock</strong>. Son solo presupuestos para el cliente.
           </div>
           <Field label="Cliente *"><input value={client} onChange={e=>setClient(e.target.value)} placeholder="Nombre del cliente" style={inputStyle}/></Field>
-          <Field label="Vendedor">
-            <select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,color:vendedor?"#1a1a1a":"#aaa",cursor:"pointer"}}>
-              <option value="">- Seleccioná vendedor -</option>
-              {vendors.map(v=><option key={v} value={v}>{v}</option>)}
-            </select>
-          </Field>
+          {currentUser?.role==="admin"
+            ? <Field label="Vendedor">
+                <select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,color:vendedor?"#1a1a1a":"#aaa",cursor:"pointer"}}>
+                  <option value="">- Sin asignar -</option>
+                  {vendors.map(v=><option key={v} value={v}>{v}</option>)}
+                </select>
+              </Field>
+            : <div style={{marginBottom:12,background:"#f5f5f5",borderRadius:8,padding:"9px 12px",fontSize:13,color:"#555"}}>
+                <span style={{fontSize:11,fontWeight:700,color:"#888",display:"block",marginBottom:2}}>VENDEDOR</span>
+                <span style={{fontWeight:700}}>{vendedor||currentUser?.name}</span>
+              </div>
+          }
           <Field label="Válida hasta"><input value={validity} onChange={e=>setValidity(e.target.value)} placeholder="Ej: 48 horas" style={inputStyle}/></Field>
           <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones, condiciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
           <div style={{borderTop:"1px solid #f5f5f5",margin:"4px 0 8px",paddingTop:10}}>
@@ -1842,7 +1860,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
       {section==="ventas"    && <VentasPanel   orders={orders}/>}
       {section==="activity"  && <ActivityPanel activity={activity} setActivity={setActivity}/>}
       {section==="vendors"   && <VendorsPanel  vendors={vendors} setVendors={setVendors}/>}
-      {section==="users"     && <UsersPanel    users={users}     setUsers={setUsers}/>}
+      {section==="users"     && <UsersPanel    users={users}     setUsers={setUsers} vendors={vendors}/>}
       {section==="excel"     && <ExcelPanel    products={products} setProducts={setProducts}/>}
       {section==="notifcfg"  && <NotifConfig   users={users} setUsers={setUsers} notifs={notifs} setNotifs={setNotifs}/>}
     </div>
@@ -2215,12 +2233,12 @@ function VendorsPanel({vendors,setVendors}) {
 }
 
 // ── Users ─────────────────────────────────────────────────────────────────────
-function UsersPanel({users,setUsers}) {
-  const [form, setForm] = useState({username:"",password:"",name:"",role:"vendedor"});
+function UsersPanel({users,setUsers,vendors}) {
+  const [form, setForm] = useState({username:"",password:"",name:"",role:"vendedor",vendedor:""});
   const [editing, setEditing] = useState(null);
   const [showPass, setShowPass] = useState({});
 
-  const startEdit = (u) => { setEditing(u.id); setForm({username:u.username,password:u.password,name:u.name,role:u.role}); };
+  const startEdit = (u) => { setEditing(u.id); setForm({username:u.username,password:u.password,name:u.name,role:u.role,email:u.email||"",vendedor:u.vendedor||""}); };
   const cancelEdit = () => { setEditing(null); setForm({username:"",password:"",name:"",role:"vendedor"}); };
 
   const save = async () => {
@@ -2271,6 +2289,13 @@ function UsersPanel({users,setUsers}) {
             <option value="admin">Administrador</option>
           </select>
         </Field>
+        <Field label="Vendedor asignado">
+          <select value={form.vendedor||""} onChange={e=>setForm(f=>({...f,vendedor:e.target.value}))} style={{...inputStyle,cursor:"pointer",color:form.vendedor?"#1a1a1a":"#aaa"}}>
+            <option value="">- Sin asignar -</option>
+            {(vendors||[]).map(v=><option key={v} value={v}>{v}</option>)}
+          </select>
+          <div style={{fontSize:10,color:"#888",marginTop:3}}>El pedido se asignará automáticamente a este vendedor cuando inicie sesión</div>
+        </Field>
         <div style={{display:"flex",gap:8,marginTop:4}}>
           <button onClick={save} style={{flex:1,padding:"9px",borderRadius:8,border:"none",background:RED,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13}}>{editing?"Guardar cambios":"Crear usuario"}</button>
           {editing&&<button onClick={cancelEdit} style={{padding:"9px 14px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontWeight:600,color:"#666",fontSize:13}}>Cancelar</button>}
@@ -2284,7 +2309,7 @@ function UsersPanel({users,setUsers}) {
               <span style={{fontSize:22}}>{u.role==="admin"?"👑":"👤"}</span>
               <div style={{flex:1}}>
                 <div style={{fontWeight:700,fontSize:13}}>{u.name}</div>
-                <div style={{fontSize:11,color:"#888"}}>@{u.username} . <span style={{color:u.role==="admin"?RED:"#1a5276",fontWeight:600}}>{u.role==="admin"?"Admin":"Vendedor"}</span>{u.email&&<span style={{color:"#aaa",marginLeft:6}}>. {u.email}</span>}</div>
+                <div style={{fontSize:11,color:"#888"}}>@{u.username} . <span style={{color:u.role==="admin"?RED:"#1a5276",fontWeight:600}}>{u.role==="admin"?"Admin":"Vendedor"}</span>{u.vendedor&&<span style={{color:"#6c3483",marginLeft:6,fontWeight:600}}>. 👤 {u.vendedor}</span>}{u.email&&<span style={{color:"#aaa",marginLeft:6}}>. {u.email}</span>}</div>
               </div>
               <button onClick={()=>startEdit(u)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11}}>✏️️</button>
               <button onClick={()=>remove(u.id)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:11}}>🗑</button>
