@@ -793,7 +793,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel}) {
           {o.notes&&<div style={{background:"#f9f9f9",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#555",marginBottom:12}}>[note] {o.notes}</div>}
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             {next&&<button onClick={()=>onStage(o.id,next)} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",background:SCFG[next].color,color:"#fff",fontWeight:700,fontSize:13}}>{SCFG[next].icon} Pasar a {SCFG[next].label}</button>}
-            {idx>0&&o.stage!=="entregado"&&<button onClick={()=>onStage(o.id,STAGES[idx-1])} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",cursor:"pointer",background:"#fff",color:"#666",fontWeight:600,fontSize:13}}><- Retroceder</button>}
+            {idx>0&&o.stage!=="entregado"&&<button onClick={()=>onStage(o.id,STAGES[idx-1])} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",cursor:"pointer",background:"#fff",color:"#666",fontWeight:600,fontSize:13}}>{"<"}- Retroceder</button>}
             <button onClick={()=>printDoc(o, o.stage==="reserva" ? "reserva" : "confirmado")} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #d6eaf8",cursor:"pointer",background:"#fff",color:"#1a5276",fontWeight:600,fontSize:13}}>
               [print] {o.stage==="reserva" ? (o.docNum||"Imprimir") : (o.compNum||"Imprimir")}
             </button>
@@ -2071,7 +2071,7 @@ function ExcelPanel({products,setProducts}) {
             <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
               {Object.entries(preview.detectedCols).map(([k,v])=>(
                 <span key={k} style={{background:"#fff",border:"1px solid #d1fae5",borderRadius:6,padding:"3px 8px",fontSize:11,color:"#065f46"}}>
-                  <strong>{v}</strong> -> {k}
+                  <strong>{v}</strong> {"->"} {k}
                 </span>
               ))}
             </div>
