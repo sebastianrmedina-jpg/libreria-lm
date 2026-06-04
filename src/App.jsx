@@ -210,12 +210,10 @@ function printDoc(doc, tipo) {
   .print-btn{display:block;margin:12px auto;padding:9px 28px;background:${badgeColor};color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;}
   .pdf-wrap{padding:0 0 32px;}
 
-  /* HEADER — fixed height, image fills width but max 28mm tall */
+  /* HEADER — imagen completa sin recorte */
   .header-img{
     width:100%;
-    max-height:28mm;
-    object-fit:cover;
-    object-position:left center;
+    height:auto;
     display:block;
     border-bottom:3px solid #c0392b;
   }
