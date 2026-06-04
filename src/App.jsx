@@ -12,7 +12,7 @@ const supaAdmin = supabase;
 
 const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock});
 const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||""});
-const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,date:r.date,items:r.items||[],validity:r.validity||"",docNum:r.doc_num||""});
+const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,date:r.date,items:r.items||[],validity:r.validity||"",docNum:r.doc_num||"",convertida:r.convertida||false,ordenId:r.orden_id||""});
 
 
 // ─── CORRELATIVE NUMBER HELPERS ───────────────────────────────────────────────
@@ -48,7 +48,7 @@ const db = {
   deleteOrder:  async (id) => { const {error} = await supaAdmin.from("lm_orders").delete().eq("id",id); if(error) throw error; },
 
   getQuotes:    async () => { const {data,error} = await supabase.from("lm_quotes").select("*").order("date",{ascending:false}); if(error) throw error; return (data||[]).map(mapQuote); },
-  upsertQuote:  async (q) => { const {error} = await supaAdmin.from("lm_quotes").upsert({id:q.id,client:q.client,vendedor:q.vendedor||"",notes:q.notes||"",total:q.total,date:q.date,items:q.items,validity:q.validity||"",doc_num:q.docNum||""}); if(error) throw error; },
+  upsertQuote:  async (q) => { const {error} = await supaAdmin.from("lm_quotes").upsert({id:q.id,client:q.client,vendedor:q.vendedor||"",notes:q.notes||"",total:q.total,date:q.date,items:q.items,validity:q.validity||"",doc_num:q.docNum||"",convertida:q.convertida||false,orden_id:q.ordenId||""}); if(error) throw error; },
   deleteQuote:  async (id) => { const {error} = await supaAdmin.from("lm_quotes").delete().eq("id",id); if(error) throw error; },
 
   getStockLog:  async () => { const {data,error} = await supabase.from("lm_stocklog").select("*").order("fecha",{ascending:false}); if(error) throw error; return (data||[]).map(r=>({...r,productoId:r.producto_id,stockAntes:r.stock_antes,stockDespues:r.stock_despues})); },
@@ -648,6 +648,27 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     await db.upsertQuote(quoteWithNum);
   };
   const delQuote = async (id) => { setQuotes(q=>q.filter(x=>x.id!==id)); await db.deleteQuote(id); };
+
+  // Convierte una cotización en reserva — descuenta stock y arranca el circuito de ventas
+  const convertQuoteToOrder = async (quote) => {
+    const order = {
+      id: genId(),
+      client: quote.client,
+      vendedor: quote.vendedor,
+      notes: quote.notes,
+      items: quote.items,
+      total: quote.total,
+      subtotal: quote.subtotal,
+      globalDisc: quote.globalDisc,
+      stage: "reserva",
+      date: today(),
+    };
+    await addOrder(order);
+    // Marcar la cotización como convertida (no eliminar, queda como historial)
+    const updated = {...quote, convertida: true, ordenId: order.id};
+    setQuotes(q=>q.map(x=>x.id===quote.id?updated:x));
+    await db.upsertQuote({...updated});
+  };
   const updProd = async (upd) => { setProducts(p=>p.map(x=>x.id===upd.id?upd:x)); await db.upsertProduct(upd); };
   const addStock = async (pid,qty,newCost) => {
     const prod=products.find(p=>p.id===pid);
@@ -710,7 +731,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       <div style={{maxWidth:1200,margin:"0 auto",padding:"20px 16px"}}>
         {tab==="central"    && <Central orders={orders} products={products} onStage={setStage} onDel={delOrder}/>}
         {tab==="nuevo"      && <Nuevo products={products} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")}/>}
-        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={products} vendors={vendors} onAdd={addQuote} onDel={delQuote}/>}
+        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={products} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onTabChange={setTab}/>}
         {tab==="precios"    && <Precios products={products}/>}
         {tab==="stock"      && <Stock products={products} onUpd={updProd} onDel={pid=>setProducts(p=>p.filter(x=>x.id!==pid))} onAdjust={(pid,qty)=>setProducts(p=>p.map(x=>x.id===pid?{...x,stock:x.stock+qty}:x))} isAdmin={isAdmin} addLog={addLog} stockLog={stockLog} setStockLog={setStockLog}/>}
         {tab==="compras"    && <Compras products={products} onStock={addStock}/>}
@@ -1067,7 +1088,7 @@ function Nuevo({products,vendors,onAdd,onDone}) {
 //   id TEXT PRIMARY KEY, client TEXT, vendedor TEXT, notes TEXT,
 //   total NUMERIC, date TEXT, items JSONB, validity TEXT
 // );
-function Cotizaciones({quotes,products,vendors,onAdd,onDel}) {
+function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onTabChange}) {
   const [view,setView]=useState("lista"); // "lista" | "nueva"
   const [expanded,setExpanded]=useState(null);
   const getP=id=>products.find(p=>p.id===id);
@@ -1088,13 +1109,13 @@ function Cotizaciones({quotes,products,vendors,onAdd,onDel}) {
               <div style={{fontSize:48,marginBottom:8}}>📄</div>
               <div>No hay cotizaciones. !Creá una!</div>
             </div>
-          : quotes.map(q=><QuoteCard key={q.id} q={q} exp={expanded===q.id} toggle={()=>setExpanded(expanded===q.id?null:q.id)} getP={getP} onDel={onDel}/>)
+          : quotes.map(q=><QuoteCard key={q.id} q={q} exp={expanded===q.id} toggle={()=>setExpanded(expanded===q.id?null:q.id)} getP={getP} onDel={onDel} onConvert={async(qt)=>{await onConvert(qt);onTabChange("central");}} />)
       )}
     </div>
   );
 }
 
-function QuoteCard({q,exp,toggle,getP,onDel}) {
+function QuoteCard({q,exp,toggle,getP,onDel,onConvert}) {
   const PURPLE = "#6c3483"; const PURPLEBG = "#e8daef";
   return (
     <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 6px #0001",overflow:"hidden",marginBottom:8}}>
@@ -1109,7 +1130,10 @@ function QuoteCard({q,exp,toggle,getP,onDel}) {
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-          <span style={{background:PURPLEBG,color:PURPLE,border:`1px solid ${PURPLE}44`,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>📄 Cotización</span>
+          {q.convertida
+            ? <span style={{background:"#d5f5e3",color:"#1e8449",border:"1px solid #1e844944",borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>✅ Convertida</span>
+            : <span style={{background:PURPLEBG,color:PURPLE,border:`1px solid ${PURPLE}44`,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>📄 Cotización</span>
+          }
           <span style={{fontWeight:800,color:PURPLE,fontSize:15}}>{fARS(q.total)}</span>
           <span style={{color:"#ccc"}}>{exp?"^":"v"}</span>
         </div>
@@ -1120,8 +1144,17 @@ function QuoteCard({q,exp,toggle,getP,onDel}) {
           {q.items.map((it,i)=>{const p=getP(it.pid);return <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f9f9f9",fontSize:13}}><span style={{color:"#444"}}>{p?.name||it.name} x {it.qty}</span><span style={{fontWeight:600}}>{fARS(it.price*it.qty)}</span></div>;})}
           <div style={{display:"flex",justifyContent:"flex-end",fontWeight:800,fontSize:16,color:PURPLE,margin:"8px 0 12px"}}>{fARS(q.total)}</div>
           {q.notes&&<div style={{background:"#f9f9f9",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#555",marginBottom:12}}>💬 {q.notes}</div>}
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
             <button onClick={()=>printDoc(q,"cotizacion")} style={{padding:"8px 12px",borderRadius:8,border:`1.5px solid ${PURPLEBG}`,cursor:"pointer",background:"#fff",color:PURPLE,fontWeight:600,fontSize:13}}>🖨️ Imprimir</button>
+            {!q.convertida
+              ? <button onClick={()=>onConvert(q)}
+                  style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#922b21,#c0392b)",color:"#fff",fontWeight:700,fontSize:13}}>
+                  🛒 Pasar a Reserva
+                </button>
+              : <span style={{background:"#d5f5e3",color:"#1e8449",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:700}}>
+                  ✅ Convertida a Reserva
+                </span>
+            }
             <div style={{marginLeft:"auto",display:"flex",gap:8}}>
               <QuoteDelBtn onConfirm={()=>onDel(q.id)}/>
             </div>
