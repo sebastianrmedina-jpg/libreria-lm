@@ -485,7 +485,7 @@ function Login({users, onLogin}) {
       <div style={{background:"#fff",borderRadius:20,padding:40,width:"100%",maxWidth:380,boxShadow:"0 20px 60px #0004"}}>
         <div style={{textAlign:"center",marginBottom:28}}>
           <img src={LOGO} alt="LM" style={{width:90,height:90,borderRadius:"50%",objectFit:"cover",marginBottom:12,boxShadow:"0 4px 16px #0002"}}/>
-          <div style={{fontWeight:800,fontSize:22,fontFamily:"Georgia,serif",color:"#1a1a1a"}}>Librería LM</div>
+          <div style={{fontWeight:800,fontSize:22,fontFamily:"Georgia,serif",color:"#1a1a1a"}}>Libreria Madrid</div>
           <div style={{fontSize:12,color:"#aaa",letterSpacing:2,textTransform:"uppercase",marginTop:2}}>Sistema de Gestión</div>
         </div>
         <Field label="Usuario"><input value={username} onChange={e=>setUsername(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()} placeholder="Tu usuario" style={inputStyle}/></Field>
@@ -538,7 +538,7 @@ export default function App() {
   if(loading) return (
     <div style={{minHeight:"100vh",background:`linear-gradient(135deg,#922b21,#c0392b)`,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
       <img src="/logo.png" alt="LM" style={{width:80,height:80,borderRadius:"50%",objectFit:"cover"}}/>
-      <div style={{color:"#fff",fontWeight:700,fontSize:16}}>Cargando Librería LM...</div>
+      <div style={{color:"#fff",fontWeight:700,fontSize:16}}>Cargando Libreria Madrid...</div>
       <div style={{color:"#ffcccc",fontSize:13}}>Conectando con la base de datos</div>
     </div>
   );
@@ -720,7 +720,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
           <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 0"}}>
             <img src={LOGO} alt="LM Logo" style={{width:54,height:54,borderRadius:"50%",objectFit:"cover",boxShadow:"0 2px 8px #0003"}}/>
             <div>
-              <div style={{color:"#fff",fontWeight:800,fontSize:20,fontFamily:"Georgia,serif"}}>Librería LM</div>
+              <div style={{color:"#fff",fontWeight:800,fontSize:20,fontFamily:"Georgia,serif"}}>Libreria Madrid</div>
               <div style={{color:"#ffcccc",fontSize:10,letterSpacing:2,textTransform:"uppercase"}}>Sistema de Gestión</div>
             </div>
           </div>
