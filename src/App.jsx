@@ -30,7 +30,20 @@ const isTestOrder = (vendedor) => vendedor === TEST_VENDOR;
 
 const db = {
   getUsers:     async () => { const {data,error} = await supabase.from("lm_users").select("*").order("name"); if(error) throw error; return (data||[]).map(u=>({...u,priceList:u.price_list||"default",vendedor:u.vendedor||"",canSeeAll:u.can_see_all!==false})); },
-  saveUser:     async (u) => { const {error} = await supaAdmin.from("lm_users").upsert({...u, price_list: u.priceList||"default", can_see_all: u.canSeeAll!==false}); if(error) throw error; },
+  saveUser:     async (u) => {
+    const {error} = await supaAdmin.from("lm_users").upsert({
+      id: u.id,
+      username: u.username,
+      password: u.password,
+      name: u.name,
+      role: u.role||"vendedor",
+      email: u.email||"",
+      vendedor: u.vendedor||"",
+      price_list: u.priceList||"default",
+      can_see_all: u.canSeeAll!==false
+    });
+    if(error) { console.error("saveUser error:", error); throw error; }
+  },
   deleteUser:   async (id) => { const {error} = await supaAdmin.from("lm_users").delete().eq("id",id); if(error) throw error; },
 
   getVendors:   async () => { const {data,error} = await supabase.from("lm_vendors").select("name").order("name"); if(error) throw error; return (data||[]).map(v=>v.name); },
@@ -2524,17 +2537,21 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
 
   const save = async () => {
     if(!form.username.trim()||!form.password.trim()||!form.name.trim()){alert("Completa todos los campos");return;}
-    if(editing) {
-      const updated = {...users.find(u=>u.id===editing), ...form, priceList:form.priceList||"default", canSeeAll:form.canSeeAll!==false};
-      setUsers(us=>us.map(u=>u.id===editing?updated:u));
-      await db.saveUser(updated);
-    } else {
-      if(users.find(u=>u.username===form.username.trim())){alert("Ese usuario ya existe");return;}
-      const newUser = {id:genId(),...form,username:form.username.trim(),name:form.name.trim(),priceList:form.priceList||"default",canSeeAll:form.canSeeAll!==false};
-      setUsers(us=>[...us,newUser]);
-      await db.saveUser(newUser);
+    try {
+      if(editing) {
+        const updated = {...users.find(u=>u.id===editing), ...form, priceList:form.priceList||"default", canSeeAll:form.canSeeAll!==false};
+        setUsers(us=>us.map(u=>u.id===editing?updated:u));
+        await db.saveUser(updated);
+      } else {
+        if(users.find(u=>u.username===form.username.trim())){alert("Ese usuario ya existe");return;}
+        const newUser = {id:genId(),username:form.username.trim(),password:form.password,name:form.name.trim(),role:form.role||"vendedor",email:form.email||"",vendedor:form.vendedor||"",priceList:form.priceList||"default",canSeeAll:form.canSeeAll!==false};
+        setUsers(us=>[...us,newUser]);
+        await db.saveUser(newUser);
+      }
+      cancelEdit();
+    } catch(e) {
+      alert("Error al guardar: " + (e.message||JSON.stringify(e)));
     }
-    cancelEdit();
   };
   const remove = async (id) => {
     if(users.filter(u=>u.role==="admin").length===1&&users.find(u=>u.id===id)?.role==="admin"){alert("Debe haber al menos un administrador");return;}
