@@ -3,6 +3,17 @@ import { createClient } from "@supabase/supabase-js";
 import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import * as XLSX from "xlsx";
 
+// ─── MOBILE HOOK ─────────────────────────────────────────────────────────────
+function useIsMobile() {
+  const [mob, setMob] = useState(typeof window !== "undefined" && window.innerWidth < 768);
+  useEffect(() => {
+    const fn = () => setMob(window.innerWidth < 768);
+    window.addEventListener("resize", fn);
+    return () => window.removeEventListener("resize", fn);
+  }, []);
+  return mob;
+}
+
 // ─── SUPABASE CONFIG ──────────────────────────────────────────────────────────
 const SUPA_URL = "https://pqwcegwadffzqecmbqbe.supabase.co";
 const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBxd2NlZ3dhZGZmenFlY21icWJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0OTgzNjgsImV4cCI6MjA5NjA3NDM2OH0.XnmgmzabW4YV4SrP1YNDtRElp7aNoGjbG37XG6VvXak";
@@ -771,65 +782,134 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     {k:"admin",     label:"Administracion",     icon:"★",   roles:["admin"]},
   ].filter(t=>t.roles.includes(currentUser.role));
 
+  const isMobile = useIsMobile();
+  const [mobileMenu, setMobileMenu] = useState(false);
+
   return (
     <div style={{minHeight:"100vh",background:"#f5f5f5",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
-      <div style={{background:`linear-gradient(135deg,${REDD},${RED})`,boxShadow:"0 4px 16px #0004"}}>
-        <div style={{maxWidth:1200,margin:"0 auto",padding:"0 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap"}}>
-          <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 0"}}>
-            <img src={LOGO} alt="LM Logo" style={{width:54,height:54,borderRadius:"50%",objectFit:"cover",boxShadow:"0 2px 8px #0003"}}/>
-            <div>
-              <div style={{color:"#fff",fontWeight:800,fontSize:20,fontFamily:"Georgia,serif"}}>Libreria Madrid</div>
-              <div style={{color:"#ffcccc",fontSize:10,letterSpacing:2,textTransform:"uppercase"}}>Sistema de Gestión</div>
+
+      {/* ── HEADER ── */}
+      <div style={{background:`linear-gradient(135deg,${REDD},${RED})`,boxShadow:"0 4px 16px #0004",position:"sticky",top:0,zIndex:100}}>
+        {isMobile ? (
+          <div>
+            <div style={{display:"flex",alignItems:"center",padding:"36px 14px 8px",gap:10}}>
+              <img src={LOGO} alt="LM" style={{width:38,height:38,borderRadius:"50%",objectFit:"cover",border:"2px solid #ffffff44",flexShrink:0}}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{color:"#fff",fontWeight:800,fontSize:15,fontFamily:"Georgia,serif"}}>Libreria Madrid</div>
+                <div style={{color:"#ffcccc",fontSize:11}}>👤 {currentUser.name}{activeList.discount>0&&<span style={{marginLeft:6,background:"#f1c40f",color:"#1a1a1a",borderRadius:4,padding:"1px 5px",fontSize:10,fontWeight:800}}>{activeList.name}</span>}</div>
+              </div>
+              <div style={{display:"flex",gap:6,flexShrink:0}}>
+                <button onClick={()=>setShowNotifs(s=>!s)} style={{width:34,height:34,borderRadius:9,background:"#ffffff1a",border:"1px solid #ffffff2a",color:"#fff",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative"}}>
+                  🔔{unreadCount>0&&<span style={{position:"absolute",top:-3,right:-3,background:"#f1c40f",color:"#1a1a1a",borderRadius:"50%",width:15,height:15,fontSize:8,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center"}}>{unreadCount}</span>}
+                </button>
+                <button onClick={()=>setMobileMenu(o=>!o)} style={{width:34,height:34,borderRadius:9,background:"#ffffff1a",border:"1px solid #ffffff2a",color:"#fff",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>☰</button>
+              </div>
             </div>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
-            <nav style={{display:"flex",gap:2,flexWrap:"wrap"}}>
-              {TABS.map(t=>(
-                <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"11px 14px",border:"none",cursor:"pointer",fontSize:13,background:tab===t.k?"#fff":"transparent",color:tab===t.k?RED:"#ffcccc",fontWeight:tab===t.k?700:500,borderRadius:"8px 8px 0 0",position:"relative"}}>
+            <div style={{display:"flex",overflowX:"auto",gap:1,padding:"0 10px",scrollbarWidth:"none"}}>
+              {TABS.map(t=>(t.role==="all"||(t.role==="admin"&&isAdmin))&&(
+                <button key={t.k} onClick={()=>setTab(t.k)}
+                  style={{padding:"7px 13px",border:"none",cursor:"pointer",fontSize:11,color:tab===t.k?"#fff":"#ffbbbb",fontWeight:tab===t.k?700:600,borderRadius:"8px 8px 0 0",background:tab===t.k?"#ffffff18":"transparent",borderBottom:tab===t.k?"3px solid #fff":"3px solid transparent",whiteSpace:"nowrap",flexShrink:0}}>
                   {t.icon} {t.label}
-                  {t.k==="central"&&pending>0&&<span style={{position:"absolute",top:5,right:3,background:"#fff",color:RED,borderRadius:10,fontSize:10,padding:"1px 5px",fontWeight:800,border:`1.5px solid ${RED}`}}>{pending}</span>}
                 </button>
               ))}
-            </nav>
-            <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 8px",borderLeft:"1px solid #ffffff33",marginLeft:4}}>
-              {isAdmin && priceLists.length>1 && (
-                <select value={previewListId||"default"} onChange={e=>setPreviewListId(e.target.value==="default"?null:e.target.value)}
-                  style={{background:"#ffffff22",border:"1px solid #ffffff44",color:"#fff",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:11,fontWeight:600}}>
-                  {priceLists.map(pl=><option key={pl.id} value={pl.id} style={{color:"#1a1a1a"}}>{pl.name}{pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
-                </select>
-              )}
-              <button onClick={()=>setShowChangePass(true)}
-                style={{background:"#ffffff15",border:"1px solid #ffffff33",color:"#ffeeee",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:5}}>
-                👤 {currentUser.name}
-                {activeList.discount>0&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:4,padding:"1px 5px",fontSize:10,fontWeight:800,marginLeft:3}}>{activeList.name}</span>}
-                <span style={{fontSize:10,opacity:.7}}>🔑</span>
-              </button>
-              <div style={{position:"relative"}}>
-                <button onClick={()=>setShowNotifs(s=>!s)} style={{background:"#ffffff22",border:"none",color:"#fff",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:16,lineHeight:1,position:"relative"}}>
-                  🔔
-                  {unreadCount>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#f1c40f",color:"#1a1a1a",borderRadius:10,fontSize:9,padding:"1px 4px",fontWeight:800,minWidth:14,textAlign:"center"}}>{unreadCount}</span>}
-                </button>
-              </div>
-              <button onClick={onLogout} style={{background:"#ffffff22",border:"none",color:"#fff",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:11,fontWeight:600}}>Salir</button>
             </div>
-            {showNotifs&&<NotifPanel notifs={notifs} setNotifs={setNotifs} currentUser={currentUser} users={users} onClose={()=>setShowNotifs(false)} onMarkAllRead={markAllRead} pushNotif={pushNotif} orders={orders}/>}
+          </div>
+        ) : (
+          <div style={{maxWidth:1200,margin:"0 auto",padding:"0 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap"}}>
+            <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 0"}}>
+              <img src={LOGO} alt="LM Logo" style={{width:54,height:54,borderRadius:"50%",objectFit:"cover",boxShadow:"0 2px 8px #0003"}}/>
+              <div>
+                <div style={{color:"#fff",fontWeight:800,fontSize:20,fontFamily:"Georgia,serif"}}>Libreria Madrid</div>
+                <div style={{color:"#ffcccc",fontSize:10,letterSpacing:2,textTransform:"uppercase"}}>Sistema de Gestión</div>
+              </div>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
+              <nav style={{display:"flex",gap:2,flexWrap:"wrap"}}>
+                {TABS.map(t=>(
+                  <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"11px 14px",border:"none",cursor:"pointer",fontSize:13,background:tab===t.k?"#fff":"transparent",color:tab===t.k?RED:"#ffcccc",fontWeight:tab===t.k?700:500,borderRadius:"8px 8px 0 0",position:"relative"}}>
+                    {t.icon} {t.label}
+                    {t.k==="central"&&pending>0&&<span style={{position:"absolute",top:5,right:3,background:"#fff",color:RED,borderRadius:10,fontSize:10,padding:"1px 5px",fontWeight:800,border:`1.5px solid ${RED}`}}>{pending}</span>}
+                  </button>
+                ))}
+              </nav>
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 8px",borderLeft:"1px solid #ffffff33",marginLeft:4}}>
+                {isAdmin && priceLists.length>1 && (
+                  <select value={previewListId||"default"} onChange={e=>setPreviewListId(e.target.value==="default"?null:e.target.value)}
+                    style={{background:"#ffffff22",border:"1px solid #ffffff44",color:"#fff",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:11,fontWeight:600}}>
+                    {priceLists.map(pl=><option key={pl.id} value={pl.id} style={{color:"#1a1a1a"}}>{pl.name}{pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
+                  </select>
+                )}
+                <button onClick={()=>setShowChangePass(true)}
+                  style={{background:"#ffffff15",border:"1px solid #ffffff33",color:"#ffeeee",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:5}}>
+                  👤 {currentUser.name}
+                  {activeList.discount>0&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:4,padding:"1px 5px",fontSize:10,fontWeight:800,marginLeft:3}}>{activeList.name}</span>}
+                  <span style={{fontSize:10,opacity:.7}}>🔑</span>
+                </button>
+                <div style={{position:"relative"}}>
+                  <button onClick={()=>setShowNotifs(s=>!s)} style={{background:"#ffffff22",border:"none",color:"#fff",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:16,lineHeight:1,position:"relative"}}>
+                    🔔
+                    {unreadCount>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#f1c40f",color:"#1a1a1a",borderRadius:10,fontSize:9,padding:"1px 4px",fontWeight:800,minWidth:14,textAlign:"center"}}>{unreadCount}</span>}
+                  </button>
+                </div>
+                <button onClick={onLogout} style={{background:"#ffffff22",border:"none",color:"#fff",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:11,fontWeight:600}}>Salir</button>
+              </div>
+              {showNotifs&&<NotifPanel notifs={notifs} setNotifs={setNotifs} currentUser={currentUser} users={users} onClose={()=>setShowNotifs(false)} onMarkAllRead={markAllRead} pushNotif={pushNotif} orders={orders}/>}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* MOBILE DRAWER MENU */}
+      {isMobile && mobileMenu && (
+        <div style={{position:"fixed",inset:0,background:"#0007",zIndex:200}} onClick={()=>setMobileMenu(false)}>
+          <div style={{width:270,height:"100%",background:"#fff",boxShadow:"4px 0 24px #0005",paddingTop:48,display:"flex",flexDirection:"column"}} onClick={e=>e.stopPropagation()}>
+            <div style={{padding:"0 20px 16px",borderBottom:"1px solid #f0f0f0",marginBottom:8}}>
+              <div style={{fontWeight:800,fontSize:17,fontFamily:"Georgia,serif"}}>Libreria Madrid</div>
+              <div style={{fontSize:11,color:"#aaa",marginTop:2}}>Sistema de Gestión</div>
+            </div>
+            {TABS.map(t=>(t.role==="all"||(t.role==="admin"&&isAdmin))&&(
+              <div key={t.k} onClick={()=>{setTab(t.k);setMobileMenu(false);}}
+                style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:tab===t.k?RED:"#333",background:tab===t.k?"#fdecea":"transparent",cursor:"pointer"}}>
+                <span style={{fontSize:20,width:28,textAlign:"center"}}>{t.icon}</span>{t.label}
+              </div>
+            ))}
+            <div style={{borderTop:"1px solid #f0f0f0",marginTop:"auto",padding:"8px 0"}}>
+              {isAdmin && priceLists.length>1 && (
+                <div style={{padding:"8px 20px"}}>
+                  <div style={{fontSize:10,fontWeight:700,color:"#aaa",marginBottom:4}}>LISTA DE PRECIOS</div>
+                  <select value={previewListId||"default"} onChange={e=>setPreviewListId(e.target.value==="default"?null:e.target.value)}
+                    style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,background:"#fff",cursor:"pointer"}}>
+                    {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}{pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
+                  </select>
+                </div>
+              )}
+              <div onClick={()=>{setShowChangePass(true);setMobileMenu(false);}} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:"#333",cursor:"pointer"}}>
+                <span style={{fontSize:20,width:28,textAlign:"center"}}>🔑</span>Cambiar contraseña
+              </div>
+              <div onClick={onLogout} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:RED,cursor:"pointer"}}>
+                <span style={{fontSize:20,width:28,textAlign:"center"}}>🚪</span>Salir
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
       {compPopup && <CompPopup order={compPopup} onClose={()=>setCompPopup(null)}/>}
       {showChangePass && <ChangePasswordModal currentUser={currentUser} users={users} setUsers={setUsers} onClose={(updated)=>{setShowChangePass(false);}}/>}
-      <div style={{maxWidth:1200,margin:"0 auto",padding:"20px 16px"}}>
+      {showNotifs && isMobile && <NotifPanel notifs={notifs} setNotifs={setNotifs} currentUser={currentUser} users={users} onClose={()=>setShowNotifs(false)} onMarkAllRead={markAllRead} pushNotif={pushNotif} orders={orders}/>}
+
+      <div style={{maxWidth:isMobile?undefined:1200,margin:"0 auto",padding:isMobile?"12px 0":"20px 16px"}}>
         {tab==="central"    && <Central
           orders={isAdmin || currentUser.canSeeAll!==false
             ? orders
             : orders.filter(o=>o.vendedor===currentUser.vendedor||o.vendedor===currentUser.name)}
-          products={products} onStage={setStage} onDel={delOrder}/>}
-        {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser}/>}
-        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onTabChange={setTab} currentUser={currentUser}/>}
+          products={products} onStage={setStage} onDel={delOrder} isMobile={isMobile}/>}
+        {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile}/>}
+        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile}/>}
         {tab==="precios"    && <Precios products={pricedProducts}/>}
-        {tab==="stock"      && <Stock products={products} onUpd={updProd} onDel={pid=>setProducts(p=>p.filter(x=>x.id!==pid))} onAdjust={(pid,qty)=>setProducts(p=>p.map(x=>x.id===pid?{...x,stock:x.stock+qty}:x))} isAdmin={isAdmin} addLog={addLog} stockLog={stockLog} setStockLog={setStockLog}/>}
+        {tab==="stock"      && <Stock products={products} onUpd={updProd} onDel={pid=>setProducts(p=>p.filter(x=>x.id!==pid))} onAdjust={(pid,qty)=>setProducts(p=>p.map(x=>x.id===pid?{...x,stock:x.stock+qty}:x))} isAdmin={isAdmin} addLog={addLog} stockLog={stockLog} setStockLog={setStockLog} isMobile={isMobile}/>}
         {tab==="compras"    && <Compras products={products} onStock={addStock}/>}
-        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} priceLists={priceLists} setPriceLists={setPriceLists}/>}
+        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile}/>}
       </div>
     </div>
   );
@@ -947,7 +1027,7 @@ function CompPopup({order, onClose}) {
 
 
 // ─── CENTRAL ──────────────────────────────────────────────────────────────────
-function Central({orders,products,onStage,onDel}) {
+function Central({orders,products,onStage,onDel,isMobile}) {
   const [fStage,setFStage]=useState("todos");
   const [search,setSearch]=useState("");
   const [expanded,setExpanded]=useState(null);
@@ -1098,7 +1178,7 @@ function Precios({products}) {
 }
 
 // ─── NUEVO PEDIDO ─────────────────────────────────────────────────────────────
-function ProductSelector({products,cart,setCart}) {
+function ProductSelector({products,cart,setCart,isMobile}) {
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("todos");
   const [catOpen,setCatOpen]=useState(false);
@@ -1168,7 +1248,7 @@ function ProductSelector({products,cart,setCart}) {
         </div>
       )}
 
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(195px,1fr))",gap:10}}>
+      <div style={{display:isMobile?"flex":"grid",flexDirection:isMobile?"column":undefined,gridTemplateColumns:isMobile?undefined:"repeat(auto-fill,minmax(195px,1fr))",gap:isMobile?8:10,padding:isMobile?"0 12px":0}}>
         {shown.length===0
           ? <div style={{gridColumn:"1/-1",textAlign:"center",padding:40,color:"#aaa",background:"#fff",borderRadius:12}}>
               <div style={{fontSize:36,marginBottom:8}}>🔍</div>
@@ -1179,7 +1259,35 @@ function ProductSelector({products,cart,setCart}) {
           const hasDisc=ic&&parseFloat(ic.disc?.value)>0;
           const discLabel=ic?fmtDisc(ic.disc):null;
           const finalPrice=ic?applyItemDiscount(ic.price,ic.qty,ic.disc):0;
-          return <div key={p.id} style={{background:"#fff",borderRadius:10,padding:14,border:ic?`2px solid ${RED}`:"2px solid transparent",boxShadow:"0 1px 4px #0001"}}>
+          return isMobile
+          ? (
+            // ── MOBILE: single-column row ──
+            <div key={p.id} style={{background:"#fff",borderRadius:12,padding:"12px 14px",border:`2px solid ${ic?RED:"transparent"}`,boxShadow:"0 1px 4px #0001",display:"flex",alignItems:"center",gap:12}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:700,fontSize:13,color:"#1a1a1a",lineHeight:1.3,marginBottom:2}}>{p.name}</div>
+                <div style={{fontSize:10,color:"#aaa",marginBottom:5}}>{p.id} · {p.category}</div>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontSize:16,fontWeight:900,color:RED}}>{fARS(p.salePrice)}</span>
+                  {hasDisc&&<span style={{fontSize:10,color:"#1e8449",fontWeight:700,background:"#d5f5e3",borderRadius:4,padding:"1px 4px"}}>{discLabel}</span>}
+                  <SPill n={p.stock}/>
+                </div>
+              </div>
+              <div style={{flexShrink:0}}>
+                {ic
+                  ? <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <button onClick={()=>setQ(p.id,ic.qty-1)} style={{width:32,height:32,borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:18,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>-</button>
+                      <input type="number" value={ic.qty} onChange={e=>setQ(p.id,+e.target.value||0)} style={{width:44,textAlign:"center",padding:4,borderRadius:7,border:`1.5px solid ${RED}`,fontWeight:700,fontSize:14,outline:"none"}}/>
+                      <button onClick={()=>setQ(p.id,ic.qty+1)} style={{width:32,height:32,borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:18,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+                    </div>
+                  : <button onClick={()=>addC(p)} style={{padding:"9px 16px",borderRadius:9,border:"none",background:p.stock>0?RED:"#ddd",color:p.stock>0?"#fff":"#aaa",fontWeight:700,fontSize:13,cursor:p.stock>0?"pointer":"default",whiteSpace:"nowrap"}}>
+                      {p.stock>0?"+ Agregar":"Sin stock"}
+                    </button>
+                }
+              </div>
+            </div>
+          ) : (
+            // ── DESKTOP: grid card ──
+            <div key={p.id} style={{background:"#fff",borderRadius:10,padding:14,border:ic?`2px solid ${RED}`:"2px solid transparent",boxShadow:"0 1px 4px #0001"}}>
             <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",marginBottom:3,lineHeight:1.3}}>{p.name}</div>
             <div style={{fontSize:12,color:"#666",marginBottom:7,fontWeight:500}}>{p.id} . {p.category}</div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
@@ -1218,7 +1326,8 @@ function ProductSelector({products,cart,setCart}) {
                 </div>
               )}
             </>:<button onClick={()=>addC(p)} style={{width:"100%",padding:"7px",borderRadius:7,border:"none",cursor:"pointer",background:RED,color:"#fff",fontWeight:700,fontSize:12}}>+ Agregar</button>}
-          </div>;
+          </div>
+          ); // end desktop card
         })}
       </div>
 
@@ -1255,7 +1364,7 @@ function ProductSelector({products,cart,setCart}) {
   );
 }
 
-function Nuevo({products,vendors,onAdd,onDone,currentUser}) {
+function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile}) {
   const [client,setClient]=useState("");
   const [notes,setNotes]=useState("");
   // Admin puede elegir vendedor; vendedores usan el suyo propio automaticamente
@@ -1268,14 +1377,137 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser}) {
   const total    = applyGlobalDiscount(subtotal, globalDisc);
   const globalDiscAmt = subtotal - total;
 
+  const [mStep, setMStep] = useState(1); // mobile: 1=datos, 2=productos, 3=resumen
   const submit=()=>{
     if(!client.trim()){alert("Ingresá el cliente");return;}
-    if(!vendedor){alert("Seleccioná un vendedor");return;}
+    if(!vendedor&&currentUser.role==="admin"){alert("Seleccioná un vendedor");return;}
     if(!cart.length){alert("Agregá productos");return;}
-    onAdd({id:genId(),client:client.trim(),notes,vendedor,items:cart,total,subtotal,globalDisc,stage:"reserva",date:today()});
+    onAdd({id:genId(),client:client.trim(),notes,vendedor:vendedor||currentUser.vendedor||currentUser.name,items:cart,total,subtotal,globalDisc,stage:"reserva",date:today()});
     setOk(true); setTimeout(()=>onDone(),1400);
   };
-  if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>✅</div><div style={{fontWeight:800,color:"#1e8449",fontSize:20,marginTop:12}}>!Pedido registrado!</div></div>;
+  if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>✅</div><div style={{fontWeight:800,color:"#1e8449",fontSize:20,marginTop:12}}>¡Pedido registrado!</div></div>;
+
+  // ── MOBILE: 3-step flow ──
+  if(isMobile) {
+    const StepBar = ({current}) => (
+      <div style={{display:"flex",alignItems:"center",padding:"10px 16px 6px",gap:0,background:"#fff",borderBottom:"1px solid #f0f0f0"}}>
+        {[{n:1,l:"Datos"},{n:2,l:"Productos"},{n:3,l:"Confirmar"}].map(({n,l},i)=>(
+          <React.Fragment key={n}>
+            {i>0&&<div style={{flex:1,height:2,background:current>i?"#1e8449":"#e5e5e5",margin:"0 4px"}}/>}
+            <div style={{display:"flex",alignItems:"center",gap:5}}>
+              <div style={{width:26,height:26,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,flexShrink:0,
+                background:current>n?"#1e8449":current===n?RED:"#fff",
+                border:`2px solid ${current>n?"#1e8449":current===n?RED:"#e5e5e5"}`,
+                color:current>=n?"#fff":"#bbb"}}>
+                {current>n?"✓":n}
+              </div>
+              <div style={{fontSize:10,fontWeight:700,color:current===n?RED:current>n?"#1e8449":"#bbb"}}>{l}</div>
+            </div>
+          </React.Fragment>
+        ))}
+      </div>
+    );
+
+    if(mStep===1) return (
+      <div>
+        <StepBar current={1}/>
+        <div style={{background:"#fff",borderRadius:14,margin:"10px 12px",padding:16,boxShadow:"0 1px 6px #0001"}}>
+          <div style={{fontSize:13,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:.5,marginBottom:12}}>👤 Datos del pedido</div>
+          <Field label="Cliente *"><input value={client} onChange={e=>setClient(e.target.value)} placeholder="Nombre completo del cliente" style={inputStyle}/></Field>
+          {currentUser.role==="admin"
+            ? <Field label="Vendedor *">
+                <select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,color:vendedor?"#1a1a1a":"#aaa",cursor:"pointer"}}>
+                  <option value="">- Seleccioná vendedor -</option>
+                  {vendors.map(v=><option key={v} value={v}>{v}</option>)}
+                </select>
+              </Field>
+            : <div style={{background:"#f9f9f9",borderRadius:10,padding:"10px 14px",marginBottom:12}}>
+                <div style={{fontSize:9,fontWeight:800,color:"#999",textTransform:"uppercase",letterSpacing:.7,marginBottom:3}}>Vendedor</div>
+                <div style={{fontSize:15,fontWeight:700,display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{width:8,height:8,borderRadius:"50%",background:"#1e8449",display:"inline-block"}}/>
+                  {vendedor||currentUser.name}
+                </div>
+              </div>
+          }
+          <Field label="Notas (opcional)"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones, condiciones de entrega..." style={{...inputStyle,resize:"vertical",minHeight:64,fontSize:12}}/></Field>
+        </div>
+        <div style={{padding:"0 12px 16px"}}>
+          <button onClick={()=>setMStep(2)} disabled={!client.trim()||(currentUser.role==="admin"&&!vendedor)}
+            style={{width:"100%",padding:14,borderRadius:12,border:"none",fontWeight:800,fontSize:15,cursor:"pointer",
+              background:(!client.trim()||(currentUser.role==="admin"&&!vendedor))?"#e5e5e5":`linear-gradient(135deg,${REDD},${RED})`,
+              color:(!client.trim()||(currentUser.role==="admin"&&!vendedor))?"#aaa":"#fff"}}>
+            Seleccionar productos →
+          </button>
+        </div>
+      </div>
+    );
+
+    if(mStep===2) return (
+      <div style={{paddingBottom:80}}>
+        <StepBar current={2}/>
+        <ProductSelector products={products} cart={cart} setCart={setCart} isMobile={true}/>
+        <div style={{position:"fixed",bottom:0,left:0,right:0,background:"#fff",borderTop:"2px solid #fdecea",padding:"10px 14px",display:"flex",alignItems:"center",gap:12,boxShadow:"0 -6px 20px #0003",zIndex:50}}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:11,color:"#888",fontWeight:600}}>✅ {cart.length} producto{cart.length!==1?"s":""} · {cart.reduce((s,i)=>s+i.qty,0)} uds.</div>
+            <div style={{fontSize:20,fontWeight:900,color:RED}}>{fARS(total)}</div>
+          </div>
+          <button onClick={()=>setMStep(3)} disabled={!cart.length}
+            style={{padding:"11px 18px",borderRadius:12,border:"none",background:cart.length?`linear-gradient(135deg,${REDD},${RED})`:"#e5e5e5",color:cart.length?"#fff":"#aaa",fontWeight:800,fontSize:13,cursor:cart.length?"pointer":"not-allowed",whiteSpace:"nowrap"}}>
+            Ver resumen →
+          </button>
+        </div>
+      </div>
+    );
+
+    return (
+      <div>
+        <div style={{background:`linear-gradient(135deg,${REDD},${RED})`,padding:"12px 16px",display:"flex",alignItems:"center",gap:10}}>
+          <button onClick={()=>setMStep(2)} style={{width:34,height:34,borderRadius:9,background:"#ffffff22",border:"none",color:"#fff",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>←</button>
+          <div style={{color:"#fff",fontWeight:800,fontSize:16}}>📋 Confirmar Pedido</div>
+        </div>
+        <StepBar current={3}/>
+        <div style={{padding:14}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+            <div style={{background:"#f9f9f9",borderRadius:9,padding:"10px 12px",borderLeft:`3px solid ${RED}`}}>
+              <div style={{fontSize:9,fontWeight:800,color:"#999",textTransform:"uppercase",marginBottom:3}}>Cliente</div>
+              <div style={{fontSize:13,fontWeight:700}}>{client}</div>
+            </div>
+            <div style={{background:"#f9f9f9",borderRadius:9,padding:"10px 12px",borderLeft:"3px solid #e5e5e5"}}>
+              <div style={{fontSize:9,fontWeight:800,color:"#999",textTransform:"uppercase",marginBottom:3}}>Vendedor</div>
+              <div style={{fontSize:13,fontWeight:700}}>{vendedor||currentUser.name}</div>
+            </div>
+            {notes&&<div style={{gridColumn:"1/-1",background:"#f9f9f9",borderRadius:9,padding:"10px 12px",borderLeft:"3px solid #e5e5e5"}}>
+              <div style={{fontSize:9,fontWeight:800,color:"#999",textTransform:"uppercase",marginBottom:3}}>Notas</div>
+              <div style={{fontSize:12,color:"#555"}}>{notes}</div>
+            </div>}
+          </div>
+          <div style={{fontSize:11,fontWeight:800,color:"#888",textTransform:"uppercase",marginBottom:8}}>Productos ({cart.length})</div>
+          {cart.map(i=>{
+            const lt=applyItemDiscount(i.price,i.qty,i.disc);
+            const hasD=parseFloat(i.disc?.value)>0;
+            return <div key={i.pid} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:"1px solid #f0f0f0",gap:8}}>
+              <div style={{fontSize:13,color:"#333",flex:1,lineHeight:1.3}}>{i.name} × {i.qty}</div>
+              <div style={{textAlign:"right"}}>
+                {hasD&&<div style={{fontSize:10,color:"#aaa",textDecoration:"line-through"}}>{fARS(i.price*i.qty)}</div>}
+                <div style={{fontSize:13,fontWeight:700}}>{fARS(lt)}</div>
+              </div>
+            </div>;
+          })}
+          {globalDiscAmt>0&&<>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#888",padding:"6px 0"}}><span>Subtotal</span><span>{fARS(subtotal)}</span></div>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#1e8449",padding:"3px 0",fontWeight:600}}><span>Dto. global ({fmtDisc(globalDisc)})</span><span>-{fARS(globalDiscAmt)}</span></div>
+          </>}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 0 8px",borderTop:"2.5px solid #f0f0f0",marginTop:4}}>
+            <div style={{fontSize:14,fontWeight:600,color:"#555"}}>TOTAL</div>
+            <div style={{fontSize:28,fontWeight:900,color:RED}}>{fARS(total)}</div>
+          </div>
+          <button onClick={submit} style={{width:"100%",padding:15,borderRadius:12,border:"none",background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",fontWeight:800,fontSize:15,cursor:"pointer",marginTop:8}}>✅ Registrar como Reserva</button>
+          <button onClick={()=>setMStep(2)} style={{width:"100%",padding:11,borderRadius:12,border:"1.5px solid #e5e5e5",background:"#fff",fontWeight:600,fontSize:13,cursor:"pointer",marginTop:8,color:"#666"}}>← Volver a productos</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{display:"grid",gridTemplateColumns:"1fr 330px",gap:18,alignItems:"start"}}>
       <div>
@@ -1816,7 +2048,7 @@ function BajaConfirm({onConfirm,disabled}) {
   );
 }
 
-function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLog}) {
+function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLog,isMobile}) {
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("todos");
   const [editing,setEditing]=useState(null);
@@ -1876,14 +2108,25 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
         <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 4px #0001",overflow:"auto"}}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
             <thead><tr style={{background:"#f9f9f9"}}>
-              {["Código","Producto","Categoría","Stock","P. Venta",...(isAdmin?["P. Costo","Margen"]:[]),""].map(h=><th key={h} style={{padding:"10px 12px",textAlign:"left",fontWeight:700,color:"#888",fontSize:11,textTransform:"uppercase",letterSpacing:.5,whiteSpace:"nowrap"}}>{h}</th>)}
+              {(isMobile?["Producto","Stock","P. Venta"]:["Código","Producto","Categoría","Stock","P. Venta",...(isAdmin?["P. Costo","Margen"]:[]),""]).map(h=><th key={h} style={{padding:"10px 12px",textAlign:h==="Stock"||h==="P. Venta"?"right":"left",fontWeight:700,color:"#888",fontSize:11,textTransform:"uppercase",letterSpacing:.5,whiteSpace:"nowrap"}}>{h}</th>)}
             </tr></thead>
             <tbody>
               {shown.length===0
                 ? <tr><td colSpan={8} style={{textAlign:"center",padding:40,color:"#aaa"}}>Sin resultados.</td></tr>
                 : shown.map(p=>{
                     const m=p.costPrice>0?((p.salePrice-p.costPrice)/p.costPrice*100).toFixed(0):"-";
-                    return <tr key={p.id} style={{borderTop:"1px solid #f5f5f5"}}>
+                    return isMobile ? (
+                      <tr key={p.id} style={{borderTop:"1px solid #f5f5f5"}}>
+                        <td style={{padding:"10px 12px"}}>
+                          <div style={{fontWeight:600,fontSize:13}}>{p.name}</div>
+                          <div style={{fontSize:10,color:"#aaa",marginTop:2}}>{p.id} · {p.category}</div>
+                          {isAdmin&&<button onClick={()=>setEditing(p)} style={{padding:"3px 8px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11,fontWeight:600,marginTop:4}}>✏️ Editar</button>}
+                        </td>
+                        <td style={{padding:"10px 12px",textAlign:"right"}}><SPill n={p.stock}/></td>
+                        <td style={{padding:"10px 12px",fontWeight:700,color:RED,textAlign:"right",whiteSpace:"nowrap"}}>{fARS(p.salePrice)}</td>
+                      </tr>
+                    ) : (
+                    <tr key={p.id} style={{borderTop:"1px solid #f5f5f5"}}>
                       <td style={{padding:"9px 12px",color:"#aaa",fontSize:11}}>{p.id}</td>
                       <td style={{padding:"9px 12px",fontWeight:600,color:"#1a1a1a",maxWidth:260}}>{p.name}</td>
                       <td style={{padding:"9px 12px",color:"#aaa",fontSize:11}}>{p.category}</td>
@@ -1892,7 +2135,8 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
                       {isAdmin&&<td style={{padding:"9px 12px",color:"#666"}}>{fARS(p.costPrice)}</td>}
                       {isAdmin&&<td style={{padding:"9px 12px",fontWeight:700,color:+m>=40?"#1e8449":"#e67e22"}}>{m}%</td>}
                       <td style={{padding:"9px 12px"}}>{isAdmin&&<button onClick={()=>setEditing(p)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11,fontWeight:600}}>✏️</button>}</td>
-                    </tr>;
+                    </tr>
+                    );
                   })
               }
             </tbody>
@@ -2005,7 +2249,7 @@ function Compras({products,onStock}) {
             style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
           {search&&<div style={{fontSize:11,color:"#aaa",marginTop:6}}>{found.length} resultados</div>}
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(195px,1fr))",gap:10}}>
+        <div style={{display:isMobile?"flex":"grid",flexDirection:isMobile?"column":undefined,gridTemplateColumns:isMobile?undefined:"repeat(auto-fill,minmax(195px,1fr))",gap:isMobile?8:10,padding:isMobile?"0 12px":0}}>
           {found.length>0
             ? found.map(p=>{
                 const inL=items.find(i=>i.pid===p.id);
@@ -2051,7 +2295,7 @@ function Compras({products,onStock}) {
 }
 
 // ─── ADMIN PANEL ──────────────────────────────────────────────────────────────
-function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,priceLists,setPriceLists}) {
+function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,priceLists,setPriceLists,isMobile}) {
   const [section, setSection] = useState("vendors");
 
   const SECTIONS = [
@@ -2064,15 +2308,38 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
     {k:"notifcfg",    label:"Notificaciones",   icon:"🔔"},
   ];
 
+  // Mobile: show icon grid when no section selected, back button when inside
+  if(isMobile && !section) return (
+    <div style={{padding:12}}>
+      <div style={{fontWeight:800,fontSize:16,marginBottom:12}}>★ Administración</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        {SECTIONS.map(s=>(
+          <div key={s.k} onClick={()=>setSection(s.k)}
+            style={{background:"#fff",borderRadius:14,padding:"18px 14px",textAlign:"center",boxShadow:"0 1px 6px #0001",cursor:"pointer"}}>
+            <div style={{fontSize:32,marginBottom:8}}>{s.icon}</div>
+            <div style={{fontSize:12,fontWeight:700,color:"#1a1a1a"}}>{s.label}</div>
+            <div style={{fontSize:10,color:"#aaa",marginTop:2}}>{s.sub}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
     <div>
-      <div style={{background:"#fff",borderRadius:12,padding:4,marginBottom:16,display:"flex",gap:4,boxShadow:"0 1px 4px #0001",flexWrap:"wrap"}}>
+      {isMobile && section && (
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 12px 0",marginBottom:8}}>
+          <button onClick={()=>setSection(null)} style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",fontWeight:600,fontSize:12,cursor:"pointer",color:"#555"}}>← Volver</button>
+          <div style={{fontWeight:800,fontSize:15}}>{SECTIONS.find(s=>s.k===section)?.icon} {SECTIONS.find(s=>s.k===section)?.label}</div>
+        </div>
+      )}
+      {!isMobile && <div style={{background:"#fff",borderRadius:12,padding:4,marginBottom:16,display:"flex",gap:4,boxShadow:"0 1px 4px #0001",flexWrap:"wrap"}}>
         {SECTIONS.map(s=>(
           <button key={s.k} onClick={()=>setSection(s.k)} style={{flex:1,minWidth:120,padding:"10px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:section===s.k?`linear-gradient(135deg,${REDD},${RED})`:"transparent",color:section===s.k?"#fff":"#555",transition:"all .15s"}}>
             {s.icon} {s.label}
           </button>
         ))}
-      </div>
+      </div>}
       {section==="ventas"      && <VentasPanel    orders={orders}/>}
       {section==="activity"    && <ActivityPanel  activity={activity} setActivity={setActivity}/>}
       {section==="vendors"     && <VendorsPanel   vendors={vendors} setVendors={setVendors}/>}
