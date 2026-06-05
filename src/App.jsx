@@ -792,7 +792,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       <div style={{background:`linear-gradient(135deg,${REDD},${RED})`,boxShadow:"0 4px 16px #0004",position:"sticky",top:0,zIndex:100}}>
         {isMobile ? (
           <div>
-            <div style={{display:"flex",alignItems:"center",padding:"36px 14px 8px",gap:10}}>
+            <div style={{display:"flex",alignItems:"center",padding:"12px 14px 8px",gap:10}}>
               <img src={LOGO} alt="LM" style={{width:38,height:38,borderRadius:"50%",objectFit:"cover",border:"2px solid #ffffff44",flexShrink:0}}/>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{color:"#fff",fontWeight:800,fontSize:15,fontFamily:"Georgia,serif"}}>Libreria Madrid</div>
@@ -806,7 +806,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
               </div>
             </div>
             <div style={{display:"flex",overflowX:"auto",gap:1,padding:"0 10px",scrollbarWidth:"none"}}>
-              {TABS.map(t=>(t.role==="all"||(t.role==="admin"&&isAdmin))&&(
+              {TABS.filter(t=>t.role==="all"||(t.role==="admin"&&isAdmin)).map(t=>(
                 <button key={t.k} onClick={()=>setTab(t.k)}
                   style={{padding:"7px 13px",border:"none",cursor:"pointer",fontSize:11,color:tab===t.k?"#fff":"#ffbbbb",fontWeight:tab===t.k?700:600,borderRadius:"8px 8px 0 0",background:tab===t.k?"#ffffff18":"transparent",borderBottom:tab===t.k?"3px solid #fff":"3px solid transparent",whiteSpace:"nowrap",flexShrink:0}}>
                   {t.icon} {t.label}
@@ -861,13 +861,13 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
 
       {/* MOBILE DRAWER MENU */}
       {isMobile && mobileMenu && (
-        <div style={{position:"fixed",inset:0,background:"#0007",zIndex:200}} onClick={()=>setMobileMenu(false)}>
-          <div style={{width:270,height:"100%",background:"#fff",boxShadow:"4px 0 24px #0005",paddingTop:48,display:"flex",flexDirection:"column"}} onClick={e=>e.stopPropagation()}>
+        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,width:"100vw",height:"100vh",background:"#0007",zIndex:9999}} onClick={()=>setMobileMenu(false)}>
+          <div style={{width:"80%",maxWidth:300,height:"100%",background:"#fff",boxShadow:"4px 0 24px #0005",paddingTop:48,display:"flex",flexDirection:"column",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
             <div style={{padding:"0 20px 16px",borderBottom:"1px solid #f0f0f0",marginBottom:8}}>
               <div style={{fontWeight:800,fontSize:17,fontFamily:"Georgia,serif"}}>Libreria Madrid</div>
               <div style={{fontSize:11,color:"#aaa",marginTop:2}}>Sistema de Gestión</div>
             </div>
-            {TABS.map(t=>(t.role==="all"||(t.role==="admin"&&isAdmin))&&(
+            {TABS.filter(t=>t.role==="all"||(t.role==="admin"&&isAdmin)).map(t=>(
               <div key={t.k} onClick={()=>{setTab(t.k);setMobileMenu(false);}}
                 style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:tab===t.k?RED:"#333",background:tab===t.k?"#fdecea":"transparent",cursor:"pointer"}}>
                 <span style={{fontSize:20,width:28,textAlign:"center"}}>{t.icon}</span>{t.label}
