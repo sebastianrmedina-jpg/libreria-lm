@@ -1108,17 +1108,20 @@ function ProductSelector({products,cart,setCart}) {
 
   const CATS=useMemo(()=>["todos",...new Set(products.map(p=>p.category))].sort(),[products]);
 
+  const [soloConStock, setSoloConStock] = useState(false);
+
   // Reset page when search or category changes
-  useEffect(()=>setPage(0),[search,cat]);
+  useEffect(()=>setPage(0),[search,cat,soloConStock]);
 
   const filtered=useMemo(()=>{
     const q=search.toLowerCase();
     return products.filter(p=>{
+      if(soloConStock && p.stock<=0) return false;
       if(cat!=="todos"&&p.category!==cat) return false;
       if(q) return norm(p.name).includes(norm(q))||p.id.toLowerCase().includes(q.toLowerCase());
       return true;
     });
-  },[products,search,cat]);
+  },[products,search,cat,soloConStock]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const shown = filtered.slice(page*PAGE_SIZE, (page+1)*PAGE_SIZE);
@@ -1140,9 +1143,15 @@ function ProductSelector({products,cart,setCart}) {
               {CATS.map(c=><button key={c} onClick={()=>{setCat(c);setCatOpen(false);}} style={{padding:"4px 11px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:cat===c?RED:"#e5e5e5",background:cat===c?"#fdecea":"#fff",color:cat===c?RED:"#666"}}>{c==="todos"?"Todos":c}</button>)}
             </div>)}
           </div>
-          <div style={{fontSize:12,color:"#888",whiteSpace:"nowrap"}}>
-            <span style={{fontWeight:700,color:RED}}>{filtered.length.toLocaleString("es-AR")}</span> productos
-            {(search||cat!=="todos")&&<span style={{color:"#aaa"}}> de {products.length.toLocaleString("es-AR")}</span>}
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            <div style={{fontSize:12,color:"#888",whiteSpace:"nowrap"}}>
+              <span style={{fontWeight:700,color:RED}}>{filtered.length.toLocaleString("es-AR")}</span> productos
+              {(search||cat!=="todos"||soloConStock)&&<span style={{color:"#aaa"}}> de {products.length.toLocaleString("es-AR")}</span>}
+            </div>
+            <button onClick={()=>setSoloConStock(s=>!s)}
+              style={{padding:"5px 12px",borderRadius:8,border:`1.5px solid ${soloConStock?"#1e8449":"#e5e5e5"}`,background:soloConStock?"#d5f5e3":"#fff",color:soloConStock?"#1e8449":"#666",fontWeight:700,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>
+              {soloConStock ? "✅ Con stock" : "📦 Solo con stock"}
+            </button>
           </div>
         </div>
       </div>
@@ -1815,17 +1824,19 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
   const [page,setPage]=useState(0);
   const PAGE_SIZE = 100;
 
+  const [soloConStock, setSoloConStock] = useState(false);
   const CATS=useMemo(()=>["todos",...new Set(products.map(p=>p.category))].sort(),[products]);
   const q=search.toLowerCase();
 
   // Reset page when filters change
-  useEffect(()=>setPage(0),[search,cat]);
+  useEffect(()=>setPage(0),[search,cat,soloConStock]);
 
   const filtered=useMemo(()=>products.filter(p=>{
+    if(soloConStock && p.stock<=0) return false;
     if(cat!=="todos"&&p.category!==cat) return false;
     if(q) return norm(p.name).includes(norm(q))||p.id.toLowerCase().includes(q.toLowerCase());
     return true;
-  }),[products,cat,q]);
+  }),[products,cat,q,soloConStock]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const shown = filtered.slice(page*PAGE_SIZE, (page+1)*PAGE_SIZE);
@@ -1853,6 +1864,10 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
           </div>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar por nombre o código..."
             style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:12,outline:"none",width:220}} autoFocus={false}/>
+          <button onClick={()=>setSoloConStock(s=>!s)}
+            style={{padding:"7px 14px",borderRadius:8,border:`1.5px solid ${soloConStock?"#1e8449":"#e5e5e5"}`,background:soloConStock?"#d5f5e3":"#fff",color:soloConStock?"#1e8449":"#666",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>
+            {soloConStock ? "✅ Con stock" : "📦 Con stock"}
+          </button>
           <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
             {CATS.map(c=><button key={c} onClick={()=>setCat(c)} style={{padding:"4px 10px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:cat===c?RED:"#e5e5e5",background:cat===c?"#fdecea":"#fff",color:cat===c?RED:"#666"}}>{c==="todos"?"Todos":c}</button>)}
           </div>
