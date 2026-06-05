@@ -806,7 +806,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
               </div>
             </div>
             <div style={{display:"flex",overflowX:"auto",gap:1,padding:"0 10px",scrollbarWidth:"none"}}>
-              {TABS.filter(t=>t.role==="all"||(t.role==="admin"&&isAdmin)).map(t=>(
+              {TABS.map(t=>(
                 <button key={t.k} onClick={()=>setTab(t.k)}
                   style={{padding:"7px 13px",border:"none",cursor:"pointer",fontSize:11,color:tab===t.k?"#fff":"#ffbbbb",fontWeight:tab===t.k?700:600,borderRadius:"8px 8px 0 0",background:tab===t.k?"#ffffff18":"transparent",borderBottom:tab===t.k?"3px solid #fff":"3px solid transparent",whiteSpace:"nowrap",flexShrink:0}}>
                   {t.icon} {t.label}
@@ -867,7 +867,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
               <div style={{fontWeight:800,fontSize:17,fontFamily:"Georgia,serif"}}>Libreria Madrid</div>
               <div style={{fontSize:11,color:"#aaa",marginTop:2}}>Sistema de Gestión</div>
             </div>
-            {TABS.filter(t=>t.role==="all"||(t.role==="admin"&&isAdmin)).map(t=>(
+            {TABS.map(t=>(
               <div key={t.k} onClick={()=>{setTab(t.k);setMobileMenu(false);}}
                 style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:tab===t.k?RED:"#333",background:tab===t.k?"#fdecea":"transparent",cursor:"pointer"}}>
                 <span style={{fontSize:20,width:28,textAlign:"center"}}>{t.icon}</span>{t.label}
