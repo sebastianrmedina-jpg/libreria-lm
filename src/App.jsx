@@ -917,7 +917,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
         {tab==="precios"    && <Precios products={pricedProducts}/>}
         {tab==="stock"      && <Stock products={products} onUpd={updProd} onDel={pid=>setProducts(p=>p.filter(x=>x.id!==pid))} onAdjust={(pid,qty)=>setProducts(p=>p.map(x=>x.id===pid?{...x,stock:x.stock+qty}:x))} isAdmin={isAdmin} addLog={addLog} stockLog={stockLog} setStockLog={setStockLog} isMobile={isMobile}/>}
         {tab==="compras"    && <Compras products={products} onStock={addStock} isMobile={isMobile}/>}
-        {tab==="solicitud"  && <SolicitudCompra products={products} currentUser={currentUser} isAdmin={isAdmin} purchaseOrders={purchaseOrders} setPurchaseOrders={setPurchaseOrders} isMobile={isMobile}/>}
+        {tab==="solicitud"  && <SolicitudCompra products={products} currentUser={currentUser} isAdmin={isAdmin} purchaseOrders={purchaseOrders} setPurchaseOrders={setPurchaseOrders} isMobile={isMobile} onStockExternal={addStock} addLog={addLog}/>}
         {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile}/>}
       </div>
     </div>
@@ -2231,6 +2231,96 @@ function EditModal({p,onSave,onClose}) {
   );
 }
 
+// ─── INGRESAR STOCK DESDE SOLICITUD ──────────────────────────────────────────
+function IngresarDesdeSolicitud({po, products, onStock, onDone}) {
+  const [items, setItems] = useState(
+    po.items.map(i => ({
+      ...i,
+      qtyRecibida: i.qty, // default = lo que se pidió
+      cost: products.find(p=>p.id===i.id)?.costPrice || 0,
+      incluir: true,
+    }))
+  );
+  const [saving, setSaving] = useState(false);
+  const [ok, setOk] = useState(false);
+
+  const update = (pid, field, val) =>
+    setItems(prev => prev.map(i => i.pid===pid ? {...i,[field]:val} : i));
+
+  const submit = async () => {
+    const toIngresar = items.filter(i => i.incluir && i.qtyRecibida > 0);
+    if(!toIngresar.length) { alert("Seleccioná al menos un producto para ingresar"); return; }
+    setSaving(true);
+    for(const it of toIngresar) {
+      await onStock(it.pid, +it.qtyRecibida, +it.cost);
+    }
+    setOk(true);
+    setSaving(false);
+    setTimeout(()=>onDone(), 1500);
+  };
+
+  if(ok) return (
+    <div style={{textAlign:"center",padding:"20px 0"}}>
+      <div style={{fontSize:40,marginBottom:6}}>✅</div>
+      <div style={{fontWeight:800,color:"#1e8449",fontSize:15}}>¡Stock actualizado!</div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{background:"#fff",borderRadius:10,overflow:"auto",marginBottom:12}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:400}}>
+          <thead><tr style={{background:"#f5f5f5"}}>
+            <th style={{padding:"8px 10px",textAlign:"left",fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase",width:32}}>
+              <input type="checkbox" checked={items.every(i=>i.incluir)} onChange={e=>setItems(prev=>prev.map(i=>({...i,incluir:e.target.checked})))} style={{cursor:"pointer"}}/>
+            </th>
+            <th style={{padding:"8px 10px",textAlign:"left",fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Producto</th>
+            <th style={{padding:"8px 10px",textAlign:"center",fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Pedido</th>
+            <th style={{padding:"8px 10px",textAlign:"center",fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Recibido</th>
+            <th style={{padding:"8px 10px",textAlign:"center",fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase"}}>P. Costo</th>
+          </tr></thead>
+          <tbody>
+            {items.map((it,i)=>(
+              <tr key={it.pid} style={{borderTop:"1px solid #f0f0f0",background:it.incluir?"#fff":"#f9f9f9",opacity:it.incluir?1:.5}}>
+                <td style={{padding:"8px 10px",textAlign:"center"}}>
+                  <input type="checkbox" checked={it.incluir} onChange={e=>update(it.pid,"incluir",e.target.checked)} style={{cursor:"pointer"}}/>
+                </td>
+                <td style={{padding:"8px 10px"}}>
+                  <div style={{fontWeight:600,fontSize:12,lineHeight:1.3}}>{it.name}</div>
+                  <div style={{fontSize:10,color:"#aaa"}}>{it.id}</div>
+                </td>
+                <td style={{padding:"8px 10px",textAlign:"center",color:"#888",fontSize:13}}>{it.qty}</td>
+                <td style={{padding:"8px 10px",textAlign:"center"}}>
+                  <input type="number" min="0" value={it.qtyRecibida}
+                    onChange={e=>update(it.pid,"qtyRecibida",+e.target.value||0)}
+                    style={{width:56,textAlign:"center",padding:"4px",borderRadius:6,border:`1.5px solid ${it.qtyRecibida<it.qty?"#e67e22":it.qtyRecibida>it.qty?"#3498db":"#1e8449"}`,fontWeight:700,fontSize:13,outline:"none"}}/>
+                  {it.qtyRecibida<it.qty&&<div style={{fontSize:9,color:"#e67e22",marginTop:2}}>Falta {it.qty-it.qtyRecibida}</div>}
+                  {it.qtyRecibida>it.qty&&<div style={{fontSize:9,color:"#3498db",marginTop:2}}>Extra +{it.qtyRecibida-it.qty}</div>}
+                </td>
+                <td style={{padding:"8px 10px",textAlign:"center"}}>
+                  <input type="number" min="0" value={it.cost}
+                    onChange={e=>update(it.pid,"cost",+e.target.value||0)}
+                    placeholder="$0"
+                    style={{width:72,textAlign:"center",padding:"4px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:12,outline:"none"}}/>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        <div style={{flex:1,fontSize:12,color:"#1e8449"}}>
+          <strong>{items.filter(i=>i.incluir).length}</strong> productos · <strong>{items.filter(i=>i.incluir).reduce((s,i)=>s+i.qtyRecibida,0)}</strong> unidades a ingresar
+        </div>
+        <button onClick={submit} disabled={saving}
+          style={{padding:"10px 20px",borderRadius:10,border:"none",background:saving?"#e5e5e5":"linear-gradient(135deg,#1a5e20,#1e8449)",color:saving?"#aaa":"#fff",fontWeight:800,fontSize:13,cursor:saving?"not-allowed":"pointer",whiteSpace:"nowrap"}}>
+          {saving?"Ingresando...":"📦 Ingresar al Stock"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── SOLICITUD DE COMPRA ──────────────────────────────────────────────────────
 const ESTADO_CFG = {
   abierta:   {label:"Abierta",    color:"#1a5276", bg:"#d6eaf8",  icon:"📋"},
@@ -2336,9 +2426,11 @@ function exportSolicitudXLSX(po) {
   XLSX.writeFile(wb, `Solicitud_${po.id.slice(-6).toUpperCase()}_${po.fecha.replace(/\//g,"-")}.xlsx`);
 }
 
-function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchaseOrders,isMobile}) {
+function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchaseOrders,isMobile,onStockExternal,addLog}) {
   const [view, setView] = useState("lista"); // lista | nueva | detalle
   const [selected, setSelected] = useState(null);
+  const [showAddProduct, setShowAddProduct] = useState(false);
+  const [addSearch, setAddSearch] = useState("");
   const [cart, setCart] = useState([]);
   const [notas, setNotas] = useState("");
   const [saving, setSaving] = useState(false);
@@ -2459,22 +2551,110 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
           </div>}
         </div>
 
-        {/* Items table */}
+        {/* Items table — editable for admin when not closed */}
         <div style={{background:"#fff",borderRadius:12,overflow:"auto",boxShadow:"0 1px 4px #0001",marginBottom:12,margin:isMobile?"0 12px 12px":"0 0 12px"}}>
+          {isAdmin && po.estado!=="cerrada" && (
+            <div style={{padding:"8px 14px",background:"#fef9e7",borderBottom:"1px solid #f0e0a0",fontSize:12,color:"#7d6608",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+              <span>✏️ Modo edición — modificá cantidades o agregá productos</span>
+              <button onClick={()=>setShowAddProduct(s=>!s)}
+                style={{marginLeft:"auto",padding:"5px 12px",borderRadius:7,border:"none",background:showAddProduct?"#1a5276":"#e67e22",color:"#fff",fontWeight:700,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>
+                {showAddProduct?"✕ Cerrar buscador":"+ Agregar producto"}
+              </button>
+            </div>
+          )}
+          {isAdmin && po.estado!=="cerrada" && showAddProduct && (
+            <div style={{padding:"12px 14px",borderBottom:"1px solid #f0f0f0",background:"#f9f9fb"}}>
+              <input value={addSearch} onChange={e=>setAddSearch(e.target.value)} autoFocus
+                placeholder="🔍 Buscar producto para agregar..."
+                style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #1a5276",fontSize:13,outline:"none",marginBottom:8}}/>
+              {addSearch.length>1 && (
+                <div style={{maxHeight:220,overflowY:"auto",display:"flex",flexDirection:"column",gap:5}}>
+                  {products.filter(p=>norm(p.name).includes(norm(addSearch))||p.id.toLowerCase().includes(addSearch.toLowerCase())).slice(0,20).map(p=>{
+                    const already = po.items.find(i=>i.id===p.id);
+                    return (
+                      <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,background:"#fff",borderRadius:8,padding:"8px 12px",border:"1.5px solid #e5e5e5"}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontWeight:600,fontSize:12,lineHeight:1.3}}>{p.name}</div>
+                          <div style={{fontSize:10,color:"#aaa"}}>{p.id}</div>
+                        </div>
+                        {already
+                          ? <span style={{fontSize:11,color:"#1e8449",fontWeight:700,background:"#d5f5e3",borderRadius:6,padding:"3px 8px"}}>✓ Ya está (×{already.qty})</span>
+                          : <button onClick={()=>{
+                              const newItems=[...po.items,{pid:p.id,id:p.id,name:p.name,qty:1,notas:""}];
+                              const updated={...po,items:newItems};
+                              savePO(updated); setSelected(updated);
+                              setAddSearch(""); setShowAddProduct(false);
+                            }} style={{padding:"5px 12px",borderRadius:7,border:"none",background:"#1a5276",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>
+                              + Agregar
+                            </button>
+                        }
+                      </div>
+                    );
+                  })}
+                  {products.filter(p=>norm(p.name).includes(norm(addSearch))||p.id.toLowerCase().includes(addSearch.toLowerCase())).length===0&&(
+                    <div style={{textAlign:"center",color:"#aaa",fontSize:12,padding:12}}>Sin resultados</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:400}}>
             <thead><tr style={{background:"#f5f5f5"}}>
               <th style={{padding:"10px 12px",textAlign:"left",fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Producto</th>
               <th style={{padding:"10px 12px",textAlign:"left",fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Código</th>
               <th style={{padding:"10px 12px",textAlign:"center",fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Cant.</th>
               <th style={{padding:"10px 12px",textAlign:"left",fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Obs.</th>
+              {isAdmin && po.estado!=="cerrada" && <th style={{padding:"10px 12px",textAlign:"center",fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Quitar</th>}
             </tr></thead>
             <tbody>
               {po.items.map((it,i)=>(
                 <tr key={i} style={{borderTop:"1px solid #f5f5f5",background:i%2===0?"#fff":"#fafafa"}}>
                   <td style={{padding:"9px 12px",fontWeight:600}}>{it.name}</td>
                   <td style={{padding:"9px 12px",color:"#aaa",fontSize:11}}>{it.id||""}</td>
-                  <td style={{padding:"9px 12px",textAlign:"center",fontWeight:800,fontSize:15,color:"#1a5276"}}>{it.qty}</td>
-                  <td style={{padding:"9px 12px",color:"#888",fontSize:12}}>{it.notas||""}</td>
+                  <td style={{padding:"9px 12px",textAlign:"center"}}>
+                    {isAdmin && po.estado!=="cerrada"
+                      ? <div style={{display:"flex",alignItems:"center",gap:4,justifyContent:"center"}}>
+                          <button onClick={()=>{
+                            const newItems=po.items.map((x,j)=>j===i?{...x,qty:Math.max(1,x.qty-1)}:x);
+                            const updated={...po,items:newItems};
+                            savePO(updated); setSelected(updated);
+                          }} style={{width:24,height:24,borderRadius:5,border:"1.5px solid #ccc",background:"#fff",cursor:"pointer",fontSize:14,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>-</button>
+                          <input type="number" min="1" value={it.qty}
+                            onChange={e=>{
+                              const newItems=po.items.map((x,j)=>j===i?{...x,qty:+e.target.value||1}:x);
+                              const updated={...po,items:newItems};
+                              savePO(updated); setSelected(updated);
+                            }}
+                            style={{width:48,textAlign:"center",padding:"3px",borderRadius:6,border:"1.5px solid #1a5276",fontWeight:700,fontSize:13,outline:"none"}}/>
+                          <button onClick={()=>{
+                            const newItems=po.items.map((x,j)=>j===i?{...x,qty:x.qty+1}:x);
+                            const updated={...po,items:newItems};
+                            savePO(updated); setSelected(updated);
+                          }} style={{width:24,height:24,borderRadius:5,border:"1.5px solid #ccc",background:"#fff",cursor:"pointer",fontSize:14,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+                        </div>
+                      : <span style={{fontWeight:800,fontSize:15,color:"#1a5276"}}>{it.qty}</span>
+                    }
+                  </td>
+                  <td style={{padding:"9px 12px"}}>
+                    {isAdmin && po.estado!=="cerrada"
+                      ? <input value={it.notas||""} onChange={e=>{
+                            const newItems=po.items.map((x,j)=>j===i?{...x,notas:e.target.value}:x);
+                            const updated={...po,items:newItems};
+                            savePO(updated); setSelected(updated);
+                          }}
+                          placeholder="Obs..." style={{width:"100%",padding:"4px 8px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:12,outline:"none"}}/>
+                      : <span style={{color:"#888",fontSize:12}}>{it.notas||""}</span>
+                    }
+                  </td>
+                  {isAdmin && po.estado!=="cerrada" && (
+                    <td style={{padding:"9px 12px",textAlign:"center"}}>
+                      <button onClick={()=>{
+                        const newItems=po.items.filter((_,j)=>j!==i);
+                        const updated={...po,items:newItems};
+                        savePO(updated); setSelected(updated);
+                      }} style={{background:"none",border:"none",cursor:"pointer",color:"#c0392b",fontSize:16,lineHeight:1}}>×</button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -2498,6 +2678,17 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
           <button onClick={()=>exportSolicitudXLSX(po)} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #1e8449",background:"#fff",color:"#1e8449",fontWeight:700,fontSize:13,cursor:"pointer"}}>📊 Excel</button>
           {isAdmin&&<button onClick={()=>deletePO(po.id)} style={{padding:"11px 16px",borderRadius:10,border:"1.5px solid #fcc",background:"#fff",color:"#c0392b",fontWeight:700,fontSize:13,cursor:"pointer"}}>🗑</button>}
         </div>
+
+        {/* Ingresar mercadería desde solicitud */}
+        {isAdmin && po.estado==="cerrada" && (
+          <div style={{background:"#d5f5e3",border:"2px solid #1e8449",borderRadius:12,padding:16,marginTop:12,margin:isMobile?"12px 12px 0":"12px 0 0"}}>
+            <div style={{fontWeight:800,fontSize:14,color:"#1e8449",marginBottom:8}}>📦 ¿Llegó la mercadería?</div>
+            <div style={{fontSize:12,color:"#1e8449",marginBottom:12,lineHeight:1.5}}>
+              Podés ingresar el stock recibido directamente desde esta solicitud. Ajustá las cantidades si recibiste diferente a lo pedido.
+            </div>
+            <IngresarDesdeSolicitud po={po} products={products} onStock={onStockExternal} onDone={()=>setView("lista")}/>
+          </div>
+        )}
       </div>
     );
   }
