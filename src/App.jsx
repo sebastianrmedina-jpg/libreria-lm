@@ -908,7 +908,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
         {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile}/>}
         {tab==="precios"    && <Precios products={pricedProducts}/>}
         {tab==="stock"      && <Stock products={products} onUpd={updProd} onDel={pid=>setProducts(p=>p.filter(x=>x.id!==pid))} onAdjust={(pid,qty)=>setProducts(p=>p.map(x=>x.id===pid?{...x,stock:x.stock+qty}:x))} isAdmin={isAdmin} addLog={addLog} stockLog={stockLog} setStockLog={setStockLog} isMobile={isMobile}/>}
-        {tab==="compras"    && <Compras products={products} onStock={addStock}/>}
+        {tab==="compras"    && <Compras products={products} onStock={addStock} isMobile={isMobile}/>}
         {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile}/>}
       </div>
     </div>
@@ -2223,7 +2223,7 @@ function EditModal({p,onSave,onClose}) {
 }
 
 // ─── ALTA DE MERCADERÍA ───────────────────────────────────────────────────────
-function Compras({products,onStock}) {
+function Compras({products,onStock,isMobile}) {
   const [search,setSearch]=useState("");
   const [items,setItems]=useState([]);
   const [ok,setOk]=useState(false);
