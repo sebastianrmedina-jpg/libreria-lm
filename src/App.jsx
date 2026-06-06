@@ -196,6 +196,8 @@ const fmtDisc = (disc) => {
 // "Bolígrafo" -> "boligrafo", "Ñoño" -> "nono"
 const norm = (s) => String(s||"").toLowerCase()
   .normalize("NFD").replace(/[̀-ͯ]/g, "");
+// Normaliza SKU quitando guiones, puntos, espacios para búsqueda flexible
+const normSKU = (s) => String(s||"").toLowerCase().replace(/[-.\s_]/g, "");
 
 // ─── PDF / PRINT ──────────────────────────────────────────────────────────────
 // tipo: "reserva" | "confirmado" | "cotizacion"
@@ -1147,7 +1149,7 @@ function Precios({products}) {
     const q = search.toLowerCase();
     let list = products.filter(p=>{
       if(cat!=="todos" && p.category!==cat) return false;
-      if(q) return norm(p.name).includes(norm(q)) || p.id.toLowerCase().includes(q.toLowerCase());
+      if(q) return norm(p.name).includes(norm(q)) || normSKU(p.id).includes(normSKU(q));
       return true;
     });
     if(sortBy==="precio_asc")  list=[...list].sort((a,b)=>a.salePrice-b.salePrice);
@@ -1218,7 +1220,7 @@ function ProductSelector({products,cart,setCart,isMobile}) {
     return products.filter(p=>{
       if(soloConStock && p.stock<=0) return false;
       if(cat!=="todos"&&p.category!==cat) return false;
-      if(q) return norm(p.name).includes(norm(q))||p.id.toLowerCase().includes(q.toLowerCase());
+      if(q) return norm(p.name).includes(norm(q))||normSKU(p.id).includes(normSKU(q));
       return true;
     });
   },[products,search,cat,soloConStock]);
@@ -1923,7 +1925,7 @@ function StockAdjust({products,onDel,onAdjust,addLog}) {
 
   const q=search.toLowerCase();
   const found = useMemo(()=>
-    q.length>1 ? products.filter(p=>norm(p.name).includes(norm(q))||p.id.toLowerCase().includes(q.toLowerCase())).slice(0,40) : []
+    q.length>1 ? products.filter(p=>norm(p.name).includes(norm(q))||normSKU(p.id).includes(normSKU(q))).slice(0,40) : []
   ,[products,search,q]);
 
   const reset = () => { setSelected(null); setQty(0); setReason(""); setSearch(""); };
@@ -2086,7 +2088,7 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
   const filtered=useMemo(()=>products.filter(p=>{
     if(soloConStock && p.stock<=0) return false;
     if(cat!=="todos"&&p.category!==cat) return false;
-    if(q) return norm(p.name).includes(norm(q))||p.id.toLowerCase().includes(q.toLowerCase());
+    if(q) return norm(p.name).includes(norm(q))||normSKU(p.id).includes(normSKU(q));
     return true;
   }),[products,cat,q,soloConStock]);
 
@@ -2580,7 +2582,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
                 style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #1a5276",fontSize:13,outline:"none",marginBottom:8}}/>
               {addSearch.length>1 && (
                 <div style={{maxHeight:220,overflowY:"auto",display:"flex",flexDirection:"column",gap:5}}>
-                  {products.filter(p=>norm(p.name).includes(norm(addSearch))||p.id.toLowerCase().includes(addSearch.toLowerCase())).slice(0,20).map(p=>{
+                  {products.filter(p=>norm(p.name).includes(norm(addSearch))||normSKU(p.id).includes(normSKU(addSearch))).slice(0,20).map(p=>{
                     const already = po.items.find(i=>i.id===p.id);
                     return (
                       <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,background:"#fff",borderRadius:8,padding:"8px 12px",border:"1.5px solid #e5e5e5"}}>
@@ -2602,7 +2604,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
                       </div>
                     );
                   })}
-                  {products.filter(p=>norm(p.name).includes(norm(addSearch))||p.id.toLowerCase().includes(addSearch.toLowerCase())).length===0&&(
+                  {products.filter(p=>norm(p.name).includes(norm(addSearch))||normSKU(p.id).includes(normSKU(addSearch))).length===0&&(
                     <div style={{textAlign:"center",color:"#aaa",fontSize:12,padding:12}}>Sin resultados</div>
                   )}
                 </div>
@@ -2775,7 +2777,7 @@ function Compras({products,onStock,isMobile}) {
 
   const found=useMemo(()=>{
     const q=search.toLowerCase();
-    return q?products.filter(p=>norm(p.name).includes(norm(q))||p.id.toLowerCase().includes(q.toLowerCase())).slice(0,50):[];
+    return q?products.filter(p=>norm(p.name).includes(norm(q))||normSKU(p.id).includes(normSKU(q))).slice(0,50):[];
   },[products,search]);
   const addI=p=>{if(!items.find(i=>i.pid===p.id))setItems(x=>[...x,{pid:p.id,name:p.name,qty:1,cost:p.costPrice}]);};
   const remI=pid=>setItems(x=>x.filter(i=>i.pid!==pid));
