@@ -113,6 +113,11 @@ const db = {
   getPriceLists: async () => { const {data,error} = await supabase.from("lm_pricelists").select("*").order("name"); if(error) throw error; return data||[]; },
   savePriceList: async (pl) => { const {error} = await supaAdmin.from("lm_pricelists").upsert(pl); if(error) throw error; },
   deletePriceList: async (id) => { const {error} = await supaAdmin.from("lm_pricelists").delete().eq("id",id); if(error) throw error; },
+  // Purchase orders (solicitudes de compra)
+  // SQL: CREATE TABLE lm_purchase_orders (id TEXT PRIMARY KEY, fecha TEXT, vendedor TEXT, estado TEXT DEFAULT 'abierta', items JSONB DEFAULT '[]', notas TEXT DEFAULT '', fecha_cierre TEXT DEFAULT '');
+  getPurchaseOrders: async () => { const {data,error} = await supabase.from("lm_purchase_orders").select("*").order("fecha",{ascending:false}); if(error) throw error; return data||[]; },
+  savePurchaseOrder: async (po) => { const {error} = await supaAdmin.from("lm_purchase_orders").upsert({id:po.id,fecha:po.fecha,vendedor:po.vendedor,estado:po.estado,items:po.items,notas:po.notas||"",fecha_cierre:po.fechaCierre||""}); if(error) throw error; },
+  deletePurchaseOrder: async (id) => { const {error} = await supaAdmin.from("lm_purchase_orders").delete().eq("id",id); if(error) throw error; },
   // Activity log
   // SQL: CREATE TABLE lm_activity (id TEXT PRIMARY KEY, fecha TEXT, usuario TEXT, rol TEXT, accion TEXT, detalle TEXT, ref_id TEXT, ref_tipo TEXT);
   getActivity:  async () => { const {data,error} = await supabase.from("lm_activity").select("*").order("fecha",{ascending:false}).limit(500); if(error) throw error; return data||[]; },
@@ -563,6 +568,7 @@ export default function App() {
   const [stockLog, setStockLog] = useState([]);
   const [activity, setActivity] = useState([]);
   const [priceLists, setPriceLists] = useState([{id:"default",name:"Normal",discount:0}]);
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [notifs, setNotifs]     = useState([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(null);
@@ -570,12 +576,12 @@ export default function App() {
   useEffect(() => {
     async function loadAll() {
       try {
-        const [u,v,p,o,q,sl,act,pl,n] = await Promise.all([
+        const [u,v,p,o,q,sl,act,pl,po,n] = await Promise.all([
           db.getUsers(), db.getVendors(), db.getProducts(),
-          db.getOrders(), db.getQuotes(), db.getStockLog(), db.getActivity(), db.getPriceLists(), db.getNotifs(),
+          db.getOrders(), db.getQuotes(), db.getStockLog(), db.getActivity(), db.getPriceLists(), db.getPurchaseOrders(), db.getNotifs(),
         ]);
         setUsers(u); setVendors(v); setProducts(p);
-        setOrders(o); setQuotes(q); setStockLog(sl); setActivity(act); setPriceLists(pl); setNotifs(n);
+        setOrders(o); setQuotes(q); setStockLog(sl); setActivity(act); setPriceLists(pl); setPurchaseOrders(po); setNotifs(n);
       } catch(e) {
         setError("No se pudo conectar con la base de datos. Verificá tu conexión.");
       } finally { setLoading(false); }
@@ -611,12 +617,13 @@ export default function App() {
     stockLog={stockLog} setStockLog={setStockLog}
     activity={activity} setActivity={setActivity}
     priceLists={priceLists} setPriceLists={setPriceLists}
+    purchaseOrders={purchaseOrders} setPurchaseOrders={setPurchaseOrders}
     notifs={notifs} setNotifs={setNotifs}
   />;
 }
 
 // ─── MAIN APP (authenticated) ─────────────────────────────────────────────────
-function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,products,setProducts,orders,setOrders,quotes,setQuotes,stockLog,setStockLog,activity,setActivity,priceLists,setPriceLists,notifs,setNotifs}) {
+function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,products,setProducts,orders,setOrders,quotes,setQuotes,stockLog,setStockLog,activity,setActivity,priceLists,setPriceLists,purchaseOrders,setPurchaseOrders,notifs,setNotifs}) {
   const isAdmin = currentUser.role === "admin";
   const [tab, setTab] = useState("central");
   const [showNotifs, setShowNotifs] = useState(false);
@@ -779,6 +786,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     {k:"precios",   label:"Precios",            icon:"💲", roles:["admin","vendedor"]},
     {k:"stock",     label:"Stock",              icon:"📦", roles:["admin","vendedor"]},
     {k:"compras",   label:"Alta de Mercancía",icon:"🏪", roles:["admin","vendedor"]},
+    {k:"solicitud",  label:"Solicitud Compra", icon:"📋", roles:["admin","vendedor"]},
     {k:"admin",     label:"Administracion",     icon:"★",   roles:["admin"]},
   ].filter(t=>t.roles.includes(currentUser.role));
 
@@ -909,6 +917,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
         {tab==="precios"    && <Precios products={pricedProducts}/>}
         {tab==="stock"      && <Stock products={products} onUpd={updProd} onDel={pid=>setProducts(p=>p.filter(x=>x.id!==pid))} onAdjust={(pid,qty)=>setProducts(p=>p.map(x=>x.id===pid?{...x,stock:x.stock+qty}:x))} isAdmin={isAdmin} addLog={addLog} stockLog={stockLog} setStockLog={setStockLog} isMobile={isMobile}/>}
         {tab==="compras"    && <Compras products={products} onStock={addStock} isMobile={isMobile}/>}
+        {tab==="solicitud"  && <SolicitudCompra products={products} currentUser={currentUser} isAdmin={isAdmin} purchaseOrders={purchaseOrders} setPurchaseOrders={setPurchaseOrders} isMobile={isMobile}/>}
         {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile}/>}
       </div>
     </div>
@@ -2216,6 +2225,337 @@ function EditModal({p,onSave,onClose}) {
         <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
           <button onClick={onClose} style={{padding:"8px 14px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontWeight:600,color:"#666"}}>Cancelar</button>
           <button onClick={()=>onSave({...p,costPrice:cost,salePrice:sale,stock})} style={{padding:"8px 14px",borderRadius:8,border:"none",background:RED,color:"#fff",cursor:"pointer",fontWeight:700}}>Guardar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SOLICITUD DE COMPRA ──────────────────────────────────────────────────────
+const ESTADO_CFG = {
+  abierta:   {label:"Abierta",    color:"#1a5276", bg:"#d6eaf8",  icon:"📋"},
+  revisando: {label:"Revisando",  color:"#e67e22", bg:"#fef9e7",  icon:"🔍"},
+  cerrada:   {label:"Cerrada",    color:"#1e8449", bg:"#d5f5e3",  icon:"✅"},
+};
+
+function printSolicitudPDF(po, logoSrc) {
+  const rows = po.items.map(it=>`
+    <tr>
+      <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;font-size:14px;">${it.name}</td>
+      <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;font-size:14px;">${it.id||""}</td>
+      <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;text-align:center;font-size:15px;font-weight:700;">${it.qty}</td>
+      <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;font-size:13px;color:#888;">${it.notas||""}</td>
+    </tr>`).join("");
+
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"/>
+<title>Solicitud de Compra</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;}
+  body{background:#fff;}
+  @media print{.no-print{display:none!important;}@page{margin:3mm;size:A4;}}
+  .btn{display:block;margin:12px auto;padding:9px 28px;background:#1a5276;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;}
+  .header-img{width:100%;height:auto;display:block;border-bottom:3px solid #c0392b;}
+  .content{padding:16px 20px 0;}
+  .doc-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid #f0f0f0;}
+  .badge{display:inline-block;padding:6px 18px;border-radius:8px;font-size:14px;font-weight:800;background:#1a5276;color:#fff;}
+  .info-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px 16px;margin-bottom:16px;}
+  .info-box{background:#f9f9f9;border-radius:8px;padding:9px 12px;border-left:3px solid #e5e5e5;}
+  .info-lbl{font-size:8px;color:#999;text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px;font-weight:700;}
+  .info-val{font-size:13px;font-weight:700;}
+  table{width:100%;border-collapse:collapse;margin-bottom:16px;}
+  thead tr{background:#f5f5f5;}
+  th{padding:9px 12px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;font-weight:700;}
+  th.c{text-align:center;}
+  tbody tr:nth-child(even){background:#fafafa;}
+  .footer{border-top:1px solid #f0f0f0;padding-top:10px;margin:0;font-size:10px;color:#bbb;display:flex;justify-content:space-between;}
+  .footer-brand{color:#c0392b;font-weight:700;}
+  .notes{background:#f9f9f9;border-left:3px solid #1a5276;padding:8px 12px;border-radius:0 6px 6px 0;font-size:12px;color:#555;margin-bottom:14px;}
+</style></head><body>
+<button class="no-print btn" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+<div>
+  <img class="header-img" src="${logoSrc}" alt="Libreria Madrid" onerror="this.style.display='none'"/>
+  <div class="content">
+    <div class="doc-meta">
+      <div><div style="font-size:11px;color:#999;margin-bottom:5px">Documento de</div><div class="badge">SOLICITUD DE COMPRA</div></div>
+      <div style="text-align:right">
+        <div style="font-size:22px;font-weight:900;">#${po.id.slice(-6).toUpperCase()}</div>
+        <div style="font-size:11px;color:#888">${po.fecha}</div>
+      </div>
+    </div>
+    <div class="info-grid">
+      <div class="info-box" style="border-left-color:#1a5276"><div class="info-lbl">Vendedor</div><div class="info-val">${po.vendedor}</div></div>
+      <div class="info-box"><div class="info-lbl">Fecha</div><div class="info-val">${po.fecha}</div></div>
+      <div class="info-box"><div class="info-lbl">Estado</div><div class="info-val">${ESTADO_CFG[po.estado]?.label||po.estado}</div></div>
+    </div>
+    ${po.notas?`<div class="notes"><strong>Notas:</strong> ${po.notas}</div>`:""}
+    <table>
+      <thead><tr>
+        <th style="width:40%">Producto</th>
+        <th style="width:20%">Código</th>
+        <th class="c" style="width:15%">Cantidad</th>
+        <th style="width:25%">Observaciones</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div style="text-align:right;font-size:13px;color:#888;margin-bottom:16px;">
+      Total items: <strong style="color:#1a5276;font-size:16px">${po.items.length}</strong> productos · 
+      <strong style="color:#1a5276;font-size:16px">${po.items.reduce((s,i)=>s+i.qty,0)}</strong> unidades
+    </div>
+    <div class="footer">
+      <span><span class="footer-brand">Libreria Madrid</span> — madrid.libreria · +54 9 11 2502-0640</span>
+      <span>Emitido el ${new Date().toLocaleString("es-AR")}</span>
+    </div>
+  </div>
+</div>
+</body></html>`;
+
+  const w = window.open("","_blank","width=820,height=750");
+  if(w){ w.document.write(html); w.document.close(); }
+}
+
+function exportSolicitudXLSX(po) {
+  const rows = [
+    ["Solicitud de Compra — Libreria Madrid"],
+    [],
+    ["ID", po.id.slice(-6).toUpperCase()],
+    ["Vendedor", po.vendedor],
+    ["Fecha", po.fecha],
+    ["Estado", ESTADO_CFG[po.estado]?.label||po.estado],
+    ["Notas", po.notas||""],
+    [],
+    ["Producto","Código","Cantidad","Observaciones"],
+    ...po.items.map(it=>[it.name, it.id||"", it.qty, it.notas||""]),
+    [],
+    ["Total productos", po.items.length],
+    ["Total unidades", po.items.reduce((s,i)=>s+i.qty,0)],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"] = [{wch:40},{wch:15},{wch:12},{wch:30}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Solicitud");
+  XLSX.writeFile(wb, `Solicitud_${po.id.slice(-6).toUpperCase()}_${po.fecha.replace(/\//g,"-")}.xlsx`);
+}
+
+function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchaseOrders,isMobile}) {
+  const [view, setView] = useState("lista"); // lista | nueva | detalle
+  const [selected, setSelected] = useState(null);
+  const [cart, setCart] = useState([]);
+  const [notas, setNotas] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [itemNotas, setItemNotas] = useState({});
+
+  const myOrders = isAdmin ? purchaseOrders : purchaseOrders.filter(po=>po.vendedor===currentUser.vendedor||po.vendedor===currentUser.name);
+
+  const savePO = async (po) => {
+    setPurchaseOrders(prev=>prev.find(x=>x.id===po.id)?prev.map(x=>x.id===po.id?po:x):[po,...prev]);
+    await db.savePurchaseOrder(po);
+  };
+
+  const createNew = async () => {
+    if(!cart.length){alert("Agregá al menos un producto");return;}
+    setSaving(true);
+    const po = {
+      id: genId(),
+      fecha: today(),
+      vendedor: currentUser.vendedor||currentUser.name,
+      estado: "abierta",
+      items: cart.map(i=>({...i, notas: itemNotas[i.pid]||""})),
+      notas,
+      fechaCierre: "",
+    };
+    await savePO(po);
+    setCart([]); setNotas(""); setItemNotas({});
+    setSaving(false);
+    setView("lista");
+  };
+
+  const changeEstado = async (po, estado) => {
+    const updated = {...po, estado, fechaCierre: estado==="cerrada" ? today() : po.fechaCierre};
+    await savePO(updated);
+    if(selected?.id===po.id) setSelected(updated);
+  };
+
+  const deletePO = async (id) => {
+    if(!window.confirm("¿Eliminar esta solicitud?")) return;
+    setPurchaseOrders(prev=>prev.filter(x=>x.id!==id));
+    await db.deletePurchaseOrder(id);
+    if(selected?.id===id){setSelected(null);setView("lista");}
+  };
+
+  const openDetail = (po) => { setSelected(po); setView("detalle"); };
+
+  // ── LISTA ──
+  if(view==="lista") return (
+    <div style={{padding:isMobile?"0":"0"}}>
+      <div style={{background:"#fff",borderRadius:12,padding:4,marginBottom:14,display:"flex",gap:4,boxShadow:"0 1px 4px #0001",margin:isMobile?"0 12px 14px":"0 0 14px"}}>
+        <button onClick={()=>setView("nueva")} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:`linear-gradient(135deg,#1a5e20,#1e8449)`,color:"#fff"}}>
+          + Nueva Solicitud
+        </button>
+      </div>
+
+      {myOrders.length===0
+        ? <div style={{textAlign:"center",padding:"50px 20px",color:"#aaa",background:"#fff",borderRadius:12,margin:isMobile?"0 12px":"0"}}>
+            <div style={{fontSize:48,marginBottom:8}}>📋</div>
+            <div style={{fontWeight:700,fontSize:15}}>No hay solicitudes aún</div>
+            <div style={{fontSize:13,marginTop:4}}>Creá una para pedir mercadería al proveedor</div>
+          </div>
+        : myOrders.map(po=>{
+            const cfg = ESTADO_CFG[po.estado]||{};
+            return (
+              <div key={po.id} style={{background:"#fff",borderRadius:12,marginBottom:8,boxShadow:"0 1px 6px #0001",overflow:"hidden",margin:isMobile?"0 12px 8px":"0 0 8px"}}>
+                <div style={{padding:"13px 16px",display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer"}} onClick={()=>openDetail(po)}>
+                  <div style={{width:10,height:10,borderRadius:"50%",background:cfg.color,marginTop:5,flexShrink:0}}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:800,fontSize:14}}>Solicitud #{po.id.slice(-6).toUpperCase()}</div>
+                    <div style={{fontSize:11,color:"#888",marginTop:2}}>{po.fecha} · 👤 {po.vendedor}</div>
+                  </div>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <span style={{background:cfg.bg,color:cfg.color,borderRadius:8,padding:"3px 10px",fontSize:11,fontWeight:700}}>{cfg.icon} {cfg.label}</span>
+                    <div style={{fontSize:11,color:"#888",marginTop:4}}>{po.items.length} productos · {po.items.reduce((s,i)=>s+i.qty,0)} uds.</div>
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:6,padding:"8px 12px",background:"#fafafa",borderTop:"1px solid #f0f0f0"}}>
+                  <button onClick={()=>openDetail(po)} style={{flex:1,padding:"8px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>Ver detalle</button>
+                  {isAdmin && po.estado==="abierta" && <button onClick={()=>changeEstado(po,"revisando")} style={{flex:1,padding:"8px",borderRadius:8,border:"none",background:"#e67e22",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>🔍 Revisar</button>}
+                  {isAdmin && po.estado==="revisando" && <button onClick={()=>changeEstado(po,"cerrada")} style={{flex:1,padding:"8px",borderRadius:8,border:"none",background:"#1e8449",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>✅ Cerrar</button>}
+                  {isAdmin && <button onClick={()=>deletePO(po.id)} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",background:"#fff",color:"#c0392b",fontSize:11,fontWeight:700,cursor:"pointer"}}>🗑</button>}
+                </div>
+              </div>
+            );
+          })
+      }
+    </div>
+  );
+
+  // ── DETALLE ──
+  if(view==="detalle" && selected) {
+    const cfg = ESTADO_CFG[selected.estado]||{};
+    const po = purchaseOrders.find(x=>x.id===selected.id)||selected;
+    return (
+      <div>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,padding:isMobile?"0 12px":"0"}}>
+          <button onClick={()=>setView("lista")} style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",fontWeight:600,fontSize:12,cursor:"pointer"}}>← Volver</button>
+          <div style={{fontWeight:800,fontSize:15}}>Solicitud #{po.id.slice(-6).toUpperCase()}</div>
+          <span style={{background:cfg.bg,color:cfg.color,borderRadius:8,padding:"3px 10px",fontSize:11,fontWeight:700,marginLeft:"auto"}}>{cfg.icon} {cfg.label}</span>
+        </div>
+
+        <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px #0001",margin:isMobile?"0 12px 12px":"0 0 12px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
+            <div style={{background:"#f9f9f9",borderRadius:8,padding:"9px 12px",borderLeft:"3px solid #1a5276"}}>
+              <div style={{fontSize:9,fontWeight:800,color:"#999",textTransform:"uppercase",marginBottom:2}}>Vendedor</div>
+              <div style={{fontSize:13,fontWeight:700}}>{po.vendedor}</div>
+            </div>
+            <div style={{background:"#f9f9f9",borderRadius:8,padding:"9px 12px",borderLeft:"3px solid #e5e5e5"}}>
+              <div style={{fontSize:9,fontWeight:800,color:"#999",textTransform:"uppercase",marginBottom:2}}>Fecha</div>
+              <div style={{fontSize:13,fontWeight:700}}>{po.fecha}</div>
+            </div>
+            <div style={{background:"#f9f9f9",borderRadius:8,padding:"9px 12px",borderLeft:`3px solid ${cfg.color}`}}>
+              <div style={{fontSize:9,fontWeight:800,color:"#999",textTransform:"uppercase",marginBottom:2}}>Estado</div>
+              <div style={{fontSize:13,fontWeight:700,color:cfg.color}}>{cfg.label}</div>
+            </div>
+          </div>
+          {po.notas&&<div style={{background:"#f9f9f9",borderLeft:"3px solid #1a5276",padding:"8px 12px",borderRadius:"0 8px 8px 0",fontSize:12,color:"#555",marginBottom:8}}>
+            <strong>Notas:</strong> {po.notas}
+          </div>}
+        </div>
+
+        {/* Items table */}
+        <div style={{background:"#fff",borderRadius:12,overflow:"auto",boxShadow:"0 1px 4px #0001",marginBottom:12,margin:isMobile?"0 12px 12px":"0 0 12px"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:400}}>
+            <thead><tr style={{background:"#f5f5f5"}}>
+              <th style={{padding:"10px 12px",textAlign:"left",fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Producto</th>
+              <th style={{padding:"10px 12px",textAlign:"left",fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Código</th>
+              <th style={{padding:"10px 12px",textAlign:"center",fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Cant.</th>
+              <th style={{padding:"10px 12px",textAlign:"left",fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Obs.</th>
+            </tr></thead>
+            <tbody>
+              {po.items.map((it,i)=>(
+                <tr key={i} style={{borderTop:"1px solid #f5f5f5",background:i%2===0?"#fff":"#fafafa"}}>
+                  <td style={{padding:"9px 12px",fontWeight:600}}>{it.name}</td>
+                  <td style={{padding:"9px 12px",color:"#aaa",fontSize:11}}>{it.id||""}</td>
+                  <td style={{padding:"9px 12px",textAlign:"center",fontWeight:800,fontSize:15,color:"#1a5276"}}>{it.qty}</td>
+                  <td style={{padding:"9px 12px",color:"#888",fontSize:12}}>{it.notas||""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{padding:"10px 14px",borderTop:"1px solid #f0f0f0",display:"flex",justifyContent:"flex-end",gap:20,fontSize:12,color:"#888"}}>
+            <span>Total productos: <strong style={{color:"#1a5276",fontSize:14}}>{po.items.length}</strong></span>
+            <span>Total unidades: <strong style={{color:"#1a5276",fontSize:14}}>{po.items.reduce((s,i)=>s+i.qty,0)}</strong></span>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",padding:isMobile?"0 12px":"0"}}>
+          {isAdmin && po.estado==="abierta" && <button onClick={()=>changeEstado(po,"revisando")} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:"#e67e22",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>🔍 Marcar como Revisando</button>}
+          {isAdmin && po.estado==="revisando" && <button onClick={()=>changeEstado(po,"cerrada")} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:"#1e8449",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>✅ Cerrar solicitud</button>}
+          <button onClick={()=>{
+            const img=new Image();img.crossOrigin="anonymous";
+            img.onload=()=>{try{const c=document.createElement("canvas");c.width=img.width;c.height=img.height;c.getContext("2d").drawImage(img,0,0);printSolicitudPDF(po,c.toDataURL("image/png"));}catch(e){printSolicitudPDF(po,"/logo.png");}};
+            img.onerror=()=>printSolicitudPDF(po,"/logo.png");
+            img.src="/logo.png?"+Date.now();
+          }} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #1a5276",background:"#fff",color:"#1a5276",fontWeight:700,fontSize:13,cursor:"pointer"}}>🖨️ PDF</button>
+          <button onClick={()=>exportSolicitudXLSX(po)} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #1e8449",background:"#fff",color:"#1e8449",fontWeight:700,fontSize:13,cursor:"pointer"}}>📊 Excel</button>
+          {isAdmin&&<button onClick={()=>deletePO(po.id)} style={{padding:"11px 16px",borderRadius:10,border:"1.5px solid #fcc",background:"#fff",color:"#c0392b",fontWeight:700,fontSize:13,cursor:"pointer"}}>🗑</button>}
+        </div>
+      </div>
+    );
+  }
+
+  // ── NUEVA SOLICITUD ──
+  const addToCart = (p) => setCart(c=>{const ex=c.find(i=>i.pid===p.id);return ex?c.map(i=>i.pid===p.id?{...i,qty:i.qty+1}:i):[...c,{pid:p.id,id:p.id,name:p.name,qty:1}];});
+  const setQty = (pid,qty) => {if(qty<=0)setCart(c=>c.filter(i=>i.pid!==pid));else setCart(c=>c.map(i=>i.pid===pid?{...i,qty}:i));};
+
+  return (
+    <div style={{display:isMobile?"block":"grid",gridTemplateColumns:"1fr 340px",gap:18,alignItems:"start"}}>
+      <div style={{padding:isMobile?"0":"0"}}>
+        <div style={{background:"#fff",borderRadius:12,padding:isMobile?"12px":"16px",marginBottom:12,boxShadow:"0 1px 4px #0001",margin:isMobile?"0 12px 12px":"0 0 12px"}}>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:12,color:"#1a5276"}}>📋 Nueva Solicitud de Compra</div>
+          <input onChange={e=>{
+              const q=e.target.value.toLowerCase();
+              // handled by ProductSelector below
+            }} placeholder="Usá el buscador de productos abajo" style={{...inputStyle,background:"#f9f9f9",color:"#aaa"}} readOnly/>
+        </div>
+        <ProductSelector products={products} cart={cart} setCart={setCart} isMobile={isMobile}/>
+      </div>
+
+      <div style={{position:isMobile?"static":"sticky",top:16,margin:isMobile?"12px":"0"}}>
+        <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 2px 12px #0002",border:"2px solid #d6eaf8"}}>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:14,color:"#1a5276"}}>📋 Resumen de Solicitud</div>
+          <div style={{background:"#d6eaf8",borderRadius:8,padding:"7px 12px",fontSize:12,color:"#1a5276",marginBottom:14}}>
+            ℹ️ Esta solicitud <strong>no modifica el stock</strong>. Es solo para pedir al proveedor.
+          </div>
+
+          {/* Items con notas por item */}
+          {cart.length===0
+            ? <div style={{textAlign:"center",color:"#aaa",fontSize:12,padding:"16px 0"}}>Agregá productos del catálogo</div>
+            : cart.map(i=>(
+                <div key={i.pid} style={{background:"#f9f9f9",borderRadius:8,padding:"10px 12px",marginBottom:8}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                    <span style={{fontWeight:600,fontSize:12,flex:1,lineHeight:1.3,marginRight:8}}>{i.name}</span>
+                    <div style={{display:"flex",alignItems:"center",gap:4}}>
+                      <button onClick={()=>setQty(i.pid,i.qty-1)} style={{width:24,height:24,borderRadius:5,border:"1.5px solid #ccc",background:"#fff",cursor:"pointer",fontSize:14,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>-</button>
+                      <input type="number" value={i.qty} onChange={e=>setQty(i.pid,+e.target.value||0)} style={{width:40,textAlign:"center",padding:"2px",borderRadius:5,border:"1.5px solid #1a5276",fontWeight:700,fontSize:13,outline:"none"}}/>
+                      <button onClick={()=>setQty(i.pid,i.qty+1)} style={{width:24,height:24,borderRadius:5,border:"1.5px solid #ccc",background:"#fff",cursor:"pointer",fontSize:14,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+                    </div>
+                  </div>
+                  <input value={itemNotas[i.pid]||""} onChange={e=>setItemNotas(n=>({...n,[i.pid]:e.target.value}))}
+                    placeholder="Obs. (color, medida, marca...)" style={{...inputStyle,fontSize:11,padding:"4px 8px",background:"#fff"}}/>
+                </div>
+              ))
+          }
+
+          <Field label="Notas generales"><textarea value={notas} onChange={e=>setNotas(e.target.value)} placeholder="Urgencia, proveedor sugerido..." style={{...inputStyle,resize:"vertical",minHeight:52,fontSize:12}}/></Field>
+
+          <div style={{display:"flex",gap:8,marginTop:8}}>
+            <button onClick={createNew} disabled={!cart.length||saving}
+              style={{flex:1,padding:"11px",borderRadius:10,border:"none",fontWeight:800,fontSize:14,cursor:"pointer",
+                background:(!cart.length||saving)?"#e5e5e5":"linear-gradient(135deg,#1a5e20,#1e8449)",
+                color:(!cart.length||saving)?"#aaa":"#fff"}}>
+              {saving?"Guardando...":"📋 Crear Solicitud"}
+            </button>
+            <button onClick={()=>setView("lista")} style={{padding:"11px 14px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancelar</button>
+          </div>
         </div>
       </div>
     </div>
