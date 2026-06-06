@@ -793,6 +793,17 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   const isMobile = useIsMobile();
   const [mobileMenu, setMobileMenu] = useState(false);
 
+  // Confirmación al cerrar/retroceder en mobile
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, []);
+
   return (
     <div style={{minHeight:"100vh",background:"#f5f5f5",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
 
@@ -894,7 +905,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
               <div onClick={()=>{setShowChangePass(true);setMobileMenu(false);}} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:"#333",cursor:"pointer"}}>
                 <span style={{fontSize:20,width:28,textAlign:"center"}}>🔑</span>Cambiar contraseña
               </div>
-              <div onClick={onLogout} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:RED,cursor:"pointer"}}>
+              <div onClick={()=>{if(window.confirm("¿Seguro que querés salir de la app?")) onLogout();}} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:RED,cursor:"pointer"}}>
                 <span style={{fontSize:20,width:28,textAlign:"center"}}>🚪</span>Salir
               </div>
             </div>
@@ -2758,6 +2769,10 @@ function Compras({products,onStock,isMobile}) {
   const [search,setSearch]=useState("");
   const [items,setItems]=useState([]);
   const [ok,setOk]=useState(false);
+  const [showManual, setShowManual] = useState(false);
+  const [manualForm, setManualForm] = useState({sku:"", name:"", qty:1, cost:0});
+  const [manualError, setManualError] = useState("");
+
   const found=useMemo(()=>{
     const q=search.toLowerCase();
     return q?products.filter(p=>norm(p.name).includes(norm(q))||p.id.toLowerCase().includes(q.toLowerCase())).slice(0,50):[];
@@ -2766,11 +2781,23 @@ function Compras({products,onStock,isMobile}) {
   const remI=pid=>setItems(x=>x.filter(i=>i.pid!==pid));
   const updI=(pid,f,v)=>setItems(x=>x.map(i=>i.pid===pid?{...i,[f]:v}:i));
   const totalCost=items.reduce((s,i)=>s+i.qty*i.cost,0);
+
+  const addManual = () => {
+    setManualError("");
+    if(!manualForm.sku.trim()) { setManualError("El SKU es obligatorio"); return; }
+    if(!manualForm.name.trim()) { setManualError("El detalle es obligatorio"); return; }
+    if(products.find(p=>p.id===manualForm.sku.trim())) { setManualError("Ese SKU ya existe en el catálogo. Buscalo arriba."); return; }
+    if(items.find(i=>i.pid===manualForm.sku.trim())) { setManualError("Ya está en la lista"); return; }
+    setItems(x=>[...x,{pid:manualForm.sku.trim(), name:manualForm.name.trim(), qty:+manualForm.qty||1, cost:+manualForm.cost||0, esNuevo:true}]);
+    setManualForm({sku:"", name:"", qty:1, cost:0});
+    setShowManual(false);
+  };
+
   const submit=()=>{
     items.forEach(i=>onStock(i.pid,+i.qty,+i.cost));
     setItems([]); setOk(true); setTimeout(()=>{setOk(false);},2000);
   };
-  if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>📦</div><div style={{fontWeight:800,color:"#1e8449",fontSize:20,marginTop:12}}>!Stock actualizado!</div></div>;
+  if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>📦</div><div style={{fontWeight:800,color:"#1e8449",fontSize:20,marginTop:12}}>¡Stock actualizado!</div></div>;
   return (
     <div style={{display:"grid",gridTemplateColumns:"1fr 340px",gap:18,alignItems:"start"}}>
       <div>
@@ -2779,6 +2806,50 @@ function Compras({products,onStock,isMobile}) {
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscá los productos que recibiste..."
             style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
           {search&&<div style={{fontSize:11,color:"#aaa",marginTop:6}}>{found.length} resultados</div>}
+          {/* Producto manual */}
+          <div style={{marginTop:12,borderTop:"1px solid #f0f0f0",paddingTop:12}}>
+            <button onClick={()=>{setShowManual(s=>!s);setManualError("");}}
+              style={{padding:"6px 14px",borderRadius:8,border:"1.5px solid #e67e22",background:showManual?"#fef9e7":"#fff",color:"#e67e22",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+              {showManual?"✕ Cancelar":"➕ Producto no está en el catálogo"}
+            </button>
+            {showManual && (
+              <div style={{background:"#fef9e7",border:"1.5px solid #e67e22",borderRadius:10,padding:14,marginTop:10}}>
+                <div style={{fontWeight:700,fontSize:13,color:"#e67e22",marginBottom:10}}>⚠️ Producto nuevo (excepcional)</div>
+                <div style={{fontSize:11,color:"#888",marginBottom:12,lineHeight:1.5}}>
+                  Solo usá esto si el producto no figura en el Excel. Generará un nuevo SKU en el catálogo.
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                  <div>
+                    <div style={{fontSize:10,fontWeight:700,color:"#666",marginBottom:4}}>SKU *</div>
+                    <input value={manualForm.sku} onChange={e=>setManualForm(f=>({...f,sku:e.target.value.toUpperCase()}))}
+                      placeholder="Ej: PROD-001"
+                      style={{...inputStyle,fontSize:12,padding:"6px 10px"}}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10,fontWeight:700,color:"#666",marginBottom:4}}>Cantidad *</div>
+                    <input type="number" min={1} value={manualForm.qty} onChange={e=>setManualForm(f=>({...f,qty:e.target.value}))}
+                      style={{...inputStyle,fontSize:12,padding:"6px 10px"}}/>
+                  </div>
+                </div>
+                <div style={{marginBottom:8}}>
+                  <div style={{fontSize:10,fontWeight:700,color:"#666",marginBottom:4}}>Detalle del producto *</div>
+                  <input value={manualForm.name} onChange={e=>setManualForm(f=>({...f,name:e.target.value}))}
+                    placeholder="Nombre completo del producto"
+                    style={{...inputStyle,fontSize:12,padding:"6px 10px"}}/>
+                </div>
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:10,fontWeight:700,color:"#666",marginBottom:4}}>Precio de costo ($)</div>
+                  <input type="number" min={0} value={manualForm.cost} onChange={e=>setManualForm(f=>({...f,cost:e.target.value}))}
+                    style={{...inputStyle,fontSize:12,padding:"6px 10px"}}/>
+                </div>
+                {manualError && <div style={{color:"#c0392b",fontSize:12,marginBottom:8,fontWeight:600}}>⚠️ {manualError}</div>}
+                <button onClick={addManual}
+                  style={{width:"100%",padding:"8px",borderRadius:8,border:"none",background:"#e67e22",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+                  ➕ Agregar a la compra
+                </button>
+              </div>
+            )}
+          </div>
         </div>
         <div style={{display:isMobile?"flex":"grid",flexDirection:isMobile?"column":undefined,gridTemplateColumns:isMobile?undefined:"repeat(auto-fill,minmax(195px,1fr))",gap:isMobile?8:10,padding:isMobile?"0 12px":0}}>
           {found.length>0
@@ -2787,7 +2858,7 @@ function Compras({products,onStock,isMobile}) {
                 return <div key={p.id} style={{background:"#fff",borderRadius:10,padding:14,border:inL?"2px solid #1e8449":"2px solid transparent",boxShadow:"0 1px 4px #0001"}}>
                   <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",marginBottom:3,lineHeight:1.3}}>{p.name}</div>
                   <div style={{fontSize:10,color:"#aaa",marginBottom:8}}>{p.id} . Stock actual: <strong>{p.stock}</strong></div>
-                  <button onClick={()=>addI(p)} disabled={!!inL} style={{width:"100%",padding:"7px",borderRadius:7,border:"none",fontSize:12,fontWeight:700,background:inL?"#d5f5e3":"#1e8449",color:inL?"#1a5276":"#fff",cursor:inL?"not-allowed":"pointer"}}>{inL?"v Agregado":"+ Agregar a la compra"}</button>
+                  <button onClick={()=>addI(p)} disabled={!!inL} style={{width:"100%",padding:"7px",borderRadius:7,border:"none",fontSize:12,fontWeight:700,background:inL?"#d5f5e3":"#1e8449",color:inL?"#1a5276":"#fff",cursor:inL?"not-allowed":"pointer"}}>{inL?"✓ Agregado":"+ Agregar a la compra"}</button>
                 </div>;
               })
             : <div style={{padding:20,color:"#aaa",fontSize:13}}>{search?"Sin resultados.":"Escribí el nombre del producto a ingresar."}</div>
@@ -2800,18 +2871,20 @@ function Compras({products,onStock,isMobile}) {
           {items.length===0
             ? <div style={{textAlign:"center",color:"#aaa",fontSize:12,padding:"16px 0"}}>Seleccioná productos</div>
             : items.map(it=>(
-                <div key={it.pid} style={{background:"#f9f9f9",borderRadius:8,padding:12,marginBottom:10}}>
+                <div key={it.pid} style={{background:"#f9f9f9",borderRadius:8,padding:12,marginBottom:10,border:it.esNuevo?"1.5px solid #e67e22":"none"}}>
+                  {it.esNuevo && <div style={{fontSize:10,color:"#e67e22",fontWeight:700,marginBottom:4}}>⚠️ NUEVO en catálogo</div>}
                   <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
                     <span style={{fontWeight:600,fontSize:12,flex:1,marginRight:6,lineHeight:1.3}}>{it.name}</span>
-                    <button onClick={()=>remI(it.pid)} style={{background:"none",border:"none",cursor:"pointer",color:RED,fontSize:18,lineHeight:1}}>x</button>
+                    <button onClick={()=>remI(it.pid)} style={{background:"none",border:"none",cursor:"pointer",color:RED,fontSize:18,lineHeight:1}}>×</button>
                   </div>
+                  <div style={{fontSize:10,color:"#aaa",marginBottom:6}}>SKU: {it.pid}</div>
                   <div style={{display:"flex",gap:8}}>
                     <div style={{flex:1}}><div style={{fontSize:10,color:"#aaa",marginBottom:3}}>Cantidad</div>
                       <input type="number" min={1} value={it.qty} onChange={e=>updI(it.pid,"qty",+e.target.value)} style={{...inputStyle,padding:"5px 7px",fontSize:12}}/></div>
                     <div style={{flex:1}}><div style={{fontSize:10,color:"#aaa",marginBottom:3}}>P. Costo ($)</div>
                       <input type="number" value={it.cost} onChange={e=>updI(it.pid,"cost",+e.target.value)} style={{...inputStyle,padding:"5px 7px",fontSize:12}}/></div>
                   </div>
-                  <div style={{fontSize:11,color:"#666",marginTop:6}}>Subtotal: <strong>{fARS(it.qty*it.cost)}</strong> . Nuevo venta: <strong style={{color:RED}}>{fARS(it.cost*1.5)}</strong></div>
+                  <div style={{fontSize:11,color:"#666",marginTop:6}}>Subtotal: <strong>{fARS(it.qty*it.cost)}</strong> · Nuevo venta: <strong style={{color:RED}}>{fARS(it.cost*1.5)}</strong></div>
                 </div>
               ))
           }
@@ -3581,12 +3654,13 @@ function ExcelPanel({products,setProducts}) {
 
     preview.all.forEach(row=>{
       const idx = newProds.findIndex(p=>p.id===row.id);
-      const precioCosto = resolvePrice(row);
+      const precioVenta = resolvePrice(row);  // oferta si existe, sino IVA
+      const precioCosto = row.precioIVA;      // costo = siempre precio IVA
       if(idx>=0){
         if(row.precioFinal!==null && row.precioFinal>0)
                                    newProds[idx].salePrice = row.precioFinal;
-        else if(precioCosto!==null) newProds[idx].salePrice = precioCosto;
-        if(precioCosto!==null)     newProds[idx].costPrice = precioCosto;
+        else if(precioVenta!==null) newProds[idx].salePrice = precioVenta;
+        if(precioCosto!==null)     newProds[idx].costPrice = precioCosto;  // siempre IVA como costo
         if(row.name) newProds[idx].name = row.name;
         updated.push(row.id);
       } else {
@@ -3597,12 +3671,12 @@ function ExcelPanel({products,setProducts}) {
     if(mode==="full") {
       preview.all.forEach(row=>{
         if(!newProds.find(p=>p.id===row.id)) {
-          const precio = resolvePrice(row);
-          const costo = resolvePrice(row);
+          const precio = resolvePrice(row);   // oferta si existe, sino IVA
+          const costo  = row.precioIVA;       // costo = siempre IVA
           newProds.push({
             id:row.id, name:row.name||row.id,
             costPrice:costo||0,
-            salePrice:(row.precioFinal&&row.precioFinal>0)?row.precioFinal:(costo||0),
+            salePrice:(row.precioFinal&&row.precioFinal>0)?row.precioFinal:(precio||0),
             category:"Importado", stock:0
           });
         }
