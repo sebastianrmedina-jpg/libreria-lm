@@ -1040,14 +1040,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                 <span style={{fontSize:20,width:28,textAlign:"center"}}>{t.icon}</span>{t.label}
               </div>
             ))}
-            <div style={{borderTop:"1px solid #f0f0f0",marginTop:16,padding:"8px 0"}}>
-              {notifPermission!=="granted" && notifPermission!=="unsupported" && (
-                <div onClick={async()=>{const r=await requestNotifPermission();setNotifPermission(r);setMobileMenu(false);}}
-                  style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:"#e67e22",cursor:"pointer"}}>
-                  <span style={{fontSize:20,width:28,textAlign:"center"}}>🔔</span>
-                  {notifPermission==="denied"?"Notificaciones bloqueadas":"Activar notificaciones"}
-                </div>
-              )}
+            <div style={{borderTop:"2px solid #f0f0f0",marginTop:24,paddingTop:8}}>
               <div onClick={()=>{if(window.confirm("¿Seguro que querés salir de la app?")) onLogout();}} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:RED,cursor:"pointer",background:"#fdecea"}}>
                 <span style={{fontSize:20,width:28,textAlign:"center"}}>🚪</span>Salir
               </div>
