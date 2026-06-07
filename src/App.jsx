@@ -795,15 +795,36 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   const isMobile = useIsMobile();
   const [mobileMenu, setMobileMenu] = useState(false);
 
-  // Confirmación al cerrar/retroceder en mobile
+  // Confirmación al cerrar/retroceder (funciona en desktop y mobile)
   useEffect(() => {
-    const handler = (e) => {
+    // Desktop: diálogo nativo al cerrar pestaña
+    const beforeUnload = (e) => {
       e.preventDefault();
       e.returnValue = '';
       return '';
     };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
+    window.addEventListener('beforeunload', beforeUnload);
+
+    // Mobile: intercepta el botón "atrás" del navegador
+    // Empujamos un estado extra al historial; cuando el usuario retrocede
+    // volvemos a este estado y mostramos el confirm
+    window.history.pushState({ appActive: true }, '');
+    const popState = (e) => {
+      const salir = window.confirm('¿Seguro que querés salir de la app?');
+      if (salir) {
+        window.removeEventListener('popstate', popState);
+        window.history.back();
+      } else {
+        // Volvemos a empujar el estado para que el botón atrás vuelva a funcionar
+        window.history.pushState({ appActive: true }, '');
+      }
+    };
+    window.addEventListener('popstate', popState);
+
+    return () => {
+      window.removeEventListener('beforeunload', beforeUnload);
+      window.removeEventListener('popstate', popState);
+    };
   }, []);
 
   return (
