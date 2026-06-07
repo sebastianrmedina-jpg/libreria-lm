@@ -1040,7 +1040,20 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                 <span style={{fontSize:20,width:28,textAlign:"center"}}>{t.icon}</span>{t.label}
               </div>
             ))}
-            <div style={{borderTop:"1px solid #f0f0f0",marginTop:"auto",padding:"8px 0"}}>
+            <div style={{borderTop:"1px solid #f0f0f0",marginTop:16,padding:"8px 0"}}>
+              {notifPermission!=="granted" && notifPermission!=="unsupported" && (
+                <div onClick={async()=>{const r=await requestNotifPermission();setNotifPermission(r);setMobileMenu(false);}}
+                  style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:"#e67e22",cursor:"pointer"}}>
+                  <span style={{fontSize:20,width:28,textAlign:"center"}}>🔔</span>
+                  {notifPermission==="denied"?"Notificaciones bloqueadas":"Activar notificaciones"}
+                </div>
+              )}
+              <div onClick={()=>{if(window.confirm("¿Seguro que querés salir de la app?")) onLogout();}} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:RED,cursor:"pointer",background:"#fdecea"}}>
+                <span style={{fontSize:20,width:28,textAlign:"center"}}>🚪</span>Salir
+              </div>
+              <div onClick={()=>{setShowChangePass(true);setMobileMenu(false);}} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:"#333",cursor:"pointer"}}>
+                <span style={{fontSize:20,width:28,textAlign:"center"}}>🔑</span>Cambiar contraseña
+              </div>
               {isAdmin && priceLists.length>1 && (
                 <div style={{padding:"8px 20px"}}>
                   <div style={{fontSize:10,fontWeight:700,color:"#aaa",marginBottom:4}}>LISTA DE PRECIOS</div>
@@ -1048,19 +1061,6 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                     style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,background:"#fff",cursor:"pointer"}}>
                     {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}{pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
                   </select>
-                </div>
-              )}
-              <div onClick={()=>{if(window.confirm("¿Seguro que querés salir de la app?")) onLogout();}} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:RED,cursor:"pointer"}}>
-                <span style={{fontSize:20,width:28,textAlign:"center"}}>🚪</span>Salir
-              </div>
-              <div onClick={()=>{setShowChangePass(true);setMobileMenu(false);}} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:"#333",cursor:"pointer"}}>
-                <span style={{fontSize:20,width:28,textAlign:"center"}}>🔑</span>Cambiar contraseña
-              </div>
-              {notifPermission!=="granted" && notifPermission!=="unsupported" && (
-                <div onClick={async()=>{const r=await requestNotifPermission();setNotifPermission(r);setMobileMenu(false);}}
-                  style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:"#e67e22",cursor:"pointer"}}>
-                  <span style={{fontSize:20,width:28,textAlign:"center"}}>🔔</span>
-                  {notifPermission==="denied"?"Notificaciones bloqueadas":"Activar notificaciones"}
                 </div>
               )}
             </div>
