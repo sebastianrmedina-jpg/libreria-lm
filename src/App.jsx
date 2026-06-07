@@ -660,61 +660,7 @@ export default function App() {
           }
         } catch {}
 
-        // ── Supabase Realtime: notificaciones cruzadas entre dispositivos ──
-        const channel = supabase.channel("lm-realtime")
-          // ── PEDIDOS ──
-          .on("postgres_changes", {event:"INSERT", schema:"public", table:"lm_orders"}, (payload) => {
-            const o = mapOrder(payload.new);
-            setOrders(prev => prev.find(x=>x.id===o.id) ? prev : [o,...prev]);
-            if(o.vendedor !== currentUser.vendedor && o.vendedor !== currentUser.name) {
-              sendLocalNotif("📋 Nuevo pedido", `${o.vendedor} · ${o.client}`, `order-${o.id}`);
-            }
-          })
-          .on("postgres_changes", {event:"UPDATE", schema:"public", table:"lm_orders"}, (payload) => {
-            const o = mapOrder(payload.new);
-            setOrders(prev => prev.map(x => x.id===o.id ? o : x));
-            const stageLabels = {confirmado:"✅ Pedido confirmado","en armado":"📦 Pedido en armado",entregado:"🎉 Pedido entregado"};
-            if(stageLabels[o.stage] && o.vendedor !== currentUser.vendedor && o.vendedor !== currentUser.name) {
-              sendLocalNotif(stageLabels[o.stage], `${o.client} — ${o.docNum||o.compNum||""}`, `stage-${o.id}`);
-            }
-          })
-          .on("postgres_changes", {event:"DELETE", schema:"public", table:"lm_orders"}, (payload) => {
-            setOrders(prev => prev.filter(x => x.id !== payload.old.id));
-          })
-          // ── COTIZACIONES ──
-          .on("postgres_changes", {event:"INSERT", schema:"public", table:"lm_quotes"}, (payload) => {
-            const q = mapQuote(payload.new);
-            setQuotes(prev => prev.find(x=>x.id===q.id) ? prev : [q,...prev]);
-            if(q.vendedor !== currentUser.vendedor && q.vendedor !== currentUser.name) {
-              sendLocalNotif("📄 Nueva cotización", `${q.vendedor} · ${q.client}`, `quote-${q.id}`);
-            }
-          })
-          .on("postgres_changes", {event:"UPDATE", schema:"public", table:"lm_quotes"}, (payload) => {
-            const q = mapQuote(payload.new);
-            setQuotes(prev => prev.map(x => x.id===q.id ? q : x));
-          })
-          .on("postgres_changes", {event:"DELETE", schema:"public", table:"lm_quotes"}, (payload) => {
-            setQuotes(prev => prev.filter(x => x.id !== payload.old.id));
-          })
-          // ── SOLICITUDES DE COMPRA ──
-          .on("postgres_changes", {event:"INSERT", schema:"public", table:"lm_purchase_orders"}, (payload) => {
-            const po = payload.new;
-            setPurchaseOrders(prev => prev.find(x=>x.id===po.id) ? prev : [{...po, fechaCierre:po.fecha_cierre},...prev]);
-            if(po.vendedor !== currentUser.vendedor && po.vendedor !== currentUser.name) {
-              sendLocalNotif("📋 Nueva solicitud de compra", `${po.vendedor} creó una solicitud`, `po-${po.id}`);
-            }
-          })
-          .on("postgres_changes", {event:"UPDATE", schema:"public", table:"lm_purchase_orders"}, (payload) => {
-            const po = payload.new;
-            setPurchaseOrders(prev => prev.map(x => x.id===po.id ? {...po, fechaCierre:po.fecha_cierre} : x));
-          })
-          .on("postgres_changes", {event:"DELETE", schema:"public", table:"lm_purchase_orders"}, (payload) => {
-            setPurchaseOrders(prev => prev.filter(x => x.id !== payload.old.id));
-          })
-          .subscribe();
-
-        // Cleanup stored in a ref to be called on unmount
-        window.__lmRealtimeChannel = channel;
+        // Realtime se inicia en MainApp una vez que el usuario está logueado
       } catch(e) {
         setError("No se pudo conectar con la base de datos. Verificá tu conexión.");
       } finally { setLoading(false); }
@@ -953,6 +899,65 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     window.addEventListener('lm-logout', handler);
     return () => window.removeEventListener('lm-logout', handler);
   }, [onLogout]);
+
+  // ── Supabase Realtime — se inicia aquí donde currentUser ya existe ──
+  useEffect(() => {
+    const channel = supabase.channel("lm-realtime-" + currentUser.id)
+      // PEDIDOS
+      .on("postgres_changes", {event:"INSERT", schema:"public", table:"lm_orders"}, (payload) => {
+        const o = mapOrder(payload.new);
+        setOrders(prev => prev.find(x=>x.id===o.id) ? prev : [o,...prev]);
+        if(o.vendedor !== currentUser.vendedor && o.vendedor !== currentUser.name) {
+          sendLocalNotif("📋 Nuevo pedido", `${o.vendedor} · ${o.client}`, `order-${o.id}`);
+        }
+      })
+      .on("postgres_changes", {event:"UPDATE", schema:"public", table:"lm_orders"}, (payload) => {
+        const o = mapOrder(payload.new);
+        setOrders(prev => prev.map(x => x.id===o.id ? o : x));
+        const stageLabels = {confirmado:"✅ Pedido confirmado","en armado":"📦 Pedido en armado",entregado:"🎉 Pedido entregado"};
+        if(stageLabels[o.stage] && o.vendedor !== currentUser.vendedor && o.vendedor !== currentUser.name) {
+          sendLocalNotif(stageLabels[o.stage], `${o.client} — ${o.docNum||o.compNum||""}`, `stage-${o.id}`);
+        }
+      })
+      .on("postgres_changes", {event:"DELETE", schema:"public", table:"lm_orders"}, (payload) => {
+        setOrders(prev => prev.filter(x => x.id !== payload.old.id));
+      })
+      // COTIZACIONES
+      .on("postgres_changes", {event:"INSERT", schema:"public", table:"lm_quotes"}, (payload) => {
+        const q = mapQuote(payload.new);
+        setQuotes(prev => prev.find(x=>x.id===q.id) ? prev : [q,...prev]);
+        if(q.vendedor !== currentUser.vendedor && q.vendedor !== currentUser.name) {
+          sendLocalNotif("📄 Nueva cotización", `${q.vendedor} · ${q.client}`, `quote-${q.id}`);
+        }
+      })
+      .on("postgres_changes", {event:"UPDATE", schema:"public", table:"lm_quotes"}, (payload) => {
+        const q = mapQuote(payload.new);
+        setQuotes(prev => prev.map(x => x.id===q.id ? q : x));
+      })
+      .on("postgres_changes", {event:"DELETE", schema:"public", table:"lm_quotes"}, (payload) => {
+        setQuotes(prev => prev.filter(x => x.id !== payload.old.id));
+      })
+      // SOLICITUDES DE COMPRA
+      .on("postgres_changes", {event:"INSERT", schema:"public", table:"lm_purchase_orders"}, (payload) => {
+        const po = payload.new;
+        setPurchaseOrders(prev => prev.find(x=>x.id===po.id) ? prev : [{...po, fechaCierre:po.fecha_cierre},...prev]);
+        if(po.vendedor !== currentUser.vendedor && po.vendedor !== currentUser.name) {
+          sendLocalNotif("📋 Nueva solicitud de compra", `${po.vendedor} creó una solicitud`, `po-${po.id}`);
+        }
+      })
+      .on("postgres_changes", {event:"UPDATE", schema:"public", table:"lm_purchase_orders"}, (payload) => {
+        const po = payload.new;
+        setPurchaseOrders(prev => prev.map(x => x.id===po.id ? {...po, fechaCierre:po.fecha_cierre} : x));
+      })
+      .on("postgres_changes", {event:"DELETE", schema:"public", table:"lm_purchase_orders"}, (payload) => {
+        setPurchaseOrders(prev => prev.filter(x => x.id !== payload.old.id));
+      })
+      .subscribe((status) => {
+        console.log("Realtime status:", status);
+      });
+
+    return () => { supabase.removeChannel(channel); };
+  }, [currentUser.id]);
 
   // Pedir permiso de notificaciones al iniciar (solo una vez)
   useEffect(() => {
