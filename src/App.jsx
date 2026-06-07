@@ -23,7 +23,7 @@ const supaAdmin = supabase;
 
 const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock});
 const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||""});
-const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,date:r.date,items:r.items||[],validity:r.validity||"",docNum:r.doc_num||"",convertida:r.convertida||false,ordenId:r.orden_id||""});
+const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,date:r.date,items:r.items||[],validity:r.validity||"",docNum:r.doc_num||"",convertida:r.convertida||false,ordenId:r.orden_id||"",extendida:r.extendida||false,extendReason:r.extend_reason||"",extendDate:r.extend_date||"",globalDisc:r.global_disc||null,subtotal:r.subtotal||0});
 
 
 // ─── CORRELATIVE NUMBER HELPERS ───────────────────────────────────────────────
@@ -198,6 +198,30 @@ const norm = (s) => String(s||"").toLowerCase()
   .normalize("NFD").replace(/[̀-ͯ]/g, "");
 // Normaliza SKU quitando guiones, puntos, espacios para búsqueda flexible
 const normSKU = (s) => String(s||"").toLowerCase().replace(/[-.\s_]/g, "");
+
+// ─── QUOTE EXPIRY HELPERS ─────────────────────────────────────────────────────
+// Parsea fecha "dd/mm/yyyy" a Date
+function parseDate(dateStr) {
+  if(!dateStr) return null;
+  const parts = dateStr.split("/");
+  if(parts.length !== 3) return null;
+  return new Date(parseInt(parts[2]), parseInt(parts[1])-1, parseInt(parts[0]));
+}
+
+// Estado de vencimiento de una cotización
+function quoteStatus(q) {
+  if(q.convertida) return "convertida";
+  const created = parseDate(q.date);
+  if(!created) return "vigente";
+  const now = new Date();
+  const hoursElapsed = (now - created) / (1000 * 60 * 60);
+  const extendedHours = q.extendida ? 96 : 48; // 48hs + 48hs extensión
+  if(hoursElapsed <= extendedHours) {
+    const hoursLeft = Math.ceil(extendedHours - hoursElapsed);
+    return { status: q.extendida ? "extendida" : "vigente", hoursLeft };
+  }
+  return { status: "vencida", hoursLeft: 0 };
+}
 
 // ─── PUSH NOTIFICATIONS ──────────────────────────────────────────────────────
 const VAPID_PUBLIC_KEY = null; // Sin servidor VAPID — usamos Notification API directa
@@ -831,6 +855,12 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     setOrders(o=>o.filter(x=>x.id!==id)); await db.deleteOrder(id);
     if(ordDel) await logActivity("Pedido eliminado", `${ordDel.docNum||ordDel.compNum||""} - ${ordDel.client} - ${fARS(ordDel.total)}`, id, "pedido");
   };
+  const saveNote = async (id, note) => {
+    const updated = orders.map(o=>o.id===id ? {...o, internalNote:note} : o);
+    setOrders(updated);
+    const ord = updated.find(o=>o.id===id);
+    await db.upsertOrder(ord);
+  };
   const addQuote = async (quote) => {
     const test = isTestOrder(quote.vendedor);
     const n = test ? 0 : await db.nextCounter("presu");
@@ -840,6 +870,12 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     await logActivity("Nueva cotización", `${quoteWithNum.docNum} - ${quoteWithNum.client} - ${fARS(quoteWithNum.total)} - Vendedor: ${quoteWithNum.vendedor||"-"}`, quoteWithNum.id, "cotizacion");
   };
   const delQuote = async (id) => { setQuotes(q=>q.filter(x=>x.id!==id)); await db.deleteQuote(id); };
+  const extendQuote = async (id, reason) => {
+    const updated = quotes.map(q => q.id===id ? {...q, extendida:true, extendReason:reason, extendDate:today()} : q);
+    setQuotes(updated);
+    const quo = updated.find(x=>x.id===id);
+    await db.upsertQuote({...quo, extend_reason:reason, extend_date:today()});
+  };
 
   // Convierte una cotización en reserva — descuenta stock y arranca el circuito de ventas
   const convertQuoteToOrder = async (quote) => {
@@ -1070,9 +1106,9 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
           orders={isAdmin || currentUser.canSeeAll!==false
             ? orders
             : orders.filter(o=>o.vendedor===currentUser.vendedor||o.vendedor===currentUser.name)}
-          products={products} onStage={setStage} onDel={delOrder} isMobile={isMobile}/>}
+          products={products} onStage={setStage} onDel={delOrder} onSaveNote={saveNote} isMobile={isMobile}/>}
         {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile}/>}
-        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile}/>}
+        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile}/>}
         {tab==="precios"    && <Precios products={pricedProducts}/>}
         {tab==="stock"      && <Stock products={products} onUpd={updProd} onDel={pid=>setProducts(p=>p.filter(x=>x.id!==pid))} onAdjust={(pid,qty)=>setProducts(p=>p.map(x=>x.id===pid?{...x,stock:x.stock+qty}:x))} isAdmin={isAdmin} addLog={addLog} stockLog={stockLog} setStockLog={setStockLog} isMobile={isMobile}/>}
         {tab==="compras"    && <Compras products={products} onStock={addStock} isMobile={isMobile}/>}
@@ -1195,13 +1231,16 @@ function CompPopup({order, onClose}) {
 
 
 // ─── CENTRAL ──────────────────────────────────────────────────────────────────
-function Central({orders,products,onStage,onDel,isMobile}) {
+function Central({orders,products,onStage,onDel,onSaveNote,isMobile}) {
   const [fStage,setFStage]=useState("todos");
+  const [fVendedor,setFVendedor]=useState("todos");
   const [search,setSearch]=useState("");
   const [expanded,setExpanded]=useState(null);
   const getP = id=>products.find(p=>p.id===id);
+  const vendedores = useMemo(()=>[...new Set(orders.map(o=>o.vendedor).filter(Boolean))].sort(),[orders]);
   const filtered = orders.filter(o=>{
     if(fStage!=="todos"&&o.stage!==fStage) return false;
+    if(fVendedor!=="todos"&&o.vendedor!==fVendedor) return false;
     if(search&&!norm(o.client).includes(norm(search))&&!o.id.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
@@ -1217,13 +1256,18 @@ function Central({orders,products,onStage,onDel,isMobile}) {
       </div>
       <div style={{background:"#fff",borderRadius:12,padding:14,marginBottom:14,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",boxShadow:"0 1px 4px #0001"}}>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar cliente o No pedido..." style={{flex:1,minWidth:180,padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none"}}/>
+        {vendedores.length>1&&<select value={fVendedor} onChange={e=>setFVendedor(e.target.value)}
+          style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",cursor:"pointer",background:"#fff"}}>
+          <option value="todos">👤 Todos los vendedores</option>
+          {vendedores.map(v=><option key={v} value={v}>{v}</option>)}
+        </select>}
         <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
           {["todos",...STAGES].map(s=>{const c=SCFG[s];return <button key={s} onClick={()=>setFStage(s)} style={{padding:"5px 11px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:fStage===s?(c?.color||RED):"#e5e5e5",background:fStage===s?(c?.bg||"#fdecea"):"#fff",color:fStage===s?(c?.color||RED):"#666"}}>{s==="todos"?"Todos":c.label}</button>;})}
         </div>
       </div>
       {filtered.length===0
         ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{fontSize:48}}>📭</div><div style={{marginTop:8}}>No hay pedidos. !Creá uno desde "Nuevo Pedido"!</div></div>
-        : filtered.map(o=><OCard key={o.id} o={o} exp={expanded===o.id} toggle={()=>setExpanded(expanded===o.id?null:o.id)} getP={getP} onStage={onStage} onDel={onDel}/>)
+        : filtered.map(o=><OCard key={o.id} o={o} exp={expanded===o.id} toggle={()=>setExpanded(expanded===o.id?null:o.id)} getP={getP} onStage={onStage} onDel={onDel} onSaveNote={onSaveNote}/>)
       }
     </div>
   );
@@ -1241,8 +1285,10 @@ function DelBtn({onConfirm}) {
   return <button onClick={()=>setConfirm(true)} style={{marginLeft:"auto",padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>🗑 Eliminar</button>;
 }
 
-function OCard({o,exp,toggle,getP,onStage,onDel}) {
+function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote}) {
   const idx=STAGES.indexOf(o.stage), next=STAGES[idx+1];
+  const [editNote,setEditNote]=useState(false);
+  const [noteVal,setNoteVal]=useState(o.internalNote||"");
   return (
     <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 6px #0001",overflow:"hidden",marginBottom:8}}>
       <div onClick={toggle} style={{padding:"13px 18px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",cursor:"pointer"}}>
@@ -1253,13 +1299,14 @@ function OCard({o,exp,toggle,getP,onStage,onDel}) {
             {o.docNum&&!o.isTest&&<span style={{fontWeight:700,color:"#c0392b"}}>{o.docNum}</span>}
             {o.compNum&&!o.isTest&&<span style={{fontWeight:700,color:"#1a5276"}}>{o.compNum}</span>}
             <span>{o.date}</span>
-            {o.vendedor&&<span>. 👤 {o.vendedor}</span>}
+            {o.vendedor&&<span>· 👤 {o.vendedor}</span>}
+            {o.internalNote&&<span style={{color:"#e67e22"}}>· 📝 Nota</span>}
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
           <Bdg stage={o.stage}/>
           <span style={{fontWeight:800,color:RED,fontSize:15}}>{fARS(o.total)}</span>
-          <span style={{color:"#ccc"}}>{exp?"^":"v"}</span>
+          <span style={{color:"#ccc"}}>{exp?"▲":"▼"}</span>
         </div>
       </div>
       {exp && (
@@ -1270,6 +1317,39 @@ function OCard({o,exp,toggle,getP,onStage,onDel}) {
           {o.items.map((it,i)=>{const p=getP(it.pid);return <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f9f9f9",fontSize:13}}><span style={{color:"#444"}}>{p?.name||it.name} x {it.qty}</span><span style={{fontWeight:600}}>{fARS(it.price*it.qty)}</span></div>;})}
           <div style={{display:"flex",justifyContent:"flex-end",fontWeight:800,fontSize:16,color:RED,margin:"8px 0 12px"}}>{fARS(o.total)}</div>
           {o.notes&&<div style={{background:"#f9f9f9",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#555",marginBottom:12}}>💬 {o.notes}</div>}
+
+          {/* ── NOTA INTERNA ── */}
+          <div style={{background:"#fffbf0",border:"1.5px solid #f0d080",borderRadius:10,padding:"10px 14px",marginBottom:14}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+              <span style={{fontSize:12,fontWeight:700,color:"#b7770d"}}>📝 Nota interna (solo admin)</span>
+              {!editNote&&<button onClick={(e)=>{e.stopPropagation();setEditNote(true);setNoteVal(o.internalNote||"");}}
+                style={{padding:"3px 10px",borderRadius:6,border:"1px solid #f0d080",background:"#fff",color:"#b7770d",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                {o.internalNote?"✏️ Editar":"+ Agregar"}
+              </button>}
+            </div>
+            {editNote ? (
+              <div onClick={e=>e.stopPropagation()}>
+                <textarea value={noteVal} onChange={e=>setNoteVal(e.target.value)}
+                  placeholder="Escribí una nota interna..."
+                  style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #f0d080",fontSize:13,resize:"vertical",minHeight:64,outline:"none",boxSizing:"border-box",background:"#fff"}}/>
+                <div style={{display:"flex",gap:8,marginTop:6}}>
+                  <button onClick={async(e)=>{e.stopPropagation();await onSaveNote(o.id,noteVal);setEditNote(false);}}
+                    style={{padding:"6px 14px",borderRadius:7,border:"none",background:"#b7770d",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                    💾 Guardar
+                  </button>
+                  <button onClick={(e)=>{e.stopPropagation();setEditNote(false);setNoteVal(o.internalNote||"");}}
+                    style={{padding:"6px 12px",borderRadius:7,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:12,cursor:"pointer"}}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{fontSize:13,color:o.internalNote?"#5d4037":"#aaa",fontStyle:o.internalNote?"normal":"italic"}}>
+                {o.internalNote||"Sin nota interna"}
+              </div>
+            )}
+          </div>
+
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             {next&&<button onClick={()=>onStage(o.id,next)} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",background:SCFG[next].color,color:"#fff",fontWeight:700,fontSize:13}}>{SCFG[next].icon} Pasar a {SCFG[next].label}</button>}
             {idx>0&&o.stage!=="entregado"&&<button onClick={()=>onStage(o.id,STAGES[idx-1])} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",cursor:"pointer",background:"#fff",color:"#666",fontWeight:600,fontSize:13}}>← Retroceder</button>}
@@ -1748,7 +1828,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile}) {
 //   id TEXT PRIMARY KEY, client TEXT, vendedor TEXT, notes TEXT,
 //   total NUMERIC, date TEXT, items JSONB, validity TEXT
 // );
-function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onTabChange,currentUser}) {
+function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,onTabChange,currentUser}) {
   const [view,setView]=useState("lista"); // "lista" | "nueva"
   const [expanded,setExpanded]=useState(null);
   const getP=id=>products.find(p=>p.id===id);
@@ -1769,14 +1849,38 @@ function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onTabChange
               <div style={{fontSize:48,marginBottom:8}}>📄</div>
               <div>No hay cotizaciones. !Creá una!</div>
             </div>
-          : quotes.map(q=><QuoteCard key={q.id} q={q} exp={expanded===q.id} toggle={()=>setExpanded(expanded===q.id?null:q.id)} getP={getP} onDel={onDel} onConvert={async(qt)=>{await onConvert(qt);onTabChange("central");}} />)
+          : quotes.map(q=><QuoteCard key={q.id} q={q} exp={expanded===q.id} toggle={()=>setExpanded(expanded===q.id?null:q.id)} getP={getP} onDel={onDel} onConvert={async(qt)=>{await onConvert(qt);onTabChange("central");}} onExtend={onExtend}/>)
       )}
     </div>
   );
 }
 
-function QuoteCard({q,exp,toggle,getP,onDel,onConvert}) {
+function QuoteCard({q,exp,toggle,getP,onDel,onConvert,onExtend}) {
   const PURPLE = "#6c3483"; const PURPLEBG = "#e8daef";
+  const [showExtForm, setShowExtForm] = useState(false);
+  const [extReason, setExtReason] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const qs = quoteStatus(q);
+  const status    = typeof qs === "object" ? qs.status : qs;
+  const hoursLeft = typeof qs === "object" ? qs.hoursLeft : null;
+  const isVencida = status === "vencida";
+  const canConvert = !isVencida && !q.convertida;
+
+  const handleExtend = async () => {
+    if(!extReason.trim()) return;
+    setSaving(true);
+    await onExtend(q.id, extReason.trim());
+    setShowExtForm(false); setExtReason(""); setSaving(false);
+  };
+
+  const StatusBdg = () => {
+    if(q.convertida) return <span style={{background:"#d5f5e3",color:"#1e8449",border:"1px solid #1e844944",borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>✅ Convertida</span>;
+    if(status==="vencida")   return <span style={{background:"#fdecea",color:"#c0392b",border:"1px solid #f1948a",borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>⏰ Vencida</span>;
+    if(status==="extendida") return <span style={{background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>🔄 Extendida</span>;
+    return <span style={{background:"#d5f5e3",color:"#1e8449",border:"1px solid #a9dfbf",borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>✅ Vigente</span>;
+  };
+
   return (
     <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 6px #0001",overflow:"hidden",marginBottom:8}}>
       <div onClick={toggle} style={{padding:"13px 18px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",cursor:"pointer"}}>
@@ -1786,20 +1890,67 @@ function QuoteCard({q,exp,toggle,getP,onDel,onConvert}) {
             {q.isTest&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:800}}>TEST</span>}
             {q.docNum&&!q.isTest&&<span style={{fontWeight:700,color:"#6c3483"}}>{q.docNum}</span>}
             <span>{q.date}</span>
-            {q.vendedor&&<span>. 👤 {q.vendedor}</span>}
+            {q.vendedor&&<span>· 👤 {q.vendedor}</span>}
+            <StatusBdg/>
+            {hoursLeft>0&&<span style={{background:"#eaf4fc",color:"#1a5276",border:"1px solid #aed6f1",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}>⏳ {hoursLeft}hs</span>}
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-          {q.convertida
-            ? <span style={{background:"#d5f5e3",color:"#1e8449",border:"1px solid #1e844944",borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>✅ Convertida</span>
-            : <span style={{background:PURPLEBG,color:PURPLE,border:`1px solid ${PURPLE}44`,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>📄 Cotización</span>
-          }
           <span style={{fontWeight:800,color:PURPLE,fontSize:15}}>{fARS(q.total)}</span>
-          <span style={{color:"#ccc"}}>{exp?"^":"v"}</span>
+          <span style={{color:"#ccc"}}>{exp?"▲":"▼"}</span>
         </div>
       </div>
       {exp && (
         <div style={{borderTop:"1px solid #f5f5f5",padding:18}}>
+
+          {/* VENCIDA sin extensión */}
+          {isVencida && !showExtForm && !q.extendida && (
+            <div style={{background:"#fdecea",border:"1.5px solid #f1948a",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
+              <div style={{fontWeight:800,fontSize:13,color:"#c0392b",marginBottom:4}}>⏰ Cotización vencida</div>
+              <div style={{fontSize:12,color:"#922b21",marginBottom:10}}>Las cotizaciones vencen a las 48 hs. Podés extenderla 48 hs más por única vez.</div>
+              <button onClick={(e)=>{e.stopPropagation();setShowExtForm(true);}}
+                style={{padding:"8px 16px",borderRadius:8,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#e67e22,#d35400)",color:"#fff",fontWeight:700,fontSize:13}}>
+                🔄 Extender 48 horas
+              </button>
+            </div>
+          )}
+
+          {/* FORMULARIO EXTENSIÓN */}
+          {showExtForm && (
+            <div style={{background:"#fffbf0",border:"1.5px solid #f0d080",borderRadius:10,padding:"12px 14px",marginBottom:14}} onClick={e=>e.stopPropagation()}>
+              <div style={{fontSize:12,fontWeight:700,color:"#b7770d",marginBottom:6}}>📝 Razón de la extensión (obligatorio)</div>
+              <textarea value={extReason} onChange={e=>setExtReason(e.target.value)}
+                placeholder="Ej: Cliente solicitó más tiempo para confirmar con su jefe..."
+                style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${extReason.trim()?"#f0d080":"#f1948a"}`,fontSize:13,resize:"vertical",minHeight:70,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              <div style={{display:"flex",gap:8,marginTop:8}}>
+                <button onClick={handleExtend} disabled={!extReason.trim()||saving}
+                  style={{padding:"7px 14px",borderRadius:7,border:"none",background:extReason.trim()?"#b7770d":"#e5e5e5",color:extReason.trim()?"#fff":"#aaa",fontWeight:700,fontSize:12,cursor:extReason.trim()?"pointer":"not-allowed"}}>
+                  {saving?"Guardando...":"✅ Confirmar extensión"}
+                </button>
+                <button onClick={(e)=>{e.stopPropagation();setShowExtForm(false);setExtReason("");}}
+                  style={{padding:"7px 12px",borderRadius:7,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:12,cursor:"pointer"}}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* INFO EXTENSIÓN USADA */}
+          {q.extendida && (
+            <div style={{background:"#fffbf0",border:"1.5px solid #f0d080",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#7d6608"}}>
+              🔄 <strong>Extensión aplicada</strong> {q.extendDate&&`(${q.extendDate})`}<br/>
+              Motivo: "{q.extendReason}"<br/>
+              <span style={{color:"#aaa",fontSize:11}}>Extensión ya usada — no se puede extender de nuevo</span>
+            </div>
+          )}
+
+          {/* VIGENTE */}
+          {status==="vigente" && !q.convertida && hoursLeft>0 && (
+            <div style={{background:"#eafaf1",border:"1.5px solid #a9dfbf",borderRadius:10,padding:"9px 14px",marginBottom:14,fontSize:12,color:"#1e8449",fontWeight:600}}>
+              ✅ Vigente — {hoursLeft} hs restantes
+            </div>
+          )}
+
           {q.validity&&<div style={{background:"#fef9e7",borderRadius:8,padding:"7px 12px",fontSize:12,color:"#7d6608",marginBottom:12}}>⏳ Validez: <strong>{q.validity}</strong></div>}
           {q.items.map((it,i)=>{const p=getP(it.pid);return <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f9f9f9",fontSize:13}}><span style={{color:"#444"}}>{p?.name||it.name} x {it.qty}</span><span style={{fontWeight:600}}>{fARS(it.price*it.qty)}</span></div>;})}
           <div style={{display:"flex",justifyContent:"flex-end",fontWeight:800,fontSize:16,color:PURPLE,margin:"8px 0 12px"}}>{fARS(q.total)}</div>
@@ -1807,13 +1958,11 @@ function QuoteCard({q,exp,toggle,getP,onDel,onConvert}) {
           <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
             <button onClick={()=>printDoc(q,"cotizacion")} style={{padding:"8px 12px",borderRadius:8,border:`1.5px solid ${PURPLEBG}`,cursor:"pointer",background:"#fff",color:PURPLE,fontWeight:600,fontSize:13}}>🖨️ Imprimir</button>
             {!q.convertida
-              ? <button onClick={()=>onConvert(q)}
-                  style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#922b21,#c0392b)",color:"#fff",fontWeight:700,fontSize:13}}>
+              ? <button onClick={()=>onConvert(q)} disabled={isVencida}
+                  style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:isVencida?"not-allowed":"pointer",background:isVencida?"#e5e5e5":"linear-gradient(135deg,#922b21,#c0392b)",color:isVencida?"#aaa":"#fff",fontWeight:700,fontSize:13}}>
                   🛒 Pasar a Reserva
                 </button>
-              : <span style={{background:"#d5f5e3",color:"#1e8449",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:700}}>
-                  ✅ Convertida a Reserva
-                </span>
+              : <span style={{background:"#d5f5e3",color:"#1e8449",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:700}}>✅ Convertida a Reserva</span>
             }
             <div style={{marginLeft:"auto",display:"flex",gap:8}}>
               <QuoteDelBtn onConfirm={()=>onDel(q.id)}/>
@@ -3224,34 +3373,53 @@ function VentasPanel({orders}) {
           }
         </>}
         {periodo==="vendedor" && <>
-          <div style={{fontWeight:800,fontSize:15,marginBottom:16}}>👤 Ventas por vendedor</div>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:16}}>👤 Dashboard por vendedor</div>
           {byVendedor.length===0
             ? <div style={{color:"#aaa",textAlign:"center",padding:20}}>Sin datos</div>
-            : <BarChart data={byVendedor} colorFn={(i)=>COLORS[i%COLORS.length]}/>
+            : <>
+              <BarChart data={byVendedor} colorFn={(i)=>COLORS[i%COLORS.length]}/>
+              {/* Tabla detalle por vendedor */}
+              <div style={{marginTop:20,overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                  <thead><tr style={{background:"#f9f9f9"}}>
+                    {["#","Vendedor","Pedidos","Total","Promedio","% del total"].map(h=>(
+                      <th key={h} style={{padding:"9px 12px",textAlign:"left",fontWeight:700,color:"#888",fontSize:11,textTransform:"uppercase"}}>{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody>
+                    {byVendedor.map(([v,d],i)=>(
+                      <tr key={v} style={{borderTop:"1px solid #f5f5f5"}}>
+                        <td style={{padding:"10px 12px",fontWeight:800,color:COLORS[i%COLORS.length],width:32}}>#{i+1}</td>
+                        <td style={{padding:"10px 12px",fontWeight:700}}>
+                          <span style={{display:"inline-block",width:10,height:10,borderRadius:"50%",background:COLORS[i%COLORS.length],marginRight:8}}/>
+                          {v}
+                        </td>
+                        <td style={{padding:"10px 12px",color:"#666"}}>{d.cant}</td>
+                        <td style={{padding:"10px 12px",fontWeight:800,color:RED}}>{fARS(d.total)}</td>
+                        <td style={{padding:"10px 12px",color:"#666"}}>{fARS(d.total/d.cant)}</td>
+                        <td style={{padding:"10px 12px"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:8}}>
+                            <div style={{flex:1,background:"#f5f5f5",borderRadius:4,height:8,overflow:"hidden"}}>
+                              <div style={{width:`${(d.total/totalGeneral)*100}%`,background:COLORS[i%COLORS.length],height:"100%",borderRadius:4}}/>
+                            </div>
+                            <span style={{fontSize:11,color:"#888",minWidth:32}}>{((d.total/totalGeneral)*100).toFixed(1)}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {/* Total row */}
+                    <tr style={{borderTop:"2px solid #e5e5e5",background:"#f9f9f9"}}>
+                      <td colSpan={2} style={{padding:"10px 12px",fontWeight:800,fontSize:13}}>TOTAL</td>
+                      <td style={{padding:"10px 12px",fontWeight:800}}>{cantGeneral}</td>
+                      <td style={{padding:"10px 12px",fontWeight:800,color:RED}}>{fARS(totalGeneral)}</td>
+                      <td style={{padding:"10px 12px",fontWeight:800,color:"#666"}}>{fARS(totalGeneral/Math.max(cantGeneral,1))}</td>
+                      <td style={{padding:"10px 12px",fontWeight:800}}>100%</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </>
           }
-          {/* Tabla detalle por vendedor */}
-          <div style={{marginTop:20,overflowX:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-              <thead><tr style={{background:"#f9f9f9"}}>
-                {["Vendedor","Pedidos","Total","Promedio"].map(h=>(
-                  <th key={h} style={{padding:"9px 12px",textAlign:"left",fontWeight:700,color:"#888",fontSize:11,textTransform:"uppercase"}}>{h}</th>
-                ))}
-              </tr></thead>
-              <tbody>
-                {byVendedor.map(([v,d],i)=>(
-                  <tr key={v} style={{borderTop:"1px solid #f5f5f5"}}>
-                    <td style={{padding:"10px 12px",fontWeight:700}}>
-                      <span style={{display:"inline-block",width:10,height:10,borderRadius:"50%",background:COLORS[i%COLORS.length],marginRight:8}}/>
-                      {v}
-                    </td>
-                    <td style={{padding:"10px 12px",color:"#666"}}>{d.cant}</td>
-                    <td style={{padding:"10px 12px",fontWeight:800,color:RED}}>{fARS(d.total)}</td>
-                    <td style={{padding:"10px 12px",color:"#666"}}>{fARS(d.total/d.cant)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </>}
       </div>
     </div>
