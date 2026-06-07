@@ -1040,7 +1040,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                 <span style={{fontSize:20,width:28,textAlign:"center"}}>{t.icon}</span>{t.label}
               </div>
             ))}
-            <div style={{borderTop:"2px solid #e5e5e5",marginTop:96,paddingTop:8}}>
+            <div style={{borderTop:"2px solid #e5e5e5",marginTop:156,paddingTop:8}}>
               <div onClick={()=>{if(window.confirm("¿Seguro que querés salir de la app?")) onLogout();}} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:RED,cursor:"pointer",background:"#fdecea"}}>
                 <span style={{fontSize:20,width:28,textAlign:"center"}}>🚪</span>Salir
               </div>
