@@ -760,10 +760,12 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const n = test ? 0 : await db.nextCounter("reserva");
     const orderWithNum = {...order, docNum: test ? "TEST-000000" : fmtDocNum("Reserva", n), isTest: test};
 
-    const updatedProds = products.map(x=>{const it=orderWithNum.items.find(i=>i.pid===x.id);return it?{...x,stock:Math.max(0,x.stock-it.qty)}:x;});
+    const updatedProds = test
+      ? products  // pedidos de prueba NO modifican stock
+      : products.map(x=>{const it=orderWithNum.items.find(i=>i.pid===x.id);return it?{...x,stock:Math.max(0,x.stock-it.qty)}:x;});
     setProducts(updatedProds); setOrders(o=>[orderWithNum,...o]);
     await db.upsertOrder(orderWithNum);
-    for(const p of updatedProds.filter(p=>orderWithNum.items.find(i=>i.pid===p.id))) await db.upsertProduct(p);
+    if(!test) for(const p of updatedProds.filter(p=>orderWithNum.items.find(i=>i.pid===p.id))) await db.upsertProduct(p);
     const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"NUEVO_PEDIDO",para:"admin",icono:"🛒",titulo:"Nuevo pedido registrado",cuerpo:`${orderWithNum.client} - ${fARS(orderWithNum.total)} - ${orderWithNum.docNum}`,ref:orderWithNum.id};
     await db.addNotif(notif); setNotifs(n=>[notif,...n]);
     await logActivity("Nuevo pedido", `${orderWithNum.docNum} - ${orderWithNum.client} - ${fARS(orderWithNum.total)} - Vendedor: ${orderWithNum.vendedor||"-"}`, orderWithNum.id, "pedido");
@@ -806,7 +808,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   };
   const delOrder = async (id) => {
     const ord=orders.find(o=>o.id===id);
-    if(ord&&ord.stage!=="entregado"){
+    if(ord && ord.stage!=="entregado" && !ord.isTest){
       const updatedProds=products.map(x=>{const it=ord.items.find(i=>i.pid===x.id);return it?{...x,stock:x.stock+it.qty}:x;});
       setProducts(updatedProds);
       for(const p of updatedProds.filter(p=>ord.items.find(i=>i.pid===p.id))) await db.upsertProduct(p);
