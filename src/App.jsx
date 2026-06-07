@@ -199,6 +199,35 @@ const norm = (s) => String(s||"").toLowerCase()
 // Normaliza SKU quitando guiones, puntos, espacios para búsqueda flexible
 const normSKU = (s) => String(s||"").toLowerCase().replace(/[-.\s_]/g, "");
 
+// ─── PUSH NOTIFICATIONS ──────────────────────────────────────────────────────
+const VAPID_PUBLIC_KEY = null; // Sin servidor VAPID — usamos Notification API directa
+
+async function requestNotifPermission() {
+  if (!("Notification" in window)) return "unsupported";
+  if (Notification.permission === "granted") return "granted";
+  if (Notification.permission === "denied") return "denied";
+  const result = await Notification.requestPermission();
+  return result;
+}
+
+function sendLocalNotif(title, body, tag = "lm") {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.ready.then(reg => {
+      reg.showNotification(title, {
+        body,
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        tag,
+        renotify: true,
+        vibrate: [200, 100, 200],
+      });
+    });
+  } else {
+    new Notification(title, { body, icon: "/icon-192.png" });
+  }
+}
+
 // ─── PDF / PRINT ──────────────────────────────────────────────────────────────
 // tipo: "reserva" | "confirmado" | "cotizacion"
 // doc must have: docNum, compNum (orders), client, vendedor, date, items, total, notes, validity
@@ -694,6 +723,12 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const ord = orders.find(o=>o.id===id);
     let updated = {...ord, stage};
 
+    // Notificar cambio de estado
+    const stageLabels = { confirmado:"✅ Pedido confirmado", "en armado":"📦 Pedido en armado", entregado:"🎉 Pedido entregado" };
+    if(stageLabels[stage] && ord) {
+      sendLocalNotif(stageLabels[stage], `${ord.client} — ${ord.docNum||ord.compNum||""}`, `stage-${id}`);
+    }
+
     // When moving to "confirmado": assign Comp-XXXXXX (skip counter for test orders)
     if(stage === "confirmado" && !ord.compNum) {
       const test = isTestOrder(ord.vendedor);
@@ -794,6 +829,19 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
 
   const isMobile = useIsMobile();
   const [mobileMenu, setMobileMenu] = useState(false);
+  const [notifPermission, setNotifPermission] = useState(
+    "Notification" in window ? Notification.permission : "unsupported"
+  );
+
+  // Pedir permiso de notificaciones al iniciar (solo una vez)
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      setTimeout(async () => {
+        const result = await requestNotifPermission();
+        setNotifPermission(result);
+      }, 3000); // espera 3s para no abrumar al usuario
+    }
+  }, []);
 
   // Confirmación al cerrar/retroceder (funciona en desktop y mobile)
   useEffect(() => {
@@ -843,6 +891,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
               <div style={{display:"flex",gap:6,flexShrink:0}}>
                 <button onClick={()=>setShowNotifs(s=>!s)} style={{width:34,height:34,borderRadius:9,background:"#ffffff1a",border:"1px solid #ffffff2a",color:"#fff",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative"}}>
                   🔔{unreadCount>0&&<span style={{position:"absolute",top:-3,right:-3,background:"#f1c40f",color:"#1a1a1a",borderRadius:"50%",width:15,height:15,fontSize:8,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center"}}>{unreadCount}</span>}
+                  {notifPermission==="default"&&<span style={{position:"absolute",top:-3,right:-3,background:"#e67e22",borderRadius:"50%",width:10,height:10}}/>}
                 </button>
                 <button onClick={()=>setMobileMenu(o=>!o)} style={{width:34,height:34,borderRadius:9,background:"#ffffff1a",border:"1px solid #ffffff2a",color:"#fff",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>☰</button>
               </div>
@@ -928,6 +977,13 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
               <div onClick={()=>{setShowChangePass(true);setMobileMenu(false);}} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:"#333",cursor:"pointer"}}>
                 <span style={{fontSize:20,width:28,textAlign:"center"}}>🔑</span>Cambiar contraseña
               </div>
+              {notifPermission!=="granted" && notifPermission!=="unsupported" && (
+                <div onClick={async()=>{const r=await requestNotifPermission();setNotifPermission(r);setMobileMenu(false);}}
+                  style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:"#e67e22",cursor:"pointer"}}>
+                  <span style={{fontSize:20,width:28,textAlign:"center"}}>🔔</span>
+                  {notifPermission==="denied"?"Notificaciones bloqueadas":"Activar notificaciones"}
+                </div>
+              )}
               <div onClick={()=>{if(window.confirm("¿Seguro que querés salir de la app?")) onLogout();}} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:RED,cursor:"pointer"}}>
                 <span style={{fontSize:20,width:28,textAlign:"center"}}>🚪</span>Salir
               </div>
