@@ -897,6 +897,13 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     "Notification" in window ? Notification.permission : "unsupported"
   );
 
+  // Escuchar el evento de logout desde el botón atrás mobile
+  useEffect(() => {
+    const handler = () => onLogout();
+    window.addEventListener('lm-logout', handler);
+    return () => window.removeEventListener('lm-logout', handler);
+  }, [onLogout]);
+
   // Pedir permiso de notificaciones al iniciar (solo una vez)
   useEffect(() => {
     if ("Notification" in window && Notification.permission === "default") {
@@ -925,7 +932,8 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       const salir = window.confirm('¿Seguro que querés salir de la app?');
       if (salir) {
         window.removeEventListener('popstate', popState);
-        window.history.back();
+        // Disparar evento custom para que onLogout lo reciba
+        window.dispatchEvent(new CustomEvent('lm-logout'));
       } else {
         // Volvemos a empujar el estado para que el botón atrás vuelva a funcionar
         window.history.pushState({ appActive: true }, '');
@@ -960,13 +968,17 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                 <button onClick={()=>setMobileMenu(o=>!o)} style={{width:34,height:34,borderRadius:9,background:"#ffffff1a",border:"1px solid #ffffff2a",color:"#fff",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>☰</button>
               </div>
             </div>
-            <div style={{display:"flex",overflowX:"auto",gap:1,padding:"0 10px",scrollbarWidth:"none"}}>
+            <div style={{display:"flex",overflowX:"auto",gap:1,padding:"0 10px",scrollbarWidth:"none",alignItems:"center"}}>
               {TABS.map(t=>(
                 <button key={t.k} onClick={()=>setTab(t.k)}
                   style={{padding:"7px 13px",border:"none",cursor:"pointer",fontSize:11,color:tab===t.k?"#fff":"#ffbbbb",fontWeight:tab===t.k?700:600,borderRadius:"8px 8px 0 0",background:tab===t.k?"#ffffff18":"transparent",borderBottom:tab===t.k?"3px solid #fff":"3px solid transparent",whiteSpace:"nowrap",flexShrink:0}}>
                   {t.icon} {t.label}
                 </button>
               ))}
+              <button onClick={()=>{if(window.confirm("¿Seguro que querés salir?")) onLogout();}}
+                style={{padding:"5px 10px",border:"1px solid #ffffff33",cursor:"pointer",fontSize:11,color:"#ffbbbb",fontWeight:600,borderRadius:7,background:"transparent",whiteSpace:"nowrap",flexShrink:0,marginLeft:6}}>
+                🚪 Salir
+              </button>
             </div>
           </div>
         ) : (
