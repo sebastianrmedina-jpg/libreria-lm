@@ -614,6 +614,11 @@ function Login({users, onLogin}) {
 
 // ─── ROOT APP ─────────────────────────────────────────────────────────────────
 export default function App() {
+  // ── SANDBOX STOCK — copia en memoria para el vendedor Prueba ──
+  // Se inicializa con el stock real al cargar, nunca persiste en Supabase
+  const [sandboxStock, setSandboxStock] = useState({}); // { pid: qty }
+  const isSandboxUser = (user) => user && isTestOrder(user.vendedor || user.name);
+
   const [currentUser, setCurrentUser] = useState(() => {
     // Recuperar sesión guardada al iniciar
     try {
@@ -643,6 +648,10 @@ export default function App() {
         ]);
         setUsers(u); setVendors(v); setProducts(p);
         setOrders(o); setQuotes(q); setStockLog(sl); setActivity(act); setPriceLists(pl); setPurchaseOrders(po); setNotifs(n);
+        // Inicializar sandbox con stock real
+        const sbInit = {};
+        p.forEach(prod => { sbInit[prod.id] = prod.stock; });
+        setSandboxStock(sbInit);
         // Refrescar sesión guardada con los datos actuales del usuario
         try {
           const saved = localStorage.getItem("lm_session");
@@ -704,11 +713,12 @@ export default function App() {
     priceLists={priceLists} setPriceLists={setPriceLists}
     purchaseOrders={purchaseOrders} setPurchaseOrders={setPurchaseOrders}
     notifs={notifs} setNotifs={setNotifs}
+    sandboxStock={sandboxStock} setSandboxStock={setSandboxStock}
   />;
 }
 
 // ─── MAIN APP (authenticated) ─────────────────────────────────────────────────
-function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,products,setProducts,orders,setOrders,quotes,setQuotes,stockLog,setStockLog,activity,setActivity,priceLists,setPriceLists,purchaseOrders,setPurchaseOrders,notifs,setNotifs}) {
+function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,products,setProducts,orders,setOrders,quotes,setQuotes,stockLog,setStockLog,activity,setActivity,priceLists,setPriceLists,purchaseOrders,setPurchaseOrders,notifs,setNotifs,sandboxStock,setSandboxStock}) {
   const isAdmin = currentUser.role === "admin";
   const [tab, setTab] = useState("central");
   const [showNotifs, setShowNotifs] = useState(false);
@@ -739,11 +749,14 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     return Math.round(basePrice * (1 - activeList.discount/100) * 100) / 100;
   };
   // Products with prices adjusted for active list
+  const isTestUser = isTestOrder(currentUser.vendedor || currentUser.name);
   const pricedProducts = useMemo(()=>products.map(p=>({
     ...p,
     salePrice: getPrice(p.salePrice),
     _basePrice: p.salePrice,
-  })),[products, activeList]);
+    // Vendedor Prueba ve el stock sandbox, no el real
+    stock: isTestUser ? (sandboxStock[p.id] ?? p.stock) : p.stock,
+  })),[products, activeList, isTestUser, sandboxStock]);
 
   const addLog = async (entry) => {
     const full = {id:genId(),fecha:new Date().toLocaleString("es-AR"),usuario:currentUser.name,rol:currentUser.role,...entry};
@@ -758,14 +771,24 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     // Assign Reserva-XXXXXX correlative number (skip counter for test orders)
     const test = isTestOrder(order.vendedor);
     const n = test ? 0 : await db.nextCounter("reserva");
-    const orderWithNum = {...order, docNum: test ? "TEST-000000" : fmtDocNum("Reserva", n), isTest: test};
+    const orderWithNum = {...order, docNum: test ? "TEST-000000" : fmtDocNum("Reserva", n), isTest: test, isSandbox: test};
 
-    const updatedProds = test
-      ? products  // pedidos de prueba NO modifican stock
-      : products.map(x=>{const it=orderWithNum.items.find(i=>i.pid===x.id);return it?{...x,stock:Math.max(0,x.stock-it.qty)}:x;});
-    setProducts(updatedProds); setOrders(o=>[orderWithNum,...o]);
+    if(test) {
+      // SANDBOX: descontar del stock paralelo en memoria, no tocar Supabase
+      setSandboxStock(prev => {
+        const next = {...prev};
+        orderWithNum.items.forEach(it => {
+          next[it.pid] = Math.max(0, (next[it.pid] ?? 0) - it.qty);
+        });
+        return next;
+      });
+    } else {
+      const updatedProds = products.map(x=>{const it=orderWithNum.items.find(i=>i.pid===x.id);return it?{...x,stock:Math.max(0,x.stock-it.qty)}:x;});
+      setProducts(updatedProds);
+      for(const p of updatedProds.filter(p=>orderWithNum.items.find(i=>i.pid===p.id))) await db.upsertProduct(p);
+    }
+    setOrders(o=>[orderWithNum,...o]);
     await db.upsertOrder(orderWithNum);
-    if(!test) for(const p of updatedProds.filter(p=>orderWithNum.items.find(i=>i.pid===p.id))) await db.upsertProduct(p);
     const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"NUEVO_PEDIDO",para:"admin",icono:"🛒",titulo:"Nuevo pedido registrado",cuerpo:`${orderWithNum.client} - ${fARS(orderWithNum.total)} - ${orderWithNum.docNum}`,ref:orderWithNum.id};
     await db.addNotif(notif); setNotifs(n=>[notif,...n]);
     await logActivity("Nuevo pedido", `${orderWithNum.docNum} - ${orderWithNum.client} - ${fARS(orderWithNum.total)} - Vendedor: ${orderWithNum.vendedor||"-"}`, orderWithNum.id, "pedido");
@@ -808,10 +831,19 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   };
   const delOrder = async (id) => {
     const ord=orders.find(o=>o.id===id);
-    if(ord && ord.stage!=="entregado" && !ord.isTest){
-      const updatedProds=products.map(x=>{const it=ord.items.find(i=>i.pid===x.id);return it?{...x,stock:x.stock+it.qty}:x;});
-      setProducts(updatedProds);
-      for(const p of updatedProds.filter(p=>ord.items.find(i=>i.pid===p.id))) await db.upsertProduct(p);
+    if(ord && ord.stage!=="entregado") {
+      if(ord.isSandbox) {
+        // SANDBOX: devolver stock al paralelo en memoria
+        setSandboxStock(prev => {
+          const next = {...prev};
+          ord.items.forEach(it => { next[it.pid] = (next[it.pid] ?? 0) + it.qty; });
+          return next;
+        });
+      } else {
+        const updatedProds=products.map(x=>{const it=ord.items.find(i=>i.pid===x.id);return it?{...x,stock:x.stock+it.qty}:x;});
+        setProducts(updatedProds);
+        for(const p of updatedProds.filter(p=>ord.items.find(i=>i.pid===p.id))) await db.upsertProduct(p);
+      }
     }
     const ordDel=orders.find(o=>o.id===id);
     setOrders(o=>o.filter(x=>x.id!==id)); await db.deleteOrder(id);
@@ -877,7 +909,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     }
   };
 
-  const pending = orders.filter(o=>o.stage!=="entregado").length;
+  const pending = orders.filter(o=>o.stage!=="entregado"&&!o.isSandbox).length;
   const TABS = [
     {k:"central",   label:"Central",           icon:"📋", roles:["admin","vendedor"]},
     {k:"nuevo",     label:"Nuevo Pedido",       icon:"🛒", roles:["admin","vendedor"]},
@@ -1131,7 +1163,21 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
         {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile}/>}
         {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile}/>}
         {tab==="precios"    && <Precios products={pricedProducts}/>}
-        {tab==="stock"      && <Stock products={products} onUpd={updProd} onDel={pid=>setProducts(p=>p.filter(x=>x.id!==pid))} onAdjust={(pid,qty)=>setProducts(p=>p.map(x=>x.id===pid?{...x,stock:x.stock+qty}:x))} isAdmin={isAdmin} addLog={addLog} stockLog={stockLog} setStockLog={setStockLog} isMobile={isMobile}/>}
+        {tab==="stock"      && <>
+              {isTestUser && (
+                <div style={{background:"#f5eef8",border:"1.5px solid #9b59b6",borderRadius:10,padding:"10px 16px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+                  <div>
+                    <span style={{fontWeight:800,color:"#6c3483",fontSize:13}}>🧪 Modo Sandbox activo</span>
+                    <span style={{color:"#888",fontSize:12,marginLeft:8}}>El stock que ves es una copia paralela. No afecta el stock real.</span>
+                  </div>
+                  <button onClick={()=>{const sb={};products.forEach(p=>{sb[p.id]=p.stock;});setSandboxStock(sb);}}
+                    style={{padding:"6px 14px",borderRadius:8,border:"1.5px solid #9b59b6",background:"#fff",color:"#6c3483",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                    🔄 Reiniciar sandbox
+                  </button>
+                </div>
+              )}
+              <Stock products={pricedProducts} onUpd={updProd} onDel={pid=>setProducts(p=>p.filter(x=>x.id!==pid))} onAdjust={(pid,qty)=>setProducts(p=>p.map(x=>x.id===pid?{...x,stock:x.stock+qty}:x))} isAdmin={isAdmin} addLog={addLog} stockLog={stockLog} setStockLog={setStockLog} isMobile={isMobile}/>
+            </>}
         {tab==="compras"    && <Compras products={products} onStock={addStock} isMobile={isMobile}/>}
         {tab==="solicitud"  && <SolicitudCompra products={products} currentUser={currentUser} isAdmin={isAdmin} purchaseOrders={purchaseOrders} setPurchaseOrders={setPurchaseOrders} isMobile={isMobile} onStockExternal={addStock} addLog={addLog}/>}
         {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile}/>}
@@ -1265,11 +1311,11 @@ function Central({orders,products,onStage,onDel,onSaveNote,isMobile}) {
     if(search&&!norm(o.client).includes(norm(search))&&!o.id.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
-  const deliv = orders.filter(o=>o.stage==="entregado").reduce((s,o)=>s+o.total,0);
+  const deliv = orders.filter(o=>o.stage==="entregado"&&!o.isSandbox).reduce((s,o)=>s+o.total,0);
   return (
     <div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(135px,1fr))",gap:12,marginBottom:20}}>
-        {STAGES.map(s=>{const c=SCFG[s],cnt=orders.filter(o=>o.stage===s).length;return <div key={s} onClick={()=>setFStage(fStage===s?"todos":s)} style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 6px #0001",borderLeft:`4px solid ${c.color}`,cursor:"pointer",outline:fStage===s?`2px solid ${c.color}`:"none"}}><div style={{fontSize:26,fontWeight:800,color:c.color}}>{cnt}</div><div style={{fontSize:12,color:"#666",fontWeight:600}}>{c.icon} {c.label}</div></div>;})}
+        {STAGES.map(s=>{const c=SCFG[s],cnt=orders.filter(o=>o.stage===s&&!o.isSandbox).length;return <div key={s} onClick={()=>setFStage(fStage===s?"todos":s)} style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 6px #0001",borderLeft:`4px solid ${c.color}`,cursor:"pointer",outline:fStage===s?`2px solid ${c.color}`:"none"}}><div style={{fontSize:26,fontWeight:800,color:c.color}}>{cnt}</div><div style={{fontSize:12,color:"#666",fontWeight:600}}>{c.icon} {c.label}</div></div>;})}
         <div style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 6px #0001",borderLeft:`4px solid ${RED}`}}>
           <div style={{fontSize:14,fontWeight:800,color:RED}}>{fARS(deliv)}</div>
           <div style={{fontSize:12,color:"#666",fontWeight:600}}>💰 Entregado</div>
@@ -1317,6 +1363,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote}) {
           <div style={{fontWeight:700,fontSize:14,color:"#1a1a1a"}}>{o.client}</div>
           <div style={{fontSize:11,color:"#aaa",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
             {o.isTest&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:800}}>TEST</span>}
+            {o.isSandbox&&<span style={{background:"#9b59b6",color:"#fff",borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:800}}>🧪 SANDBOX</span>}
             {o.docNum&&!o.isTest&&<span style={{fontWeight:700,color:"#c0392b"}}>{o.docNum}</span>}
             {o.compNum&&!o.isTest&&<span style={{fontWeight:700,color:"#1a5276"}}>{o.compNum}</span>}
             <span>{o.date}</span>
@@ -3222,6 +3269,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
 
   const SECTIONS = [
     {k:"ventas",      label:"Ventas",           icon:"📈"},
+    {k:"sandbox",     label:"Demo Sandbox",     icon:"🧪"},
     {k:"activity",    label:"Actividad",        icon:"📝"},
     {k:"vendors",     label:"Vendedores",       icon:"👥"},
     {k:"users",       label:"Usuarios",         icon:"🔐"},
@@ -3229,6 +3277,9 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
     {k:"excel",       label:"Importar Precios", icon:"📊"},
     {k:"notifcfg",    label:"Notificaciones",   icon:"🔔"},
   ];
+
+  const sandboxOrders = orders.filter(o=>o.isSandbox);
+  const realOrders    = orders.filter(o=>!o.isSandbox);
 
   // Mobile: show icon grid when no section selected, back button when inside
   if(isMobile && !section) return (
@@ -3262,7 +3313,26 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
           </button>
         ))}
       </div>}
-      {section==="ventas"      && <VentasPanel    orders={orders}/>}
+      {section==="ventas"      && <VentasPanel    orders={realOrders}/>}
+      {section==="sandbox"     && (
+        <div>
+          <div style={{background:"#f5eef8",border:"1.5px solid #9b59b6",borderRadius:12,padding:"12px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
+            <span style={{fontSize:28}}>🧪</span>
+            <div>
+              <div style={{fontWeight:800,fontSize:14,color:"#6c3483"}}>Dashboard Demo — Vendedor Prueba</div>
+              <div style={{fontSize:12,color:"#888",marginTop:2}}>Mostrá a los vendedores cómo funciona el sistema. Estos datos son del sandbox y no afectan las estadísticas reales.</div>
+            </div>
+          </div>
+          {sandboxOrders.length===0
+            ? <div style={{textAlign:"center",padding:60,background:"#fff",borderRadius:12,color:"#aaa"}}>
+                <div style={{fontSize:48,marginBottom:8}}>🧪</div>
+                <div style={{fontWeight:700,fontSize:15}}>Sin datos de prueba aún</div>
+                <div style={{fontSize:13,marginTop:4}}>Ingresá con el usuario Prueba y generá algunos pedidos para ver el demo aquí.</div>
+              </div>
+            : <VentasPanel orders={sandboxOrders}/>
+          }
+        </div>
+      )}
       {section==="activity"    && <ActivityPanel  activity={activity} setActivity={setActivity}/>}
       {section==="vendors"     && <VendorsPanel   vendors={vendors} setVendors={setVendors}/>}
       {section==="users"       && <UsersPanel     users={users} setUsers={setUsers} vendors={vendors} priceLists={priceLists}/>}
@@ -3275,7 +3345,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
 
 // ── Panel de Ventas ───────────────────────────────────────────────────────────
 function VentasPanel({orders}) {
-  const vendidas = orders.filter(o=>o.stage==="entregado");
+  const vendidas = orders.filter(o=>o.stage==="entregado" && !o.isSandbox);
   const [periodo, setPeriodo] = useState("mes"); // "dia"|"mes"|"vendedor"
 
   // ── helpers ──
