@@ -613,6 +613,48 @@ export default function App() {
         ]);
         setUsers(u); setVendors(v); setProducts(p);
         setOrders(o); setQuotes(q); setStockLog(sl); setActivity(act); setPriceLists(pl); setPurchaseOrders(po); setNotifs(n);
+
+        // ── Supabase Realtime: notificaciones cruzadas entre dispositivos ──
+        const channel = supabase.channel("lm-realtime")
+          // Nuevo pedido o cotización
+          .on("postgres_changes", {event:"INSERT", schema:"public", table:"lm_orders"}, (payload) => {
+            const o = mapOrder(payload.new);
+            setOrders(prev => prev.find(x=>x.id===o.id) ? prev : [o,...prev]);
+            // Solo notificar si el que lo creó NO soy yo
+            if(o.vendedor !== currentUser.vendedor && o.vendedor !== currentUser.name) {
+              sendLocalNotif("📋 Nuevo pedido", `${o.vendedor} · ${o.client}`, `order-${o.id}`);
+            }
+          })
+          // Cambio de estado de pedido
+          .on("postgres_changes", {event:"UPDATE", schema:"public", table:"lm_orders"}, (payload) => {
+            const o = mapOrder(payload.new);
+            setOrders(prev => prev.map(x => x.id===o.id ? o : x));
+            const stageLabels = {confirmado:"✅ Pedido confirmado","en armado":"📦 Pedido en armado",entregado:"🎉 Pedido entregado"};
+            // Notificar si el cambio fue hecho por otro usuario
+            if(stageLabels[o.stage] && o.vendedor !== currentUser.vendedor && o.vendedor !== currentUser.name) {
+              sendLocalNotif(stageLabels[o.stage], `${o.client} — ${o.docNum||o.compNum||""}`, `stage-${o.id}`);
+            }
+          })
+          // Nueva cotización
+          .on("postgres_changes", {event:"INSERT", schema:"public", table:"lm_quotes"}, (payload) => {
+            const q = mapQuote(payload.new);
+            setQuotes(prev => prev.find(x=>x.id===q.id) ? prev : [q,...prev]);
+            if(q.vendedor !== currentUser.vendedor && q.vendedor !== currentUser.name) {
+              sendLocalNotif("📄 Nueva cotización", `${q.vendedor} · ${q.client}`, `quote-${q.id}`);
+            }
+          })
+          // Nueva solicitud de compra
+          .on("postgres_changes", {event:"INSERT", schema:"public", table:"lm_purchase_orders"}, (payload) => {
+            const po = payload.new;
+            setPurchaseOrders(prev => prev.find(x=>x.id===po.id) ? prev : [{...po, fechaCierre:po.fecha_cierre},...prev]);
+            if(po.vendedor !== currentUser.vendedor && po.vendedor !== currentUser.name) {
+              sendLocalNotif("📋 Nueva solicitud de compra", `${po.vendedor} creó una solicitud`, `po-${po.id}`);
+            }
+          })
+          .subscribe();
+
+        // Cleanup stored in a ref to be called on unmount
+        window.__lmRealtimeChannel = channel;
       } catch(e) {
         setError("No se pudo conectar con la base de datos. Verificá tu conexión.");
       } finally { setLoading(false); }
@@ -722,12 +764,6 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   const setStage = async (id,stage) => {
     const ord = orders.find(o=>o.id===id);
     let updated = {...ord, stage};
-
-    // Notificar cambio de estado
-    const stageLabels = { confirmado:"✅ Pedido confirmado", "en armado":"📦 Pedido en armado", entregado:"🎉 Pedido entregado" };
-    if(stageLabels[stage] && ord) {
-      sendLocalNotif(stageLabels[stage], `${ord.client} — ${ord.docNum||ord.compNum||""}`, `stage-${id}`);
-    }
 
     // When moving to "confirmado": assign Comp-XXXXXX (skip counter for test orders)
     if(stage === "confirmado" && !ord.compNum) {
