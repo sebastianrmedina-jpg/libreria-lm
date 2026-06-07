@@ -590,7 +590,13 @@ function Login({users, onLogin}) {
 
 // ─── ROOT APP ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(() => {
+    // Recuperar sesión guardada al iniciar
+    try {
+      const saved = localStorage.getItem("lm_session");
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
   const [users, setUsers]       = useState([]);
   const [vendors, setVendors]   = useState([]);
   const [products, setProducts] = useState([]);
@@ -613,6 +619,22 @@ export default function App() {
         ]);
         setUsers(u); setVendors(v); setProducts(p);
         setOrders(o); setQuotes(q); setStockLog(sl); setActivity(act); setPriceLists(pl); setPurchaseOrders(po); setNotifs(n);
+        // Refrescar sesión guardada con los datos actuales del usuario
+        try {
+          const saved = localStorage.getItem("lm_session");
+          if(saved) {
+            const savedUser = JSON.parse(saved);
+            const fresh = u.find(x => x.id === savedUser.id);
+            if(fresh) {
+              localStorage.setItem("lm_session", JSON.stringify(fresh));
+              setCurrentUser(fresh);
+            } else {
+              // Usuario eliminado — cerrar sesión
+              localStorage.removeItem("lm_session");
+              setCurrentUser(null);
+            }
+          }
+        } catch {}
 
         // ── Supabase Realtime: notificaciones cruzadas entre dispositivos ──
         const channel = supabase.channel("lm-realtime")
@@ -679,9 +701,15 @@ export default function App() {
       </div>
     </div>
   );
-  if(!currentUser) return <Login users={users} onLogin={u=>setCurrentUser(u)}/>;
+  if(!currentUser) return <Login users={users} onLogin={u=>{
+    localStorage.setItem("lm_session", JSON.stringify(u));
+    setCurrentUser(u);
+  }}/>;
   return <MainApp
-    currentUser={currentUser} onLogout={()=>setCurrentUser(null)}
+    currentUser={currentUser} onLogout={()=>{
+      localStorage.removeItem("lm_session");
+      setCurrentUser(null);
+    }}
     users={users} setUsers={setUsers}
     vendors={vendors} setVendors={setVendors}
     products={products} setProducts={setProducts}
