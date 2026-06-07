@@ -1050,6 +1050,9 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                   </select>
                 </div>
               )}
+              <div onClick={()=>{if(window.confirm("¿Seguro que querés salir de la app?")) onLogout();}} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:RED,cursor:"pointer"}}>
+                <span style={{fontSize:20,width:28,textAlign:"center"}}>🚪</span>Salir
+              </div>
               <div onClick={()=>{setShowChangePass(true);setMobileMenu(false);}} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:"#333",cursor:"pointer"}}>
                 <span style={{fontSize:20,width:28,textAlign:"center"}}>🔑</span>Cambiar contraseña
               </div>
@@ -1060,9 +1063,6 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                   {notifPermission==="denied"?"Notificaciones bloqueadas":"Activar notificaciones"}
                 </div>
               )}
-              <div onClick={()=>{if(window.confirm("¿Seguro que querés salir de la app?")) onLogout();}} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:RED,cursor:"pointer"}}>
-                <span style={{fontSize:20,width:28,textAlign:"center"}}>🚪</span>Salir
-              </div>
             </div>
           </div>
         </div>
