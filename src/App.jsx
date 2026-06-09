@@ -1227,7 +1227,9 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
         {tab==="central"    && <Central
           orders={isAdmin || currentUser.canSeeAll!==false
             ? orders
-            : orders.filter(o=>o.vendedor===currentUser.vendedor||o.vendedor===currentUser.name)}
+            : isTestUser
+              ? orders.filter(o=>o.isSandbox)
+              : orders.filter(o=>o.vendedor===currentUser.vendedor||o.vendedor===currentUser.name||o.vendedor===currentUser.username)}
           products={pricedProducts} onStage={setStage} onDel={delOrder} onSaveNote={saveNote}
           onRequestEdit={requestEdit} onApproveEditRequest={approveEditRequest} onRejectEditRequest={rejectEditRequest}
           onSubmitEdit={submitEdit} onApproveEdit={approveEdit} onRejectEdit={rejectEdit}
