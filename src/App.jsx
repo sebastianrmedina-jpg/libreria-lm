@@ -22,7 +22,7 @@ const supabase = createClient(SUPA_URL, SUPA_ANON);
 const supaAdmin = supabase;
 
 const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock});
-const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||""});
+const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||"",isTest:r.is_test||false,isSandbox:r.is_sandbox||false,internalNote:r.internal_note||"",editStatus:r.edit_status||"",editReason:r.edit_reason||"",editItems:r.edit_items||null,editRejectReason:r.edit_reject_reason||""});
 const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,date:r.date,items:r.items||[],validity:r.validity||"",docNum:r.doc_num||"",convertida:r.convertida||false,ordenId:r.orden_id||"",extendida:r.extendida||false,extendReason:r.extend_reason||"",extendDate:r.extend_date||"",globalDisc:r.global_disc||null,subtotal:r.subtotal||0});
 
 
@@ -82,7 +82,7 @@ const db = {
   deleteProduct: async (id) => { const {error} = await supaAdmin.from("lm_products").delete().eq("id",id); if(error) throw error; },
 
   getOrders:    async () => { const {data,error} = await supabase.from("lm_orders").select("*").order("date",{ascending:false}); if(error) throw error; return (data||[]).map(mapOrder); },
-  upsertOrder:  async (o) => { const {error} = await supaAdmin.from("lm_orders").upsert({id:o.id,client:o.client,vendedor:o.vendedor||"",notes:o.notes||"",total:o.total,stage:o.stage,date:o.date,items:o.items,doc_num:o.docNum||"",comp_num:o.compNum||""}); if(error) throw error; },
+  upsertOrder:  async (o) => { const {error} = await supaAdmin.from("lm_orders").upsert({id:o.id,client:o.client,vendedor:o.vendedor||"",notes:o.notes||"",total:o.total,stage:o.stage,date:o.date,items:o.items,doc_num:o.docNum||"",comp_num:o.compNum||"",is_test:o.isTest||false,is_sandbox:o.isSandbox||false,internal_note:o.internalNote||"",edit_status:o.editStatus||"",edit_reason:o.editReason||"",edit_items:o.editItems||null,edit_reject_reason:o.editRejectReason||""}); if(error) throw error; },
   deleteOrder:  async (id) => { const {error} = await supaAdmin.from("lm_orders").delete().eq("id",id); if(error) throw error; },
 
   getQuotes:    async () => { const {data,error} = await supabase.from("lm_quotes").select("*").order("date",{ascending:false}); if(error) throw error; return (data||[]).map(mapQuote); },
@@ -855,6 +855,75 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const ord = updated.find(o=>o.id===id);
     await db.upsertOrder(ord);
   };
+
+  // ── EDIT REQUEST FLOW ─────────────────────────────────────────────────────
+  // Fase 1: vendedor solicita edición
+  const requestEdit = async (id, reason) => {
+    const updated = orders.map(o=>o.id===id ? {...o, editStatus:"solicitada", editReason:reason} : o);
+    setOrders(updated);
+    await db.upsertOrder(updated.find(o=>o.id===id));
+    sendLocalNotif("✏️ Solicitud de edición", `${orders.find(o=>o.id===id)?.vendedor} quiere editar un pedido`, `edit-req-${id}`);
+  };
+
+  // Fase 2a: admin aprueba la solicitud → vendedor puede editar
+  const approveEditRequest = async (id) => {
+    const updated = orders.map(o=>o.id===id ? {...o, editStatus:"aprobada", editRejectReason:""} : o);
+    setOrders(updated);
+    await db.upsertOrder(updated.find(o=>o.id===id));
+    sendLocalNotif("✅ Edición aprobada", `Tu solicitud de edición fue aprobada`, `edit-apr-${id}`);
+  };
+
+  // Fase 2b: admin rechaza la solicitud
+  const rejectEditRequest = async (id, reason) => {
+    const updated = orders.map(o=>o.id===id ? {...o, editStatus:"rechazada", editRejectReason:reason} : o);
+    setOrders(updated);
+    await db.upsertOrder(updated.find(o=>o.id===id));
+    sendLocalNotif("❌ Edición rechazada", `Tu solicitud de edición fue rechazada`, `edit-rej-${id}`);
+  };
+
+  // Fase 3: vendedor guarda los cambios editados
+  const submitEdit = async (id, newItems, newTotal) => {
+    const updated = orders.map(o=>o.id===id ? {...o, editStatus:"en revisión", editItems:newItems, editTotal:newTotal} : o);
+    setOrders(updated);
+    await db.upsertOrder(updated.find(o=>o.id===id));
+    sendLocalNotif("👀 Cambios para revisar", `${orders.find(o=>o.id===id)?.vendedor} editó un pedido — revisá los cambios`, `edit-sub-${id}`);
+  };
+
+  // Fase 4a: admin aprueba los cambios finales
+  const approveEdit = async (id) => {
+    const ord = orders.find(o=>o.id===id);
+    if(!ord) return;
+    // Aplicar cambios: restaurar stock viejo, descontar nuevo
+    if(!ord.isSandbox) {
+      // Devolver stock de items originales
+      let prods = [...products];
+      ord.items.forEach(it => {
+        const idx = prods.findIndex(p=>p.id===it.pid);
+        if(idx>=0) prods[idx] = {...prods[idx], stock: prods[idx].stock + it.qty};
+      });
+      // Descontar stock de items nuevos
+      ord.editItems.forEach(it => {
+        const idx = prods.findIndex(p=>p.id===it.pid);
+        if(idx>=0) prods[idx] = {...prods[idx], stock: Math.max(0, prods[idx].stock - it.qty)};
+      });
+      setProducts(prods);
+      for(const p of prods.filter(p=>ord.items.find(i=>i.pid===p.id)||ord.editItems.find(i=>i.pid===p.id))) await db.upsertProduct(p);
+    }
+    const newTotal = ord.editItems.reduce((s,it)=>s+it.price*it.qty,0);
+    const updated = orders.map(o=>o.id===id ? {...o, items:ord.editItems, total:newTotal, editStatus:"", editItems:null, editReason:"", editRejectReason:""} : o);
+    setOrders(updated);
+    await db.upsertOrder(updated.find(o=>o.id===id));
+    sendLocalNotif("✅ Cambios aprobados", `Tu edición del pedido fue aprobada`, `edit-ok-${id}`);
+    await logActivity("Edición aprobada", `Pedido ${ord.docNum||ord.compNum||""} editado`, id, "pedido");
+  };
+
+  // Fase 4b: admin rechaza los cambios finales
+  const rejectEdit = async (id, reason) => {
+    const updated = orders.map(o=>o.id===id ? {...o, editStatus:"cambios rechazados", editRejectReason:reason, editItems:null} : o);
+    setOrders(updated);
+    await db.upsertOrder(updated.find(o=>o.id===id));
+    sendLocalNotif("❌ Cambios rechazados", `El admin rechazó tu edición`, `edit-no-${id}`);
+  };
   const addQuote = async (quote) => {
     const test = isTestOrder(quote.vendedor);
     const n = test ? 0 : await db.nextCounter("presu");
@@ -1159,7 +1228,10 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
           orders={isAdmin || currentUser.canSeeAll!==false
             ? orders
             : orders.filter(o=>o.vendedor===currentUser.vendedor||o.vendedor===currentUser.name)}
-          products={products} onStage={setStage} onDel={delOrder} onSaveNote={saveNote} isMobile={isMobile}/>}
+          products={pricedProducts} onStage={setStage} onDel={delOrder} onSaveNote={saveNote}
+          onRequestEdit={requestEdit} onApproveEditRequest={approveEditRequest} onRejectEditRequest={rejectEditRequest}
+          onSubmitEdit={submitEdit} onApproveEdit={approveEdit} onRejectEdit={rejectEdit}
+          currentUser={currentUser} isMobile={isMobile}/>}
         {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile}/>}
         {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile}/>}
         {tab==="precios"    && <Precios products={pricedProducts}/>}
@@ -1298,7 +1370,7 @@ function CompPopup({order, onClose}) {
 
 
 // ─── CENTRAL ──────────────────────────────────────────────────────────────────
-function Central({orders,products,onStage,onDel,onSaveNote,isMobile}) {
+function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,currentUser,isMobile}) {
   const [fStage,setFStage]=useState("todos");
   const [fVendedor,setFVendedor]=useState("todos");
   const [search,setSearch]=useState("");
@@ -1334,7 +1406,7 @@ function Central({orders,products,onStage,onDel,onSaveNote,isMobile}) {
       </div>
       {filtered.length===0
         ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{fontSize:48}}>📭</div><div style={{marginTop:8}}>No hay pedidos. !Creá uno desde "Nuevo Pedido"!</div></div>
-        : filtered.map(o=><OCard key={o.id} o={o} exp={expanded===o.id} toggle={()=>setExpanded(expanded===o.id?null:o.id)} getP={getP} onStage={onStage} onDel={onDel} onSaveNote={onSaveNote}/>)
+        : filtered.map(o=><OCard key={o.id} o={o} exp={expanded===o.id} toggle={()=>setExpanded(expanded===o.id?null:o.id)} getP={getP} onStage={onStage} onDel={onDel} onSaveNote={onSaveNote} onRequestEdit={onRequestEdit} onApproveEditRequest={onApproveEditRequest} onRejectEditRequest={onRejectEditRequest} onSubmitEdit={onSubmitEdit} onApproveEdit={onApproveEdit} onRejectEdit={onRejectEdit} currentUser={currentUser} products={products}/>)
       }
     </div>
   );
@@ -1352,10 +1424,47 @@ function DelBtn({onConfirm}) {
   return <button onClick={()=>setConfirm(true)} style={{marginLeft:"auto",padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>🗑 Eliminar</button>;
 }
 
-function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote}) {
+function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,currentUser,products}) {
+  const isAdmin = currentUser?.role === "admin";
   const idx=STAGES.indexOf(o.stage), next=STAGES[idx+1];
   const [editNote,setEditNote]=useState(false);
   const [noteVal,setNoteVal]=useState(o.internalNote||"");
+
+  // Edit request states
+  const [showReqForm, setShowReqForm]     = useState(false);
+  const [reqReason,   setReqReason]       = useState("");
+  const [showRejectForm, setShowRejectForm] = useState(false);
+  const [rejectReason, setRejectReason]   = useState("");
+  const [showEditMode, setShowEditMode]   = useState(false);
+  const [editItems,   setEditItems]       = useState([]);
+  const [showFinalReject, setShowFinalReject] = useState(false);
+  const [finalRejectReason, setFinalRejectReason] = useState("");
+  const [saving, setSaving]               = useState(false);
+
+  const es = o.editStatus || "";
+
+  // Edit badge
+  const EditBdg = () => {
+    if(!es) return null;
+    const cfg = {
+      "solicitada":        {bg:"#fef9e7",color:"#b7770d",border:"#f0d080",label:"✏️ Edición solicitada"},
+      "aprobada":          {bg:"#eafaf1",color:"#1e8449",border:"#a9dfbf",label:"✅ Podés editar"},
+      "rechazada":         {bg:"#fdecea",color:"#c0392b",border:"#f1948a",label:"❌ Edición rechazada"},
+      "en revisión":       {bg:"#eaf4fc",color:"#1a5276",border:"#aed6f1",label:"👀 Cambios en revisión"},
+      "cambios rechazados":{bg:"#fdecea",color:"#c0392b",border:"#f1948a",label:"❌ Cambios rechazados"},
+    };
+    const c = cfg[es]; if(!c) return null;
+    return <span style={{background:c.bg,color:c.color,border:`1px solid ${c.border}`,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>{c.label}</span>;
+  };
+
+  const startEditMode = () => {
+    setEditItems(o.items.map(it=>({...it})));
+    setShowEditMode(true);
+  };
+  const updEditItem = (pid,qty) => setEditItems(prev=>prev.map(it=>it.pid===pid?{...it,qty:Math.max(1,qty)}:it));
+  const remEditItem = pid => setEditItems(prev=>prev.filter(it=>it.pid!==pid));
+  const editTotal = editItems.reduce((s,it)=>s+it.price*it.qty,0);
+
   return (
     <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 6px #0001",overflow:"hidden",marginBottom:8}}>
       <div onClick={toggle} style={{padding:"13px 18px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",cursor:"pointer"}}>
@@ -1369,6 +1478,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote}) {
             <span>{o.date}</span>
             {o.vendedor&&<span>· 👤 {o.vendedor}</span>}
             {o.internalNote&&<span style={{color:"#e67e22"}}>· 📝 Nota</span>}
+            <EditBdg/>
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
@@ -1377,16 +1487,191 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote}) {
           <span style={{color:"#ccc"}}>{exp?"▲":"▼"}</span>
         </div>
       </div>
+
       {exp && (
         <div style={{borderTop:"1px solid #f5f5f5",padding:18}}>
+
+          {/* PROGRESS BAR */}
           <div style={{display:"flex",marginBottom:18,overflowX:"auto"}}>
             {STAGES.map((s,i)=>{const done=i<=idx,c=SCFG[s];return <div key={s} style={{display:"flex",alignItems:"center",flex:1,minWidth:65}}><div style={{textAlign:"center",flex:1}}><div style={{width:30,height:30,borderRadius:"50%",background:done?c.color:"#eee",color:done?"#fff":"#aaa",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 4px",fontSize:13}}>{done?c.icon:"○"}</div><div style={{fontSize:10,color:done?c.color:"#aaa",fontWeight:done?700:400}}>{c.label}</div></div>{i<3&&<div style={{height:2,background:i<idx?RED:"#eee",flex:1}}/>}</div>;})}
           </div>
+
+          {/* ── EDIT STATUS BLOCKS ── */}
+
+          {/* Admin: solicitud pendiente */}
+          {isAdmin && es==="solicitada" && (
+            <div style={{background:"#fef9e7",border:"1.5px solid #f0d080",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
+              <div style={{fontWeight:800,fontSize:13,color:"#b7770d",marginBottom:4}}>✏️ Solicitud de edición</div>
+              <div style={{fontSize:12,color:"#7d6608",marginBottom:10}}>Motivo: "{o.editReason}"</div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <button onClick={async()=>{setSaving(true);await onApproveEditRequest(o.id);setSaving(false);}}
+                  style={{padding:"7px 14px",borderRadius:8,border:"none",background:"#1e8449",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                  ✅ Aprobar solicitud
+                </button>
+                {!showRejectForm && <button onClick={()=>setShowRejectForm(true)}
+                  style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #f1948a",background:"#fff",color:"#c0392b",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                  ❌ Rechazar
+                </button>}
+              </div>
+              {showRejectForm && (
+                <div style={{marginTop:10}} onClick={e=>e.stopPropagation()}>
+                  <textarea value={rejectReason} onChange={e=>setRejectReason(e.target.value)}
+                    placeholder="Motivo del rechazo..."
+                    style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #f1948a",fontSize:13,resize:"vertical",minHeight:60,outline:"none",boxSizing:"border-box"}}/>
+                  <div style={{display:"flex",gap:8,marginTop:6}}>
+                    <button onClick={async()=>{if(!rejectReason.trim())return;setSaving(true);await onRejectEditRequest(o.id,rejectReason);setShowRejectForm(false);setRejectReason("");setSaving(false);}}
+                      disabled={!rejectReason.trim()}
+                      style={{padding:"6px 14px",borderRadius:7,border:"none",background:rejectReason.trim()?"#c0392b":"#e5e5e5",color:rejectReason.trim()?"#fff":"#aaa",fontWeight:700,fontSize:12,cursor:rejectReason.trim()?"pointer":"not-allowed"}}>
+                      Confirmar rechazo
+                    </button>
+                    <button onClick={()=>{setShowRejectForm(false);setRejectReason("");}}
+                      style={{padding:"6px 12px",borderRadius:7,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:12,cursor:"pointer"}}>Cancelar</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Vendedor: solicitud enviada esperando */}
+          {!isAdmin && es==="solicitada" && (
+            <div style={{background:"#fef9e7",border:"1.5px solid #f0d080",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#b7770d",fontWeight:600}}>
+              ⏳ Solicitud de edición enviada al admin. Esperando aprobación...
+            </div>
+          )}
+
+          {/* Vendedor: solicitud rechazada */}
+          {!isAdmin && es==="rechazada" && (
+            <div style={{background:"#fdecea",border:"1.5px solid #f1948a",borderRadius:10,padding:"10px 14px",marginBottom:14}}>
+              <div style={{fontWeight:800,fontSize:13,color:"#c0392b",marginBottom:3}}>❌ Solicitud rechazada</div>
+              <div style={{fontSize:12,color:"#922b21"}}>Motivo: "{o.editRejectReason}"</div>
+              <button onClick={()=>{const u=orders||[];}}
+                style={{marginTop:8,padding:"5px 12px",borderRadius:7,border:"1px solid #f1948a",background:"#fff",color:"#c0392b",fontSize:11,fontWeight:600,cursor:"pointer"}}
+                onClick={async()=>{setSaving(true);await onRequestEdit(o.id,"");setSaving(false);}}>
+                Volver a solicitar
+              </button>
+            </div>
+          )}
+
+          {/* Vendedor: aprobada — puede editar */}
+          {!isAdmin && es==="aprobada" && !showEditMode && (
+            <div style={{background:"#eafaf1",border:"1.5px solid #a9dfbf",borderRadius:10,padding:"10px 14px",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+              <div>
+                <div style={{fontWeight:800,fontSize:13,color:"#1e8449"}}>✅ Edición aprobada</div>
+                <div style={{fontSize:12,color:"#1a5276",marginTop:2}}>El admin autorizó la edición. Hacé tus cambios y enviá para revisión final.</div>
+              </div>
+              <button onClick={startEditMode}
+                style={{padding:"8px 16px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#1a5276,#2980b9)",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+                ✏️ Editar pedido
+              </button>
+            </div>
+          )}
+
+          {/* EDIT MODE — formulario de edición */}
+          {!isAdmin && es==="aprobada" && showEditMode && (
+            <div style={{background:"#eaf4fc",border:"1.5px solid #aed6f1",borderRadius:10,padding:"14px",marginBottom:14}} onClick={e=>e.stopPropagation()}>
+              <div style={{fontWeight:800,fontSize:13,color:"#1a5276",marginBottom:10}}>✏️ Editando pedido</div>
+              {editItems.map((it,i)=>{
+                const p = getP(it.pid);
+                return (
+                  <div key={it.pid} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #d6eaf8",flexWrap:"wrap"}}>
+                    <div style={{flex:1,fontSize:13,fontWeight:600,color:"#1a1a1a"}}>{p?.name||it.name}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <button onClick={()=>updEditItem(it.pid,it.qty-1)} style={{width:28,height:28,borderRadius:7,border:"1.5px solid #aed6f1",background:"#fff",fontWeight:800,cursor:"pointer",fontSize:14}}>−</button>
+                      <span style={{minWidth:28,textAlign:"center",fontWeight:700}}>{it.qty}</span>
+                      <button onClick={()=>updEditItem(it.pid,it.qty+1)} style={{width:28,height:28,borderRadius:7,border:"1.5px solid #aed6f1",background:"#fff",fontWeight:800,cursor:"pointer",fontSize:14}}>+</button>
+                    </div>
+                    <span style={{fontWeight:700,color:RED,minWidth:80,textAlign:"right"}}>{fARS(it.price*it.qty)}</span>
+                    <button onClick={()=>remEditItem(it.pid)} style={{background:"none",border:"none",color:"#c0392b",fontSize:18,cursor:"pointer",lineHeight:1}}>×</button>
+                  </div>
+                );
+              })}
+              <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:15,color:RED,padding:"10px 0",borderTop:"2px solid #d6eaf8",margin:"8px 0"}}>
+                <span>Nuevo total</span><span>{fARS(editTotal)}</span>
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={async()=>{if(!editItems.length)return;setSaving(true);await onSubmitEdit(o.id,editItems,editTotal);setShowEditMode(false);setSaving(false);}}
+                  disabled={!editItems.length||saving}
+                  style={{padding:"8px 16px",borderRadius:8,border:"none",background:editItems.length?"linear-gradient(135deg,#1a5276,#2980b9)":"#e5e5e5",color:editItems.length?"#fff":"#aaa",fontWeight:700,fontSize:13,cursor:editItems.length?"pointer":"not-allowed"}}>
+                  {saving?"Enviando...":"📤 Enviar para revisión"}
+                </button>
+                <button onClick={()=>setShowEditMode(false)}
+                  style={{padding:"8px 12px",borderRadius:8,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:13,cursor:"pointer"}}>Cancelar</button>
+              </div>
+            </div>
+          )}
+
+          {/* Admin: cambios en revisión — comparación original vs nuevo */}
+          {isAdmin && es==="en revisión" && (
+            <div style={{background:"#eaf4fc",border:"1.5px solid #aed6f1",borderRadius:10,padding:"14px",marginBottom:14}}>
+              <div style={{fontWeight:800,fontSize:13,color:"#1a5276",marginBottom:12}}>👀 Revisión de cambios — {o.vendedor}</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:"#888",marginBottom:6}}>ORIGINAL</div>
+                  {o.items.map((it,i)=>{const p=getP(it.pid);return <div key={i} style={{fontSize:12,color:"#555",padding:"3px 0",borderBottom:"1px solid #f0f0f0"}}>{p?.name||it.name} × {it.qty} — {fARS(it.price*it.qty)}</div>;})}
+                  <div style={{fontWeight:700,fontSize:13,color:"#555",marginTop:6}}>{fARS(o.total)}</div>
+                </div>
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:"#1a5276",marginBottom:6}}>NUEVO</div>
+                  {(o.editItems||[]).map((it,i)=>{
+                    const p=getP(it.pid);
+                    const orig=o.items.find(x=>x.pid===it.pid);
+                    const changed=!orig||orig.qty!==it.qty;
+                    return <div key={i} style={{fontSize:12,color:changed?"#1a5276":"#555",fontWeight:changed?700:400,padding:"3px 0",borderBottom:"1px solid #f0f0f0"}}>{p?.name||it.name} × {it.qty} — {fARS(it.price*it.qty)}{changed?" ✏️":""}</div>;
+                  })}
+                  <div style={{fontWeight:800,fontSize:13,color:RED,marginTop:6}}>{fARS((o.editItems||[]).reduce((s,it)=>s+it.price*it.qty,0))}</div>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <button onClick={async()=>{setSaving(true);await onApproveEdit(o.id);setSaving(false);}}
+                  style={{padding:"8px 16px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#1a5e20,#1e8449)",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+                  ✅ Aprobar cambios
+                </button>
+                {!showFinalReject && <button onClick={()=>setShowFinalReject(true)}
+                  style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #f1948a",background:"#fff",color:"#c0392b",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+                  ❌ Rechazar cambios
+                </button>}
+              </div>
+              {showFinalReject && (
+                <div style={{marginTop:10}} onClick={e=>e.stopPropagation()}>
+                  <textarea value={finalRejectReason} onChange={e=>setFinalRejectReason(e.target.value)}
+                    placeholder="Motivo del rechazo..."
+                    style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #f1948a",fontSize:13,resize:"vertical",minHeight:60,outline:"none",boxSizing:"border-box"}}/>
+                  <div style={{display:"flex",gap:8,marginTop:6}}>
+                    <button onClick={async()=>{if(!finalRejectReason.trim())return;setSaving(true);await onRejectEdit(o.id,finalRejectReason);setShowFinalReject(false);setFinalRejectReason("");setSaving(false);}}
+                      disabled={!finalRejectReason.trim()}
+                      style={{padding:"6px 14px",borderRadius:7,border:"none",background:finalRejectReason.trim()?"#c0392b":"#e5e5e5",color:finalRejectReason.trim()?"#fff":"#aaa",fontWeight:700,fontSize:12,cursor:finalRejectReason.trim()?"pointer":"not-allowed"}}>
+                      Confirmar rechazo
+                    </button>
+                    <button onClick={()=>{setShowFinalReject(false);setFinalRejectReason("");}}
+                      style={{padding:"6px 12px",borderRadius:7,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:12,cursor:"pointer"}}>Cancelar</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Vendedor: cambios en revisión */}
+          {!isAdmin && es==="en revisión" && (
+            <div style={{background:"#eaf4fc",border:"1.5px solid #aed6f1",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#1a5276",fontWeight:600}}>
+              👀 Tus cambios fueron enviados. El admin está revisando la edición final.
+            </div>
+          )}
+
+          {/* Vendedor: cambios rechazados en revisión final */}
+          {!isAdmin && es==="cambios rechazados" && (
+            <div style={{background:"#fdecea",border:"1.5px solid #f1948a",borderRadius:10,padding:"10px 14px",marginBottom:14}}>
+              <div style={{fontWeight:800,fontSize:13,color:"#c0392b",marginBottom:3}}>❌ Cambios rechazados por el admin</div>
+              <div style={{fontSize:12,color:"#922b21"}}>Motivo: "{o.editRejectReason}"</div>
+              <div style={{fontSize:11,color:"#888",marginTop:4}}>El pedido quedó con los datos originales.</div>
+            </div>
+          )}
+
+          {/* ITEMS LIST */}
           {o.items.map((it,i)=>{const p=getP(it.pid);return <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f9f9f9",fontSize:13}}><span style={{color:"#444"}}>{p?.name||it.name} x {it.qty}</span><span style={{fontWeight:600}}>{fARS(it.price*it.qty)}</span></div>;})}
           <div style={{display:"flex",justifyContent:"flex-end",fontWeight:800,fontSize:16,color:RED,margin:"8px 0 12px"}}>{fARS(o.total)}</div>
           {o.notes&&<div style={{background:"#f9f9f9",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#555",marginBottom:12}}>💬 {o.notes}</div>}
 
-          {/* ── NOTA INTERNA ── */}
+          {/* NOTA INTERNA */}
           <div style={{background:"#fffbf0",border:"1.5px solid #f0d080",borderRadius:10,padding:"10px 14px",marginBottom:14}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
               <span style={{fontSize:12,fontWeight:700,color:"#b7770d"}}>📝 Nota interna (solo admin)</span>
@@ -1397,527 +1682,52 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote}) {
             </div>
             {editNote ? (
               <div onClick={e=>e.stopPropagation()}>
-                <textarea value={noteVal} onChange={e=>setNoteVal(e.target.value)}
-                  placeholder="Escribí una nota interna..."
+                <textarea value={noteVal} onChange={e=>setNoteVal(e.target.value)} placeholder="Escribí una nota interna..."
                   style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #f0d080",fontSize:13,resize:"vertical",minHeight:64,outline:"none",boxSizing:"border-box",background:"#fff"}}/>
                 <div style={{display:"flex",gap:8,marginTop:6}}>
                   <button onClick={async(e)=>{e.stopPropagation();await onSaveNote(o.id,noteVal);setEditNote(false);}}
-                    style={{padding:"6px 14px",borderRadius:7,border:"none",background:"#b7770d",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-                    💾 Guardar
-                  </button>
+                    style={{padding:"6px 14px",borderRadius:7,border:"none",background:"#b7770d",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer"}}>💾 Guardar</button>
                   <button onClick={(e)=>{e.stopPropagation();setEditNote(false);setNoteVal(o.internalNote||"");}}
-                    style={{padding:"6px 12px",borderRadius:7,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:12,cursor:"pointer"}}>
-                    Cancelar
-                  </button>
+                    style={{padding:"6px 12px",borderRadius:7,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:12,cursor:"pointer"}}>Cancelar</button>
                 </div>
               </div>
             ) : (
-              <div style={{fontSize:13,color:o.internalNote?"#5d4037":"#aaa",fontStyle:o.internalNote?"normal":"italic"}}>
-                {o.internalNote||"Sin nota interna"}
-              </div>
+              <div style={{fontSize:13,color:o.internalNote?"#5d4037":"#aaa",fontStyle:o.internalNote?"normal":"italic"}}>{o.internalNote||"Sin nota interna"}</div>
             )}
           </div>
 
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {next&&<button onClick={()=>onStage(o.id,next)} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",background:SCFG[next].color,color:"#fff",fontWeight:700,fontSize:13}}>{SCFG[next].icon} Pasar a {SCFG[next].label}</button>}
-            {idx>0&&o.stage!=="entregado"&&<button onClick={()=>onStage(o.id,STAGES[idx-1])} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",cursor:"pointer",background:"#fff",color:"#666",fontWeight:600,fontSize:13}}>← Retroceder</button>}
-            <button onClick={()=>printDoc(o, o.stage==="reserva" ? "reserva" : "confirmado")} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #d6eaf8",cursor:"pointer",background:"#fff",color:"#1a5276",fontWeight:600,fontSize:13}}>
-              🖨️ {o.stage==="reserva" ? (o.docNum||"Imprimir") : (o.compNum||"Imprimir")}
+          {/* ACTIONS */}
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+            {next&&!es&&<button onClick={()=>onStage(o.id,next)} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",background:SCFG[next].color,color:"#fff",fontWeight:700,fontSize:13}}>{SCFG[next].icon} Pasar a {SCFG[next].label}</button>}
+            {idx>0&&o.stage!=="entregado"&&!es&&<button onClick={()=>onStage(o.id,STAGES[idx-1])} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",cursor:"pointer",background:"#fff",color:"#666",fontWeight:600,fontSize:13}}>← Retroceder</button>}
+            <button onClick={()=>printDoc(o, o.stage==="reserva"?"reserva":"confirmado")} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #d6eaf8",cursor:"pointer",background:"#fff",color:"#1a5276",fontWeight:600,fontSize:13}}>
+              🖨️ {o.stage==="reserva"?(o.docNum||"Imprimir"):(o.compNum||"Imprimir")}
             </button>
+            {/* Solicitar edición — solo vendedor, solo si no hay edición en curso */}
+            {!isAdmin && !es && o.stage!=="entregado" && (
+              !showReqForm
+                ? <button onClick={(e)=>{e.stopPropagation();setShowReqForm(true);}}
+                    style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #aed6f1",background:"#fff",color:"#1a5276",fontWeight:600,fontSize:13,cursor:"pointer"}}>
+                    ✏️ Solicitar edición
+                  </button>
+                : <div style={{width:"100%",marginTop:8}} onClick={e=>e.stopPropagation()}>
+                    <textarea value={reqReason} onChange={e=>setReqReason(e.target.value)}
+                      placeholder="Motivo de la edición..."
+                      style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #aed6f1",fontSize:13,resize:"vertical",minHeight:60,outline:"none",boxSizing:"border-box"}}/>
+                    <div style={{display:"flex",gap:8,marginTop:6}}>
+                      <button onClick={async()=>{if(!reqReason.trim())return;setSaving(true);await onRequestEdit(o.id,reqReason);setShowReqForm(false);setReqReason("");setSaving(false);}}
+                        disabled={!reqReason.trim()||saving}
+                        style={{padding:"6px 14px",borderRadius:7,border:"none",background:reqReason.trim()?"#1a5276":"#e5e5e5",color:reqReason.trim()?"#fff":"#aaa",fontWeight:700,fontSize:12,cursor:reqReason.trim()?"pointer":"not-allowed"}}>
+                        {saving?"Enviando...":"📤 Enviar solicitud"}
+                      </button>
+                      <button onClick={()=>{setShowReqForm(false);setReqReason("");}}
+                        style={{padding:"6px 12px",borderRadius:7,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:12,cursor:"pointer"}}>Cancelar</button>
+                    </div>
+                  </div>
+            )}
             <DelBtn onConfirm={()=>onDel(o.id)}/>
           </div>
         </div>
-      )}
-    </div>
-  );
-}
-
-// ─── BUSCADOR DE PRECIOS ──────────────────────────────────────────────────────
-function Precios({products}) {
-  const [search, setSearch] = useState("");
-  const [cat, setCat]       = useState("todos");
-  const [catOpen, setCatOpen] = useState(false);
-  const [sortBy, setSortBy] = useState("nombre");
-  const CATS = useMemo(()=>["todos",...new Set(products.map(p=>p.category))].sort(),[products]);
-  const shown = useMemo(()=>{
-    const q = search.toLowerCase();
-    let list = products.filter(p=>{
-      if(cat!=="todos" && p.category!==cat) return false;
-      if(q) return norm(p.name).includes(norm(q)) || normSKU(p.id).includes(normSKU(q));
-      return true;
-    });
-    if(sortBy==="precio_asc")  list=[...list].sort((a,b)=>a.salePrice-b.salePrice);
-    if(sortBy==="precio_desc") list=[...list].sort((a,b)=>b.salePrice-a.salePrice);
-    if(sortBy==="nombre")      list=[...list].sort((a,b)=>a.name.localeCompare(b.name));
-    return list.slice(0,200);
-  },[products,search,cat,sortBy]);
-  return (
-    <div>
-      <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:14,boxShadow:"0 1px 4px #0001"}}>
-        <div style={{fontWeight:800,fontSize:16,marginBottom:12,color:"#1a1a1a"}}>🏷️️ Buscador de Precios</div>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscá por nombre o código..." style={{width:"100%",padding:"10px 14px",borderRadius:10,border:"1.5px solid #e5e5e5",fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:10}} autoFocus/>
-        <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
-          <div style={{position:"relative",flex:1,minWidth:200}}>
-            <button onClick={()=>setCatOpen(o=>!o)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"8px 12px",borderRadius:8,border:`1.5px solid ${catOpen?RED:"#e5e5e5"}`,background:cat!=="todos"?"#fdecea":"#fff",color:cat!=="todos"?RED:"#666",cursor:"pointer",fontSize:13,fontWeight:600}}>
-              <span>🏷️️ {cat==="todos"?"Todas las categorías":cat}</span><span style={{fontSize:10}}>{catOpen?"^":"v"}</span>
-            </button>
-            {catOpen&&(<div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#fff",borderRadius:10,border:"1.5px solid #e5e5e5",boxShadow:"0 8px 24px #0002",zIndex:50,padding:8,display:"flex",flexWrap:"wrap",gap:5,maxHeight:220,overflowY:"auto"}}>
-              {CATS.map(c=>(<button key={c} onClick={()=>{setCat(c);setCatOpen(false);}} style={{padding:"4px 11px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:cat===c?RED:"#e5e5e5",background:cat===c?"#fdecea":"#fff",color:cat===c?RED:"#666"}}>{c==="todos"?"Todos":c}</button>))}
-            </div>)}
-          </div>
-          <div style={{display:"flex",gap:5}}>
-            {[{v:"nombre",l:"A-Z"},{v:"precio_asc",l:"Precio ↑"},{v:"precio_desc",l:"Precio ↓"}].map(opt=>(
-              <button key={opt.v} onClick={()=>setSortBy(opt.v)} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid",cursor:"pointer",fontSize:12,fontWeight:600,borderColor:sortBy===opt.v?RED:"#e5e5e5",background:sortBy===opt.v?"#fdecea":"#fff",color:sortBy===opt.v?RED:"#666"}}>{opt.l}</button>
-            ))}
-          </div>
-          <div style={{fontSize:12,color:"#aaa",whiteSpace:"nowrap"}}>{shown.length} producto{shown.length!==1?"s":""}{shown.length===200?" (máx 200)":""}</div>
-        </div>
-      </div>
-      {shown.length===0
-        ? <div style={{textAlign:"center",padding:60,color:"#aaa",background:"#fff",borderRadius:12}}><div style={{fontSize:48,marginBottom:8}}>🔍</div><div>No se encontraron productos</div></div>
-        : <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 4px #0001",overflow:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-              <thead><tr style={{background:"#f9f9f9",position:"sticky",top:0}}>{["Código","Descripción","Categoría","Precio"].map(h=>(<th key={h} style={{padding:"11px 14px",textAlign:"left",fontWeight:700,color:"#888",fontSize:11,textTransform:"uppercase",letterSpacing:.5,whiteSpace:"nowrap"}}>{h}</th>))}</tr></thead>
-              <tbody>
-                {shown.map(p=>(<tr key={p.id} style={{borderTop:"1px solid #f5f5f5"}} onMouseEnter={e=>e.currentTarget.style.background="#fafafa"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                  <td style={{padding:"10px 14px",color:"#999",fontSize:11,whiteSpace:"nowrap"}}>{p.id}</td>
-                  <td style={{padding:"10px 14px",fontWeight:600,color:"#1a1a1a",maxWidth:320}}>{p.name}</td>
-                  <td style={{padding:"10px 14px"}}><span style={{background:"#f5f5f5",color:"#666",borderRadius:6,padding:"2px 8px",fontSize:11,fontWeight:500}}>{p.category}</span></td>
-                  <td style={{padding:"10px 14px",whiteSpace:"nowrap"}}><span style={{fontWeight:800,fontSize:15,color:RED}}>{fARS(p.salePrice)}</span></td>
-                </tr>))}
-              </tbody>
-            </table>
-          </div>
-      }
-    </div>
-  );
-}
-
-// ─── NUEVO PEDIDO ─────────────────────────────────────────────────────────────
-function ProductSelector({products,cart,setCart,isMobile}) {
-  const [search,setSearch]=useState("");
-  const [cat,setCat]=useState("todos");
-  const [catOpen,setCatOpen]=useState(false);
-  const [discOpen,setDiscOpen]=useState(null);
-  const [page,setPage]=useState(0);
-  const PAGE_SIZE = 50;
-
-  const CATS=useMemo(()=>["todos",...new Set(products.map(p=>p.category))].sort(),[products]);
-
-  const [soloConStock, setSoloConStock] = useState(false);
-
-  // Reset page when search or category changes
-  useEffect(()=>setPage(0),[search,cat,soloConStock]);
-
-  const filtered=useMemo(()=>{
-    const q=search.toLowerCase();
-    return products.filter(p=>{
-      if(soloConStock && p.stock<=0) return false;
-      if(cat!=="todos"&&p.category!==cat) return false;
-      if(q) return norm(p.name).includes(norm(q))||normSKU(p.id).includes(normSKU(q));
-      return true;
-    });
-  },[products,search,cat,soloConStock]);
-
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const shown = filtered.slice(page*PAGE_SIZE, (page+1)*PAGE_SIZE);
-
-  const addC=p=>setCart(c=>{const ex=c.find(i=>i.pid===p.id);return ex?c.map(i=>i.pid===p.id?{...i,qty:i.qty+1}:i):[...c,{pid:p.id,qty:1,price:p.salePrice,name:p.name,disc:{type:"%",value:""}}];});
-  const setQ=(pid,qty)=>{if(qty<=0){setCart(c=>c.filter(i=>i.pid!==pid));setDiscOpen(null);}else setCart(c=>c.map(i=>i.pid===pid?{...i,qty}:i));};
-  const setDisc=(pid,field,val)=>setCart(c=>c.map(i=>i.pid===pid?{...i,disc:{...(i.disc||{type:"%",value:""}),[field]:val}}:i));
-
-  return (
-    <div>
-      <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px #0001"}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar por nombre o código..." style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",marginBottom:10,boxSizing:"border-box"}}/>
-        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-          <div style={{position:"relative",flex:1,minWidth:180}}>
-            <button onClick={()=>setCatOpen(o=>!o)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"8px 12px",borderRadius:8,border:`1.5px solid ${catOpen?RED:"#e5e5e5"}`,background:cat!=="todos"?"#fdecea":"#fff",color:cat!=="todos"?RED:"#666",cursor:"pointer",fontSize:13,fontWeight:600}}>
-              <span>🏷️ {cat==="todos"?"Todas las categorías":cat}</span><span style={{fontSize:10,marginLeft:6}}>{catOpen?"^":"v"}</span>
-            </button>
-            {catOpen&&(<div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#fff",borderRadius:10,border:"1.5px solid #e5e5e5",boxShadow:"0 8px 24px #0002",zIndex:50,padding:8,display:"flex",flexWrap:"wrap",gap:5,maxHeight:220,overflowY:"auto"}}>
-              {CATS.map(c=><button key={c} onClick={()=>{setCat(c);setCatOpen(false);}} style={{padding:"4px 11px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:cat===c?RED:"#e5e5e5",background:cat===c?"#fdecea":"#fff",color:cat===c?RED:"#666"}}>{c==="todos"?"Todos":c}</button>)}
-            </div>)}
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-            <div style={{fontSize:12,color:"#888",whiteSpace:"nowrap"}}>
-              <span style={{fontWeight:700,color:RED}}>{filtered.length.toLocaleString("es-AR")}</span> productos
-              {(search||cat!=="todos"||soloConStock)&&<span style={{color:"#aaa"}}> de {products.length.toLocaleString("es-AR")}</span>}
-            </div>
-            <button onClick={()=>setSoloConStock(s=>!s)}
-              style={{padding:"5px 12px",borderRadius:8,border:`1.5px solid ${soloConStock?"#1e8449":"#e5e5e5"}`,background:soloConStock?"#d5f5e3":"#fff",color:soloConStock?"#1e8449":"#666",fontWeight:700,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>
-              {soloConStock ? "✅ Con stock" : "📦 Solo con stock"}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Items en carrito — siempre visibles arriba */}
-      {cart.length>0&&(
-        <div style={{background:"#d5f5e3",border:"1.5px solid #1e8449",borderRadius:10,padding:"8px 14px",marginBottom:12,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-          <span style={{fontSize:12,fontWeight:700,color:"#1e8449"}}>✅ {cart.length} producto{cart.length!==1?"s":""} en el carrito</span>
-          {cart.map(i=>(
-            <span key={i.pid} style={{background:"#fff",borderRadius:6,padding:"2px 8px",fontSize:11,color:"#1a1a1a",border:"1px solid #a9dfbf"}}>
-              {i.name.slice(0,20)}{i.name.length>20?"...":""} ×{i.qty}
-            </span>
-          ))}
-        </div>
-      )}
-
-      <div style={{display:isMobile?"flex":"grid",flexDirection:isMobile?"column":undefined,gridTemplateColumns:isMobile?undefined:"repeat(auto-fill,minmax(195px,1fr))",gap:isMobile?8:10,padding:isMobile?"0 12px":0}}>
-        {shown.length===0
-          ? <div style={{gridColumn:"1/-1",textAlign:"center",padding:40,color:"#aaa",background:"#fff",borderRadius:12}}>
-              <div style={{fontSize:36,marginBottom:8}}>🔍</div>
-              <div>Sin resultados. Probá con otra búsqueda.</div>
-            </div>
-          : shown.map(p=>{
-          const ic=cart.find(i=>i.pid===p.id);
-          const hasDisc=ic&&parseFloat(ic.disc?.value)>0;
-          const discLabel=ic?fmtDisc(ic.disc):null;
-          const finalPrice=ic?applyItemDiscount(ic.price,ic.qty,ic.disc):0;
-          return isMobile
-          ? (
-            // ── MOBILE: single-column row ──
-            <div key={p.id} style={{background:"#fff",borderRadius:12,padding:"12px 14px",border:`2px solid ${ic?RED:"transparent"}`,boxShadow:"0 1px 4px #0001",display:"flex",alignItems:"center",gap:12}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontWeight:700,fontSize:13,color:"#1a1a1a",lineHeight:1.3,marginBottom:2}}>{p.name}</div>
-                <div style={{fontSize:10,color:"#aaa",marginBottom:5}}>{p.id} · {p.category}</div>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <span style={{fontSize:16,fontWeight:900,color:RED}}>{fARS(p.salePrice)}</span>
-                  {hasDisc&&<span style={{fontSize:10,color:"#1e8449",fontWeight:700,background:"#d5f5e3",borderRadius:4,padding:"1px 4px"}}>{discLabel}</span>}
-                  <SPill n={p.stock}/>
-                </div>
-              </div>
-              <div style={{flexShrink:0}}>
-                {ic
-                  ? <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <button onClick={()=>setQ(p.id,ic.qty-1)} style={{width:32,height:32,borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:18,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>-</button>
-                      <input type="number" value={ic.qty} onChange={e=>setQ(p.id,+e.target.value||0)} style={{width:44,textAlign:"center",padding:4,borderRadius:7,border:`1.5px solid ${RED}`,fontWeight:700,fontSize:14,outline:"none"}}/>
-                      <button onClick={()=>setQ(p.id,ic.qty+1)} style={{width:32,height:32,borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:18,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
-                    </div>
-                  : <button onClick={()=>addC(p)} style={{padding:"9px 16px",borderRadius:9,border:"none",background:p.stock>0?RED:"#ddd",color:p.stock>0?"#fff":"#aaa",fontWeight:700,fontSize:13,cursor:p.stock>0?"pointer":"default",whiteSpace:"nowrap"}}>
-                      {p.stock>0?"+ Agregar":"Sin stock"}
-                    </button>
-                }
-              </div>
-            </div>
-          ) : (
-            // ── DESKTOP: grid card ──
-            <div key={p.id} style={{background:"#fff",borderRadius:10,padding:14,border:ic?`2px solid ${RED}`:"2px solid transparent",boxShadow:"0 1px 4px #0001"}}>
-            <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",marginBottom:3,lineHeight:1.3}}>{p.name}</div>
-            <div style={{fontSize:12,color:"#666",marginBottom:7,fontWeight:500}}>{p.id} . {p.category}</div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-              <div>
-                <span style={{fontSize:17,fontWeight:800,color:RED}}>{fARS(p.salePrice)}</span>
-                {hasDisc&&<span style={{fontSize:10,color:"#1e8449",marginLeft:5,fontWeight:700,background:"#d5f5e3",borderRadius:4,padding:"1px 4px"}}>{discLabel}</span>}
-              </div>
-              <SPill n={p.stock}/>
-            </div>
-            {ic?<>
-              <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:discOpen===p.id?6:0}}>
-                <button onClick={()=>setQ(p.id,ic.qty-1)} style={{width:27,height:27,borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:15,fontWeight:700}}>-</button>
-                <input type="number" value={ic.qty} onChange={e=>setQ(p.id,+e.target.value||0)} style={{width:38,textAlign:"center",padding:3,borderRadius:6,border:`1.5px solid ${RED}`,fontWeight:700,fontSize:13,outline:"none"}}/>
-                <button onClick={()=>setQ(p.id,ic.qty+1)} style={{width:27,height:27,borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:15,fontWeight:700}}>+</button>
-                <button onClick={()=>setDiscOpen(discOpen===p.id?null:p.id)}
-                  style={{marginLeft:"auto",padding:"3px 7px",borderRadius:6,border:`1.5px solid ${hasDisc?"#1e8449":"#e5e5e5"}`,background:hasDisc?"#d5f5e3":"#fff",color:hasDisc?"#1e8449":"#888",cursor:"pointer",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>
-                  {hasDisc?discLabel:"% $"}
-                </button>
-              </div>
-              {discOpen===p.id&&(
-                <div style={{background:"#f0fdf4",border:"1.5px solid #1e8449",borderRadius:8,padding:"8px 10px"}}>
-                  <div style={{fontSize:10,color:"#166534",fontWeight:700,marginBottom:6}}>DESCUENTO POR ITEM</div>
-                  <div style={{display:"flex",gap:5,alignItems:"center"}}>
-                    <select value={ic.disc?.type||"%"} onChange={e=>setDisc(p.id,"type",e.target.value)}
-                      style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48}}>
-                      <option value="%">%</option>
-                      <option value="$">$</option>
-                    </select>
-                    <input type="number" min="0" value={ic.disc?.value||""} onChange={e=>setDisc(p.id,"value",e.target.value)}
-                      placeholder="0" style={{flex:1,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
-                    <button onClick={()=>setDiscOpen(null)} style={{padding:"5px 10px",borderRadius:6,border:"none",background:"#1e8449",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:700}}>OK</button>
-                  </div>
-                  {hasDisc&&<div style={{fontSize:11,color:"#166534",marginTop:5,fontWeight:600,textAlign:"center"}}>
-                    Subtotal con dto: <strong>{fARS(finalPrice)}</strong>
-                  </div>}
-                </div>
-              )}
-            </>:<button onClick={()=>addC(p)} style={{width:"100%",padding:"7px",borderRadius:7,border:"none",cursor:"pointer",background:RED,color:"#fff",fontWeight:700,fontSize:12}}>+ Agregar</button>}
-          </div>
-          ); // end desktop card
-        })}
-      </div>
-
-      {/* Paginación */}
-      {totalPages>1&&(
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 4px",flexWrap:"wrap",gap:8,marginTop:8}}>
-          <div style={{fontSize:12,color:"#888"}}>
-            Mostrando {page*PAGE_SIZE+1}–{Math.min((page+1)*PAGE_SIZE,filtered.length)} de {filtered.length.toLocaleString("es-AR")}
-          </div>
-          <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
-            <button onClick={()=>setPage(0)} disabled={page===0}
-              style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:page===0?"not-allowed":"pointer",color:page===0?"#ccc":"#555",fontSize:12,fontWeight:600}}>«</button>
-            <button onClick={()=>setPage(p=>Math.max(0,p-1))} disabled={page===0}
-              style={{padding:"5px 12px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:page===0?"not-allowed":"pointer",color:page===0?"#ccc":"#555",fontSize:12,fontWeight:600}}>← Ant.</button>
-            {Array.from({length:totalPages},(_,i)=>i)
-              .filter(i=>i===0||i===totalPages-1||Math.abs(i-page)<=2)
-              .reduce((acc,i,idx,arr)=>{if(idx>0&&i-arr[idx-1]>1)acc.push("...");acc.push(i);return acc;},[])
-              .map((item,i)=>item==="..."
-                ?<span key={`e${i}`} style={{padding:"5px 4px",fontSize:12,color:"#aaa"}}>…</span>
-                :<button key={item} onClick={()=>setPage(item)}
-                    style={{padding:"5px 10px",borderRadius:7,border:`1.5px solid ${page===item?RED:"#e5e5e5"}`,background:page===item?"#fdecea":"#fff",cursor:"pointer",color:page===item?RED:"#555",fontSize:12,fontWeight:page===item?800:600,minWidth:34}}>
-                    {item+1}
-                  </button>
-              )
-            }
-            <button onClick={()=>setPage(p=>Math.min(totalPages-1,p+1))} disabled={page===totalPages-1}
-              style={{padding:"5px 12px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:page===totalPages-1?"not-allowed":"pointer",color:page===totalPages-1?"#ccc":"#555",fontSize:12,fontWeight:600}}>Sig. →</button>
-            <button onClick={()=>setPage(totalPages-1)} disabled={page===totalPages-1}
-              style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:page===totalPages-1?"not-allowed":"pointer",color:page===totalPages-1?"#ccc":"#555",fontSize:12,fontWeight:600}}>»</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile}) {
-  const [client,setClient]=useState("");
-  const [notes,setNotes]=useState("");
-  // Admin puede elegir vendedor; vendedores usan el suyo propio automaticamente
-  const [vendedor,setVendedor]=useState(currentUser?.role!=="admin" ? (currentUser?.vendedor||currentUser?.name||"") : "");
-  const [cart,setCart]=useState([]);
-  const [globalDisc,setGlobalDisc]=useState({type:"%",value:""});
-  const [ok,setOk]=useState(false);
-
-  const subtotal = cart.reduce((s,i)=>s+applyItemDiscount(i.price,i.qty,i.disc),0);
-  const total    = applyGlobalDiscount(subtotal, globalDisc);
-  const globalDiscAmt = subtotal - total;
-
-  const [mStep, setMStep] = useState(1); // mobile: 1=datos, 2=productos, 3=resumen
-  const submit=()=>{
-    if(!client.trim()){alert("Ingresá el cliente");return;}
-    if(!vendedor&&currentUser.role==="admin"){alert("Seleccioná un vendedor");return;}
-    if(!cart.length){alert("Agregá productos");return;}
-    onAdd({id:genId(),client:client.trim(),notes,vendedor:vendedor||currentUser.vendedor||currentUser.name,items:cart,total,subtotal,globalDisc,stage:"reserva",date:today()});
-    setOk(true); setTimeout(()=>onDone(),1400);
-  };
-  if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>✅</div><div style={{fontWeight:800,color:"#1e8449",fontSize:20,marginTop:12}}>¡Pedido registrado!</div></div>;
-
-  // ── MOBILE: 3-step flow ──
-  if(isMobile) {
-    const StepBar = ({current}) => (
-      <div style={{display:"flex",alignItems:"center",padding:"10px 16px 6px",gap:0,background:"#fff",borderBottom:"1px solid #f0f0f0"}}>
-        {[{n:1,l:"Datos"},{n:2,l:"Productos"},{n:3,l:"Confirmar"}].map(({n,l},i)=>(
-          <React.Fragment key={n}>
-            {i>0&&<div style={{flex:1,height:2,background:current>i?"#1e8449":"#e5e5e5",margin:"0 4px"}}/>}
-            <div style={{display:"flex",alignItems:"center",gap:5}}>
-              <div style={{width:26,height:26,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,flexShrink:0,
-                background:current>n?"#1e8449":current===n?RED:"#fff",
-                border:`2px solid ${current>n?"#1e8449":current===n?RED:"#e5e5e5"}`,
-                color:current>=n?"#fff":"#bbb"}}>
-                {current>n?"✓":n}
-              </div>
-              <div style={{fontSize:10,fontWeight:700,color:current===n?RED:current>n?"#1e8449":"#bbb"}}>{l}</div>
-            </div>
-          </React.Fragment>
-        ))}
-      </div>
-    );
-
-    if(mStep===1) return (
-      <div>
-        <StepBar current={1}/>
-        <div style={{background:"#fff",borderRadius:14,margin:"10px 12px",padding:16,boxShadow:"0 1px 6px #0001"}}>
-          <div style={{fontSize:13,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:.5,marginBottom:12}}>👤 Datos del pedido</div>
-          <Field label="Cliente *"><input value={client} onChange={e=>setClient(e.target.value)} placeholder="Nombre completo del cliente" style={inputStyle}/></Field>
-          {currentUser.role==="admin"
-            ? <Field label="Vendedor *">
-                <select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,color:vendedor?"#1a1a1a":"#aaa",cursor:"pointer"}}>
-                  <option value="">- Seleccioná vendedor -</option>
-                  {vendors.map(v=><option key={v} value={v}>{v}</option>)}
-                </select>
-              </Field>
-            : <div style={{background:"#f9f9f9",borderRadius:10,padding:"10px 14px",marginBottom:12}}>
-                <div style={{fontSize:9,fontWeight:800,color:"#999",textTransform:"uppercase",letterSpacing:.7,marginBottom:3}}>Vendedor</div>
-                <div style={{fontSize:15,fontWeight:700,display:"flex",alignItems:"center",gap:6}}>
-                  <span style={{width:8,height:8,borderRadius:"50%",background:"#1e8449",display:"inline-block"}}/>
-                  {vendedor||currentUser.name}
-                </div>
-              </div>
-          }
-          <Field label="Notas (opcional)"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones, condiciones de entrega..." style={{...inputStyle,resize:"vertical",minHeight:64,fontSize:12}}/></Field>
-        </div>
-        <div style={{padding:"0 12px 16px"}}>
-          <button onClick={()=>setMStep(2)} disabled={!client.trim()||(currentUser.role==="admin"&&!vendedor)}
-            style={{width:"100%",padding:14,borderRadius:12,border:"none",fontWeight:800,fontSize:15,cursor:"pointer",
-              background:(!client.trim()||(currentUser.role==="admin"&&!vendedor))?"#e5e5e5":`linear-gradient(135deg,${REDD},${RED})`,
-              color:(!client.trim()||(currentUser.role==="admin"&&!vendedor))?"#aaa":"#fff"}}>
-            Seleccionar productos →
-          </button>
-        </div>
-      </div>
-    );
-
-    if(mStep===2) return (
-      <div style={{paddingBottom:80}}>
-        <StepBar current={2}/>
-        <ProductSelector products={products} cart={cart} setCart={setCart} isMobile={true}/>
-        <div style={{position:"fixed",bottom:0,left:0,right:0,background:"#fff",borderTop:"2px solid #fdecea",padding:"10px 14px",display:"flex",alignItems:"center",gap:12,boxShadow:"0 -6px 20px #0003",zIndex:50}}>
-          <div style={{flex:1}}>
-            <div style={{fontSize:11,color:"#888",fontWeight:600}}>✅ {cart.length} producto{cart.length!==1?"s":""} · {cart.reduce((s,i)=>s+i.qty,0)} uds.</div>
-            <div style={{fontSize:20,fontWeight:900,color:RED}}>{fARS(total)}</div>
-          </div>
-          <button onClick={()=>setMStep(3)} disabled={!cart.length}
-            style={{padding:"11px 18px",borderRadius:12,border:"none",background:cart.length?`linear-gradient(135deg,${REDD},${RED})`:"#e5e5e5",color:cart.length?"#fff":"#aaa",fontWeight:800,fontSize:13,cursor:cart.length?"pointer":"not-allowed",whiteSpace:"nowrap"}}>
-            Ver resumen →
-          </button>
-        </div>
-      </div>
-    );
-
-    return (
-      <div>
-        <div style={{background:`linear-gradient(135deg,${REDD},${RED})`,padding:"12px 16px",display:"flex",alignItems:"center",gap:10}}>
-          <button onClick={()=>setMStep(2)} style={{width:34,height:34,borderRadius:9,background:"#ffffff22",border:"none",color:"#fff",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>←</button>
-          <div style={{color:"#fff",fontWeight:800,fontSize:16}}>📋 Confirmar Pedido</div>
-        </div>
-        <StepBar current={3}/>
-        <div style={{padding:14}}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-            <div style={{background:"#f9f9f9",borderRadius:9,padding:"10px 12px",borderLeft:`3px solid ${RED}`}}>
-              <div style={{fontSize:9,fontWeight:800,color:"#999",textTransform:"uppercase",marginBottom:3}}>Cliente</div>
-              <div style={{fontSize:13,fontWeight:700}}>{client}</div>
-            </div>
-            <div style={{background:"#f9f9f9",borderRadius:9,padding:"10px 12px",borderLeft:"3px solid #e5e5e5"}}>
-              <div style={{fontSize:9,fontWeight:800,color:"#999",textTransform:"uppercase",marginBottom:3}}>Vendedor</div>
-              <div style={{fontSize:13,fontWeight:700}}>{vendedor||currentUser.name}</div>
-            </div>
-            {notes&&<div style={{gridColumn:"1/-1",background:"#f9f9f9",borderRadius:9,padding:"10px 12px",borderLeft:"3px solid #e5e5e5"}}>
-              <div style={{fontSize:9,fontWeight:800,color:"#999",textTransform:"uppercase",marginBottom:3}}>Notas</div>
-              <div style={{fontSize:12,color:"#555"}}>{notes}</div>
-            </div>}
-          </div>
-          <div style={{fontSize:11,fontWeight:800,color:"#888",textTransform:"uppercase",marginBottom:8}}>Productos ({cart.length})</div>
-          {cart.map(i=>{
-            const lt=applyItemDiscount(i.price,i.qty,i.disc);
-            const hasD=parseFloat(i.disc?.value)>0;
-            return <div key={i.pid} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:"1px solid #f0f0f0",gap:8}}>
-              <div style={{fontSize:13,color:"#333",flex:1,lineHeight:1.3}}>{i.name} × {i.qty}</div>
-              <div style={{textAlign:"right"}}>
-                {hasD&&<div style={{fontSize:10,color:"#aaa",textDecoration:"line-through"}}>{fARS(i.price*i.qty)}</div>}
-                <div style={{fontSize:13,fontWeight:700}}>{fARS(lt)}</div>
-              </div>
-            </div>;
-          })}
-          {globalDiscAmt>0&&<>
-            <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#888",padding:"6px 0"}}><span>Subtotal</span><span>{fARS(subtotal)}</span></div>
-            <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#1e8449",padding:"3px 0",fontWeight:600}}><span>Dto. global ({fmtDisc(globalDisc)})</span><span>-{fARS(globalDiscAmt)}</span></div>
-          </>}
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 0 8px",borderTop:"2.5px solid #f0f0f0",marginTop:4}}>
-            <div style={{fontSize:14,fontWeight:600,color:"#555"}}>TOTAL</div>
-            <div style={{fontSize:28,fontWeight:900,color:RED}}>{fARS(total)}</div>
-          </div>
-          <button onClick={submit} style={{width:"100%",padding:15,borderRadius:12,border:"none",background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",fontWeight:800,fontSize:15,cursor:"pointer",marginTop:8}}>✅ Registrar como Reserva</button>
-          <button onClick={()=>setMStep(2)} style={{width:"100%",padding:11,borderRadius:12,border:"1.5px solid #e5e5e5",background:"#fff",fontWeight:600,fontSize:13,cursor:"pointer",marginTop:8,color:"#666"}}>← Volver a productos</button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{display:"grid",gridTemplateColumns:"1fr 330px",gap:18,alignItems:"start"}}>
-      <div>
-        <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>🛒 Nuevo Pedido - Seleccioná productos</div>
-        <ProductSelector products={products} cart={cart} setCart={setCart}/>
-      </div>
-      <div style={{position:"sticky",top:16}}>
-        <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 2px 12px #0002"}}>
-          <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>📋 Resumen del Pedido</div>
-          <Field label="Cliente *"><input value={client} onChange={e=>setClient(e.target.value)} placeholder="Nombre del cliente" style={inputStyle}/></Field>
-          {currentUser?.role==="admin"
-            ? <Field label="Vendedor *">
-                <select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,color:vendedor?"#1a1a1a":"#aaa",cursor:"pointer"}}>
-                  <option value="">- Seleccioná vendedor -</option>
-                  {vendors.map(v=><option key={v} value={v}>{v}</option>)}
-                </select>
-              </Field>
-            : <div style={{marginBottom:12,background:"#f5f5f5",borderRadius:8,padding:"9px 12px",fontSize:13,color:"#555"}}>
-                <span style={{fontSize:11,fontWeight:700,color:"#888",display:"block",marginBottom:2}}>VENDEDOR</span>
-                <span style={{fontWeight:700}}>{vendedor||currentUser?.name}</span>
-              </div>
-          }
-          <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
-          <div style={{borderTop:"1px solid #f5f5f5",margin:"4px 0 8px",paddingTop:10}}>
-            {cart.length===0?<div style={{textAlign:"center",color:"#aaa",fontSize:12,padding:"10px 0"}}>Agregá productos al pedido</div>
-            :cart.map(i=>{
-              const lineTotal=applyItemDiscount(i.price,i.qty,i.disc);
-              const hasD=parseFloat(i.disc?.value)>0;
-              return <div key={i.pid} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:"1px solid #f9f9f9",color:"#555",gap:6}}>
-                <span style={{flex:1,lineHeight:1.3}}>{i.name} x {i.qty}</span>
-                <div style={{textAlign:"right",whiteSpace:"nowrap"}}>
-                  {hasD&&<div style={{fontSize:10,color:"#aaa",textDecoration:"line-through"}}>{fARS(i.price*i.qty)}</div>}
-                  <span style={{fontWeight:600,color:hasD?"#1e8449":undefined}}>{fARS(lineTotal)}</span>
-                  {hasD&&<span style={{fontSize:10,color:"#1e8449",marginLeft:3}}>{fmtDisc(i.disc)}</span>}
-                </div>
-              </div>;
-            })}
-          </div>
-          {/* Global discount */}
-          <div style={{background:"#f9fdf9",border:"1.5px solid #e5e5e5",borderRadius:8,padding:"10px 12px",marginBottom:8}}>
-            <div style={{fontSize:11,color:"#555",fontWeight:700,marginBottom:6}}>DESCUENTO GLOBAL</div>
-            <div style={{display:"flex",gap:6,alignItems:"center"}}>
-              <select value={globalDisc.type} onChange={e=>setGlobalDisc(d=>({...d,type:e.target.value}))}
-                style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48}}>
-                <option value="%">%</option>
-                <option value="$">$</option>
-              </select>
-              <input type="number" min="0" value={globalDisc.value} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))}
-                placeholder="0" style={{flex:1,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
-              {globalDiscAmt>0&&<span style={{fontSize:11,color:"#1e8449",fontWeight:700,whiteSpace:"nowrap"}}>-{fARS(globalDiscAmt)}</span>}
-            </div>
-          </div>
-          {globalDiscAmt>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#888",padding:"2px 0"}}>
-            <span>Subtotal</span><span>{fARS(subtotal)}</span>
-          </div>}
-          <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:17,color:RED,padding:"8px 0",borderTop:"2px solid #f5f5f5",margin:"6px 0 14px"}}><span>Total</span><span>{fARS(total)}</span></div>
-          <button onClick={submit} disabled={!cart.length||!client.trim()||!vendedor} style={{width:"100%",padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:(!cart.length||!client.trim()||!vendedor)?"#e5e5e5":`linear-gradient(135deg,${REDD},${RED})`,color:(!cart.length||!client.trim()||!vendedor)?"#aaa":"#fff"}}>
-            ✅ Registrar como Reserva
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
-// ─── COTIZACIONES ─────────────────────────────────────────────────────────────
-// IMPORTANTE: Crear tabla en Supabase antes de usar:
-// CREATE TABLE lm_quotes (
-//   id TEXT PRIMARY KEY, client TEXT, vendedor TEXT, notes TEXT,
-//   total NUMERIC, date TEXT, items JSONB, validity TEXT
-// );
-function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,onTabChange,currentUser}) {
-  const [view,setView]=useState("lista"); // "lista" | "nueva"
-  const [expanded,setExpanded]=useState(null);
-  const getP=id=>products.find(p=>p.id===id);
-  return (
-    <div>
-      <div style={{background:"#fff",borderRadius:12,padding:4,marginBottom:16,display:"flex",gap:4,boxShadow:"0 1px 4px #0001"}}>
-        <button onClick={()=>setView("lista")} style={{flex:1,padding:"10px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="lista"?`linear-gradient(135deg,#6c3483,#9b59b6)`:"transparent",color:view==="lista"?"#fff":"#555"}}>
-          📄 Lista de Cotizaciones ({quotes.length})
-        </button>
-        <button onClick={()=>setView("nueva")} style={{flex:1,padding:"10px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="nueva"?`linear-gradient(135deg,#6c3483,#9b59b6)`:"transparent",color:view==="nueva"?"#fff":"#555"}}>
-          + Nueva Cotización
-        </button>
-      </div>
-      {view==="nueva" && <NuevaCotizacion products={products} vendors={vendors} onAdd={async(q)=>{await onAdd(q);setView("lista");}} currentUser={currentUser}/>}
-      {view==="lista" && (
-        quotes.length===0
-          ? <div style={{textAlign:"center",padding:60,color:"#aaa",background:"#fff",borderRadius:12}}>
-              <div style={{fontSize:48,marginBottom:8}}>📄</div>
-              <div>No hay cotizaciones. !Creá una!</div>
-            </div>
-          : quotes.map(q=><QuoteCard key={q.id} q={q} exp={expanded===q.id} toggle={()=>setExpanded(expanded===q.id?null:q.id)} getP={getP} onDel={onDel} onConvert={async(qt)=>{await onConvert(qt);onTabChange("central");}} onExtend={onExtend}/>)
       )}
     </div>
   );
