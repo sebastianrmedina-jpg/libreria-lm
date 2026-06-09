@@ -1733,6 +1733,261 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
   );
 }
 
+// ─── PRECIOS ──────────────────────────────────────────────────────────────────
+function Precios({products}) {
+  const [search,setSearch]=useState("");
+  const [sortBy,setSortBy]=useState("name");
+  const shown=useMemo(()=>{
+    const q=norm(search);
+    return products
+      .filter(p=>!q||norm(p.name).includes(q)||normSKU(p.id).includes(normSKU(search)))
+      .sort((a,b)=>sortBy==="name"?a.name.localeCompare(b.name):b.salePrice-a.salePrice)
+      .slice(0,200);
+  },[products,search,sortBy]);
+  return (
+    <div>
+      <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:14,boxShadow:"0 1px 4px #0001"}}>
+        <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar producto o código..."
+            style={{flex:1,minWidth:160,padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none"}}/>
+          <div style={{display:"flex",gap:6}}>
+            {[{v:"name",l:"A-Z"},{v:"price",l:"Precio"}].map(opt=>(
+              <button key={opt.v} onClick={()=>setSortBy(opt.v)} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid",cursor:"pointer",fontSize:12,fontWeight:600,borderColor:sortBy===opt.v?RED:"#e5e5e5",background:sortBy===opt.v?"#fdecea":"#fff",color:sortBy===opt.v?RED:"#666"}}>{opt.l}</button>
+            ))}
+          </div>
+          <div style={{fontSize:12,color:"#aaa",whiteSpace:"nowrap"}}>{shown.length} producto{shown.length!==1?"s":""}{shown.length===200?" (máx 200)":""}</div>
+        </div>
+      </div>
+      {shown.length===0
+        ? <div style={{textAlign:"center",padding:60,color:"#aaa",background:"#fff",borderRadius:12}}><div style={{fontSize:48,marginBottom:8}}>🔍</div><div>No se encontraron productos</div></div>
+        : <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 4px #0001",overflow:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead><tr style={{background:"#f9f9f9",position:"sticky",top:0}}>{["Código","Descripción","Categoría","Precio"].map(h=>(<th key={h} style={{padding:"11px 14px",textAlign:"left",fontWeight:700,color:"#888",fontSize:11,textTransform:"uppercase",letterSpacing:.5,whiteSpace:"nowrap"}}>{h}</th>))}</tr></thead>
+              <tbody>
+                {shown.map(p=>(<tr key={p.id} style={{borderTop:"1px solid #f5f5f5"}} onMouseEnter={e=>e.currentTarget.style.background="#fafafa"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <td style={{padding:"10px 14px",color:"#999",fontSize:11,whiteSpace:"nowrap"}}>{p.id}</td>
+                  <td style={{padding:"10px 14px",fontWeight:600,color:"#1a1a1a",maxWidth:320}}>{p.name}</td>
+                  <td style={{padding:"10px 14px"}}><span style={{background:"#f5f5f5",color:"#666",borderRadius:6,padding:"2px 8px",fontSize:11,fontWeight:500}}>{p.category}</span></td>
+                  <td style={{padding:"10px 14px",whiteSpace:"nowrap"}}><span style={{fontWeight:800,fontSize:15,color:RED}}>{fARS(p.salePrice)}</span></td>
+                </tr>))}
+              </tbody>
+            </table>
+          </div>
+      }
+    </div>
+  );
+}
+
+// ─── NUEVO PEDIDO ─────────────────────────────────────────────────────────────
+function ProductSelector({products,cart,setCart,isMobile}) {
+  const [search,setSearch]=useState("");
+  const [cat,setCat]=useState("todos");
+  const [catOpen,setCatOpen]=useState(false);
+  const CATS=useMemo(()=>["todos",...new Set(products.map(p=>p.category))].sort(),[products]);
+  const shown=useMemo(()=>{
+    const q=search.toLowerCase();
+    return products.filter(p=>{
+      if(cat!=="todos"&&p.category!==cat)return false;
+      if(q)return norm(p.name).includes(norm(q))||normSKU(p.id).includes(normSKU(q));
+      return true;
+    }).slice(0,80);
+  },[products,search,cat]);
+  const addC=p=>setCart(c=>{const ex=c.find(i=>i.pid===p.id);return ex?c.map(i=>i.pid===p.id?{...i,qty:i.qty+1}:i):[...c,{pid:p.id,qty:1,price:p.salePrice,name:p.name}];});
+  const setQ=(pid,qty)=>{if(qty<=0)setCart(c=>c.filter(i=>i.pid!==pid));else setCart(c=>c.map(i=>i.pid===pid?{...i,qty}:i));};
+  return (
+    <div>
+      <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px #0001"}}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar por nombre o código..." style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",marginBottom:10,boxSizing:"border-box"}}/>
+        <div style={{position:"relative"}}>
+          <button onClick={()=>setCatOpen(o=>!o)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"8px 12px",borderRadius:8,border:`1.5px solid ${catOpen?RED:"#e5e5e5"}`,background:cat!=="todos"?"#fdecea":"#fff",color:cat!=="todos"?RED:"#666",cursor:"pointer",fontSize:13,fontWeight:600}}>
+            <span>🏷️ {cat==="todos"?"Todas las categorías":cat}</span><span style={{fontSize:10,marginLeft:6}}>{catOpen?"▲":"▼"}</span>
+          </button>
+          {catOpen&&(<div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#fff",borderRadius:10,border:"1.5px solid #e5e5e5",boxShadow:"0 8px 24px #0002",zIndex:50,padding:8,display:"flex",flexWrap:"wrap",gap:5,maxHeight:220,overflowY:"auto"}}>
+            {CATS.map(c=><button key={c} onClick={()=>{setCat(c);setCatOpen(false);}} style={{padding:"4px 11px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:cat===c?RED:"#e5e5e5",background:cat===c?"#fdecea":"#fff",color:cat===c?RED:"#666"}}>{c==="todos"?"Todos":c}</button>)}
+          </div>)}
+        </div>
+        {search&&<div style={{fontSize:11,color:"#aaa",marginTop:6}}>{shown.length} resultados</div>}
+      </div>
+      {isMobile
+        ? <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {shown.map(p=>{const ic=cart.find(i=>i.pid===p.id);return (
+              <div key={p.id} style={{background:"#fff",borderRadius:10,padding:"12px 14px",display:"flex",alignItems:"center",gap:10,boxShadow:"0 1px 4px #0001",border:ic?`2px solid ${RED}`:"2px solid transparent"}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",lineHeight:1.3,marginBottom:2}}>{p.name}</div>
+                  <div style={{fontSize:11,color:"#666"}}>{p.id} · {p.category}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4}}>
+                    <span style={{fontSize:15,fontWeight:800,color:RED}}>{fARS(p.salePrice)}</span>
+                    <SPill n={p.stock}/>
+                  </div>
+                </div>
+                {ic
+                  ? <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                      <button onClick={()=>setQ(p.id,ic.qty-1)} style={{width:30,height:30,borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:16,fontWeight:700}}>−</button>
+                      <span style={{minWidth:24,textAlign:"center",fontWeight:800,fontSize:14}}>{ic.qty}</span>
+                      <button onClick={()=>setQ(p.id,ic.qty+1)} style={{width:30,height:30,borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:16,fontWeight:700}}>+</button>
+                    </div>
+                  : <button onClick={()=>addC(p)} style={{padding:"7px 12px",borderRadius:7,border:"none",cursor:"pointer",background:RED,color:"#fff",fontWeight:700,fontSize:12,flexShrink:0}}>+ Agregar</button>
+                }
+              </div>
+            );})}
+          </div>
+        : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(195px,1fr))",gap:10}}>
+            {shown.map(p=>{const ic=cart.find(i=>i.pid===p.id);return <div key={p.id} style={{background:"#fff",borderRadius:10,padding:14,border:ic?`2px solid ${RED}`:"2px solid transparent",boxShadow:"0 1px 4px #0001"}}>
+              <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",marginBottom:3,lineHeight:1.3}}>{p.name}</div>
+              <div style={{fontSize:12,color:"#666",marginBottom:7,fontWeight:500}}>{p.id} · {p.category}</div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <span style={{fontSize:17,fontWeight:800,color:RED}}>{fARS(p.salePrice)}</span><SPill n={p.stock}/>
+              </div>
+              {ic?<div style={{display:"flex",alignItems:"center",gap:5}}>
+                <button onClick={()=>setQ(p.id,ic.qty-1)} style={{width:27,height:27,borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:15,fontWeight:700}}>−</button>
+                <input type="number" value={ic.qty} onChange={e=>setQ(p.id,+e.target.value||0)} style={{width:40,textAlign:"center",padding:3,borderRadius:6,border:`1.5px solid ${RED}`,fontWeight:700,fontSize:13,outline:"none"}}/>
+                <button onClick={()=>setQ(p.id,ic.qty+1)} style={{width:27,height:27,borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:15,fontWeight:700}}>+</button>
+                <span style={{color:"#1e8449",fontSize:12,fontWeight:700}}>✓</span>
+              </div>:<button onClick={()=>addC(p)} style={{width:"100%",padding:"7px",borderRadius:7,border:"none",cursor:"pointer",background:RED,color:"#fff",fontWeight:700,fontSize:12}}>+ Agregar</button>}
+            </div>;})}
+          </div>
+      }
+    </div>
+  );
+}
+
+function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile}) {
+  const [client,setClient]=useState("");
+  const [notes,setNotes]=useState("");
+  const [vendedor,setVendedor]=useState(currentUser.role==="vendedor"?(currentUser.vendedor||currentUser.name):"");
+  const [cart,setCart]=useState([]);
+  const [globalDisc,setGlobalDisc]=useState({type:"%",value:""});
+  const [ok,setOk]=useState(false);
+  const [mStep,setMStep]=useState(1);
+
+  const subtotal=cart.reduce((s,i)=>s+applyItemDiscount(i.price,i.qty,i.disc),0);
+  const total=applyGlobalDiscount(subtotal,globalDisc);
+  const globalDiscAmt=subtotal-total;
+
+  const submit=()=>{
+    if(!client.trim()){alert("Ingresá el cliente");return;}
+    if(!vendedor&&currentUser.role==="admin"){alert("Seleccioná un vendedor");return;}
+    if(!cart.length){alert("Agregá productos");return;}
+    onAdd({id:genId(),client:client.trim(),notes,vendedor:vendedor||currentUser.vendedor||currentUser.name,items:cart,total,subtotal,globalDisc,stage:"reserva",date:today()});
+    setOk(true); setTimeout(()=>onDone(),1400);
+  };
+
+  if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>✅</div><div style={{fontWeight:800,color:"#1e8449",fontSize:20,marginTop:12}}>¡Pedido registrado!</div></div>;
+
+  if(isMobile) {
+    return (
+      <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
+        {/* Steps header */}
+        <div style={{display:"flex",background:"#fff",borderRadius:10,padding:"10px 14px",marginBottom:12,boxShadow:"0 1px 4px #0001",gap:4}}>
+          {[{n:1,l:"Datos"},{n:2,l:"Productos"},{n:3,l:"Confirmar"}].map(s=>(
+            <div key={s.n} onClick={()=>mStep>s.n&&setMStep(s.n)}
+              style={{flex:1,textAlign:"center",padding:"6px 4px",borderRadius:8,background:mStep===s.n?"#fdecea":mStep>s.n?"#f9f9f9":"transparent",cursor:mStep>s.n?"pointer":"default"}}>
+              <div style={{fontWeight:800,fontSize:13,color:mStep===s.n?RED:mStep>s.n?"#888":"#ccc"}}>{s.n}</div>
+              <div style={{fontSize:10,color:mStep===s.n?RED:mStep>s.n?"#888":"#ccc",fontWeight:600}}>{s.l}</div>
+            </div>
+          ))}
+        </div>
+
+        {mStep===1 && (
+          <div style={{background:"#fff",borderRadius:12,padding:16,boxShadow:"0 1px 4px #0001"}}>
+            <Field label="Cliente *"><input value={client} onChange={e=>setClient(e.target.value)} placeholder="Nombre del cliente" style={inputStyle}/></Field>
+            {currentUser.role==="admin"&&<Field label="Vendedor *"><select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,color:vendedor?"#1a1a1a":"#aaa",cursor:"pointer"}}><option value="">— Seleccioná vendedor —</option>{vendors.map(v=><option key={v} value={v}>{v}</option>)}</select></Field>}
+            <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
+            <button onClick={()=>{if(!client.trim()){alert("Ingresá el cliente");return;}if(!vendedor&&currentUser.role==="admin"){alert("Seleccioná un vendedor");return;}setMStep(2);}}
+              style={{width:"100%",padding:"12px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",marginTop:8}}>
+              Siguiente → Productos
+            </button>
+          </div>
+        )}
+
+        {mStep===2 && (
+          <div style={{flex:1,overflow:"auto"}}>
+            <ProductSelector products={products} cart={cart} setCart={setCart} isMobile={true}/>
+            {cart.length>0&&(
+              <div style={{position:"sticky",bottom:0,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",padding:"12px 16px",borderRadius:"0 0 12px 12px",display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
+                <span style={{fontWeight:700}}>{cart.length} producto{cart.length!==1?"s":""} · {fARS(cart.reduce((s,i)=>s+i.price*i.qty,0))}</span>
+                <button onClick={()=>setMStep(3)} style={{padding:"8px 16px",borderRadius:8,border:"none",background:"#fff",color:RED,fontWeight:800,fontSize:13,cursor:"pointer"}}>Ver resumen →</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {mStep===3 && (
+          <div style={{background:"#fff",borderRadius:12,padding:16,boxShadow:"0 1px 4px #0001"}}>
+            <div style={{fontWeight:800,fontSize:15,marginBottom:14,color:"#1a1a1a"}}>📋 Confirmar pedido</div>
+            <div style={{fontSize:13,color:"#555",marginBottom:4}}>👤 <strong>{client}</strong> · {vendedor}</div>
+            <div style={{borderTop:"1px solid #f5f5f5",margin:"8px 0",paddingTop:8}}>
+              {cart.map(i=><div key={i.pid} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"3px 0",color:"#555"}}><span style={{flex:1,marginRight:6}}>{i.name} × {i.qty}</span><span style={{fontWeight:600}}>{fARS(i.price*i.qty)}</span></div>)}
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:17,color:RED,padding:"8px 0",borderTop:"2px solid #f5f5f5",marginBottom:14}}><span>Total</span><span>{fARS(total)}</span></div>
+            <button onClick={submit} style={{width:"100%",padding:"12px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff"}}>
+              ✅ Registrar como Reserva
+            </button>
+            <button onClick={()=>setMStep(2)} style={{width:"100%",padding:"10px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer",marginTop:8}}>← Volver a productos</button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"1fr 330px",gap:18,alignItems:"start"}}>
+      <div>
+        <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>🛒 Nuevo Pedido — Seleccioná productos</div>
+        <ProductSelector products={products} cart={cart} setCart={setCart}/>
+      </div>
+      <div style={{position:"sticky",top:16}}>
+        <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 2px 12px #0002"}}>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>📋 Resumen del Pedido</div>
+          <Field label="Cliente *"><input value={client} onChange={e=>setClient(e.target.value)} placeholder="Nombre del cliente" style={inputStyle}/></Field>
+          {currentUser.role==="admin"&&<Field label="Vendedor *"><select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,color:vendedor?"#1a1a1a":"#aaa",cursor:"pointer"}}><option value="">— Seleccioná vendedor —</option>{vendors.map(v=><option key={v} value={v}>{v}</option>)}</select></Field>}
+          <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
+          <div style={{borderTop:"1px solid #f5f5f5",margin:"4px 0 8px",paddingTop:10}}>
+            {cart.length===0?<div style={{textAlign:"center",color:"#aaa",fontSize:12,padding:"10px 0"}}>Agregá productos al pedido</div>
+            :cart.map(i=><div key={i.pid} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"3px 0",color:"#555"}}><span style={{flex:1,marginRight:6,lineHeight:1.3}}>{i.name} × {i.qty}</span><span style={{fontWeight:600,whiteSpace:"nowrap"}}>{fARS(i.price*i.qty)}</span></div>)}
+          </div>
+          <div style={{background:"#f9fdf9",border:"1.5px solid #e5e5e5",borderRadius:8,padding:"10px 12px",marginBottom:8}}>
+            <div style={{fontSize:11,color:"#555",fontWeight:700,marginBottom:6}}>DESCUENTO GLOBAL</div>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <select value={globalDisc.type} onChange={e=>setGlobalDisc(d=>({...d,type:e.target.value}))}
+                style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48}}>
+                <option value="%">%</option><option value="$">$</option>
+              </select>
+              <input type="number" min="0" value={globalDisc.value} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))}
+                placeholder="0" style={{flex:1,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
+              {globalDiscAmt>0&&<span style={{fontSize:11,color:"#1e8449",fontWeight:700,whiteSpace:"nowrap"}}>−{fARS(globalDiscAmt)}</span>}
+            </div>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:17,color:RED,padding:"8px 0",borderTop:"2px solid #f5f5f5",marginBottom:14}}><span>Total</span><span>{fARS(total)}</span></div>
+          <button onClick={submit} disabled={!cart.length||!client.trim()||(!vendedor&&currentUser.role==="admin")} style={{width:"100%",padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:(!cart.length||!client.trim()||(!vendedor&&currentUser.role==="admin"))?"#e5e5e5":`linear-gradient(135deg,${REDD},${RED})`,color:(!cart.length||!client.trim()||(!vendedor&&currentUser.role==="admin"))?"#aaa":"#fff"}}>
+            ✅ Registrar como Reserva
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,onTabChange,currentUser}) {
+  const [view,setView]=useState("lista");
+  const [expanded,setExpanded]=useState(null);
+  const getP=id=>products.find(p=>p.id===id);
+  return (
+    <div>
+      <div style={{background:"#fff",borderRadius:12,padding:4,marginBottom:16,display:"flex",gap:4,boxShadow:"0 1px 4px #0001"}}>
+        <button onClick={()=>setView("lista")} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="lista"?`linear-gradient(135deg,${REDD},${RED})`:"transparent",color:view==="lista"?"#fff":"#555"}}>📄 Lista de Cotizaciones ({quotes.filter(q=>!q.convertida).length})</button>
+        <button onClick={()=>setView("nueva")} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="nueva"?`linear-gradient(135deg,${REDD},${RED})`:"transparent",color:view==="nueva"?"#fff":"#555"}}>➕ Nueva Cotización</button>
+      </div>
+      {view==="nueva" && <NuevaCotizacion products={products} vendors={vendors} onAdd={async(q)=>{await onAdd(q);setView("lista");}} currentUser={currentUser}/>}
+      {view==="lista" && (quotes.length===0
+        ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{fontSize:48}}>📄</div><div style={{marginTop:8}}>No hay cotizaciones aún</div></div>
+        : quotes.map(q=><QuoteCard key={q.id} q={q} exp={expanded===q.id} toggle={()=>setExpanded(expanded===q.id?null:q.id)} getP={getP} onDel={onDel} onConvert={async(qt)=>{await onConvert(qt);onTabChange("central");}} onExtend={onExtend}/>)
+      )}
+    </div>
+  );
+}
+
+
 function QuoteCard({q,exp,toggle,getP,onDel,onConvert,onExtend}) {
   const PURPLE = "#6c3483"; const PURPLEBG = "#e8daef";
   const [showExtForm, setShowExtForm] = useState(false);
