@@ -773,7 +773,9 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const n = test ? 0 : await db.nextCounter("reserva");
     const orderWithNum = {...order, docNum: test ? "TEST-000000" : fmtDocNum("Reserva", n), isTest: test, isSandbox: test};
 
-    if(test) {
+    // Detectar sandbox también si el vendedor es Prueba aunque el flag no esté
+    const isSandbox = test || isTestOrder(order.vendedor);
+    if(isSandbox) {
       // SANDBOX: descontar del stock paralelo en memoria, no tocar Supabase
       setSandboxStock(prev => {
         const next = {...prev};
@@ -787,8 +789,8 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       setProducts(updatedProds);
       for(const p of updatedProds.filter(p=>orderWithNum.items.find(i=>i.pid===p.id))) await db.upsertProduct(p);
     }
-    setOrders(o=>[orderWithNum,...o]);
-    await db.upsertOrder(orderWithNum);
+    setOrders(o=>[{...orderWithNum, isSandbox: isSandbox},...o]);
+    await db.upsertOrder({...orderWithNum, isSandbox: isSandbox});
     const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"NUEVO_PEDIDO",para:"admin",icono:"🛒",titulo:"Nuevo pedido registrado",cuerpo:`${orderWithNum.client} - ${fARS(orderWithNum.total)} - ${orderWithNum.docNum}`,ref:orderWithNum.id};
     await db.addNotif(notif); setNotifs(n=>[notif,...n]);
     await logActivity("Nuevo pedido", `${orderWithNum.docNum} - ${orderWithNum.client} - ${fARS(orderWithNum.total)} - Vendedor: ${orderWithNum.vendedor||"-"}`, orderWithNum.id, "pedido");
@@ -831,9 +833,11 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   };
   const delOrder = async (id) => {
     const ord=orders.find(o=>o.id===id);
+    // Detectar sandbox por isSandbox flag O por vendedor de prueba
+    const isSandboxOrder = ord && (ord.isSandbox || isTestOrder(ord.vendedor));
     if(ord && ord.stage!=="entregado") {
-      if(ord.isSandbox) {
-        // SANDBOX: devolver stock al paralelo en memoria
+      if(isSandboxOrder) {
+        // SANDBOX: devolver stock al paralelo en memoria, nunca tocar Supabase
         setSandboxStock(prev => {
           const next = {...prev};
           ord.items.forEach(it => { next[it.pid] = (next[it.pid] ?? 0) + it.qty; });
@@ -1225,11 +1229,13 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
 
       <div style={{maxWidth:isMobile?undefined:1200,margin:"0 auto",padding:isMobile?"12px 0":"20px 16px"}}>
         {tab==="central"    && <Central
-          orders={isAdmin || currentUser.canSeeAll!==false
-            ? orders
+          orders={isAdmin
+            ? orders  // admin ve todos
             : isTestUser
-              ? orders.filter(o=>o.isSandbox)
-              : orders.filter(o=>o.vendedor===currentUser.vendedor||o.vendedor===currentUser.name||o.vendedor===currentUser.username)}
+              ? orders.filter(o=>o.isSandbox)  // usuario Prueba ve solo sandbox
+              : currentUser.canSeeAll===false
+                ? orders.filter(o=>o.vendedor===currentUser.vendedor||o.vendedor===currentUser.name||o.vendedor===currentUser.username)
+                : orders}  // vendedor con canSeeAll ve todos
           products={pricedProducts} onStage={setStage} onDel={delOrder} onSaveNote={saveNote}
           onRequestEdit={requestEdit} onApproveEditRequest={approveEditRequest} onRejectEditRequest={rejectEditRequest}
           onSubmitEdit={submitEdit} onApproveEdit={approveEdit} onRejectEdit={rejectEdit}
@@ -1385,11 +1391,13 @@ function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onAppro
     if(search&&!norm(o.client).includes(norm(search))&&!o.id.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
-  const deliv = orders.filter(o=>o.stage==="entregado"&&!o.isSandbox).reduce((s,o)=>s+o.total,0);
+  // Si todos los pedidos son sandbox (usuario Prueba), contar normalmente
+  const allSandbox = orders.length>0 && orders.every(o=>o.isSandbox);
+  const deliv = orders.filter(o=>o.stage==="entregado"&&(allSandbox||!o.isSandbox)).reduce((s,o)=>s+o.total,0);
   return (
     <div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(135px,1fr))",gap:12,marginBottom:20}}>
-        {STAGES.map(s=>{const c=SCFG[s],cnt=orders.filter(o=>o.stage===s&&!o.isSandbox).length;return <div key={s} onClick={()=>setFStage(fStage===s?"todos":s)} style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 6px #0001",borderLeft:`4px solid ${c.color}`,cursor:"pointer",outline:fStage===s?`2px solid ${c.color}`:"none"}}><div style={{fontSize:26,fontWeight:800,color:c.color}}>{cnt}</div><div style={{fontSize:12,color:"#666",fontWeight:600}}>{c.icon} {c.label}</div></div>;})}
+        {STAGES.map(s=>{const c=SCFG[s],cnt=orders.filter(o=>o.stage===s&&(allSandbox||!o.isSandbox)).length;return <div key={s} onClick={()=>setFStage(fStage===s?"todos":s)} style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 6px #0001",borderLeft:`4px solid ${c.color}`,cursor:"pointer",outline:fStage===s?`2px solid ${c.color}`:"none"}}><div style={{fontSize:26,fontWeight:800,color:c.color}}>{cnt}</div><div style={{fontSize:12,color:"#666",fontWeight:600}}>{c.icon} {c.label}</div></div>;})}
         <div style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 6px #0001",borderLeft:`4px solid ${RED}`}}>
           <div style={{fontSize:14,fontWeight:800,color:RED}}>{fARS(deliv)}</div>
           <div style={{fontSize:12,color:"#666",fontWeight:600}}>💰 Entregado</div>
