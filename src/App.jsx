@@ -1828,18 +1828,9 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
               🖨️ {o.stage==="reserva"?(o.docNum||"Imprimir"):(o.compNum||"Imprimir")}
             </button>
             <button onClick={()=>{
-              const doc = o.stage==="reserva"?"reserva":"confirmado";
               const num = o.stage==="reserva"?(o.docNum||""):(o.compNum||"");
-              const items = o.items.map(it=>`• ${it.name} x${it.qty} — ${fARS(it.price*it.qty)}`).join("
-");
-              const txt = `*Libreria Madrid*
-*${num}*
-Cliente: ${o.client}
-Fecha: ${o.date}
-
-${items}
-
-*Total: ${fARS(o.total)}*`;
+              const items = o.items.map(it=>`- ${it.name} x${it.qty} - ${fARS(it.price*it.qty)}`).join("\n");
+              const txt = `*Libreria Madrid*\n*${num}*\nCliente: ${o.client}\nFecha: ${o.date}\n\n${items}\n\n*Total: ${fARS(o.total)}*`;
               window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`, "_blank");
             }} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #d5f5e3",cursor:"pointer",background:"#fff",color:"#1e8449",fontWeight:600,fontSize:13}}>
               💬 WhatsApp
@@ -2593,18 +2584,9 @@ function QuoteCard({q,exp,toggle,getP,onDel,onConvert,onExtend}) {
           <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
             <button onClick={()=>printDoc(q,"cotizacion")} style={{padding:"8px 12px",borderRadius:8,border:`1.5px solid ${PURPLEBG}`,cursor:"pointer",background:"#fff",color:PURPLE,fontWeight:600,fontSize:13}}>🖨️ Imprimir</button>
             <button onClick={()=>{
-              const items = q.items.map(it=>`• ${it.name} x${it.qty} — ${fARS(it.price*it.qty)}`).join("
-");
-              const disc = q.globalDisc?.value ? `
-Descuento: ${fmtDisc(q.globalDisc)}` : "";
-              const txt = `*Libreria Madrid - Cotización*
-*${q.docNum||""}*
-Cliente: ${q.client}
-Fecha: ${q.date} · Válida: ${q.validity||"48 horas"}
-
-${items}${disc}
-
-*Total: ${fARS(q.total)}*`;
+              const items = q.items.map(it=>`- ${it.name} x${it.qty} - ${fARS(it.price*it.qty)}`).join("\n");
+              const disc = q.globalDisc?.value ? `\nDescuento: ${fmtDisc(q.globalDisc)}` : "";
+              const txt = `*Libreria Madrid - Cotizacion*\n*${q.docNum||""}*\nCliente: ${q.client}\nFecha: ${q.date} - Valida: ${q.validity||"48 horas"}\n\n${items}${disc}\n\n*Total: ${fARS(q.total)}*`;
               window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`, "_blank");
             }} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #d5f5e3",cursor:"pointer",background:"#fff",color:"#1e8449",fontWeight:600,fontSize:13}}>
               💬 WhatsApp
