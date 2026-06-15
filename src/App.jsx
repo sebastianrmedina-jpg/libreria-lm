@@ -24,7 +24,7 @@ const supaAdmin = supabase;
 const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock});
 const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||"",isTest:r.is_test||false,isSandbox:r.is_sandbox||false,internalNote:r.internal_note||"",editStatus:r.edit_status||"",editReason:r.edit_reason||"",editItems:r.edit_items||null,editRejectReason:r.edit_reject_reason||""});
 const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,date:r.date,items:r.items||[],validity:r.validity||"",docNum:r.doc_num||"",convertida:r.convertida||false,ordenId:r.orden_id||"",extendida:r.extendida||false,extendReason:r.extend_reason||"",extendDate:r.extend_date||"",globalDisc:r.global_disc||null,subtotal:r.subtotal||0});
- 
+
 
 // ─── CORRELATIVE NUMBER HELPERS ───────────────────────────────────────────────
 // Table lm_counters: { id: "reserva"|"comp"|"presu", value: number }
@@ -1958,14 +1958,19 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile}) {
         )}
 
         {mStep===2 && (
-          <div style={{flex:1,overflow:"auto"}}>
+          <div style={{flex:1,overflow:"auto",paddingBottom:cart.length>0?72:0}}>
             <ProductSelector products={products} cart={cart} setCart={setCart} isMobile={true}/>
-            {cart.length>0&&(
-              <div style={{position:"sticky",bottom:0,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",padding:"12px 16px",borderRadius:"0 0 12px 12px",display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
-                <span style={{fontWeight:700}}>{cart.length} producto{cart.length!==1?"s":""} · {fARS(cart.reduce((s,i)=>s+i.price*i.qty,0))}</span>
-                <button onClick={()=>setMStep(3)} style={{padding:"8px 16px",borderRadius:8,border:"none",background:"#fff",color:RED,fontWeight:800,fontSize:13,cursor:"pointer"}}>Ver resumen →</button>
-              </div>
-            )}
+          </div>
+        )}
+        {mStep===2 && cart.length>0&&(
+          <div style={{position:"fixed",bottom:0,left:0,right:0,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",padding:"13px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",zIndex:200,boxShadow:"0 -3px 16px #0003"}}>
+            <div>
+              <div style={{fontWeight:800,fontSize:15}}>{fARS(cart.reduce((s,i)=>s+i.price*i.qty,0))}</div>
+              <div style={{fontSize:11,opacity:.85}}>{cart.length} producto{cart.length!==1?"s":""} seleccionado{cart.length!==1?"s":""}</div>
+            </div>
+            <button onClick={()=>setMStep(3)} style={{padding:"10px 20px",borderRadius:10,border:"none",background:"#fff",color:RED,fontWeight:800,fontSize:14,cursor:"pointer",boxShadow:"0 2px 8px #0002"}}>
+              Ver resumen →
+            </button>
           </div>
         )}
 
