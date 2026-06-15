@@ -242,22 +242,70 @@ function quoteStatus(q) {
   return { status: "vencida", hoursLeft: 0 };
 }
 
-// ─── CROSS-DEVICE NOTIFICATIONS via lm_notifs ────────────────────────────────
-// Escribe en lm_notifs → Realtime lo entrega al destinatario
-// para: "admin" | "vendedor" | username específico
+// ─── ONESIGNAL PUSH NOTIFICATIONS ───────────────────────────────────────────
+const OS_APP_ID = "00dbe0c1-e7bf-4f80-885c-1680381ed121";
+const OS_API_KEY = "os_v2_app_adn6bqphx5hybcc4c2adqhwreg4ekar7am5ej5fv4uwxgtau3pqgjfzynkjg226awxtc4737kumrypjz7ju777gjpna26pw6epg2syi";
+
+// Registrar el dispositivo en OneSignal con el username como external_id
+async function registerOneSignal(username) {
+  try {
+    const OS = window.OneSignal;
+    if(!OS) return;
+    await OS.login(username);
+    const permission = await OS.Notifications.permission;
+    if(!permission) {
+      await OS.Notifications.requestPermission();
+    }
+  } catch(e) {
+    console.warn("OneSignal register error:", e);
+  }
+}
+
+// Enviar notificación push via OneSignal REST API a un usuario específico
+// targetUsername: username del destinatario ("admin" significa enviar a todos los admins)
+async function sendPushNotif({title, body, targetUsername}) {
+  try {
+    // Si el destinatario es "admin", enviar a todos con rol admin
+    // Si es un username específico, enviar solo a ese usuario
+    const filters = targetUsername === "admin"
+      ? [{ field: "tag", key: "role", relation: "=", value: "admin" }]
+      : [{ field: "tag", key: "username", relation: "=", value: targetUsername }];
+
+    const payload = {
+      app_id: OS_APP_ID,
+      headings: { en: title, es: title },
+      contents: { en: body, es: body },
+      filters,
+    };
+    // Llamada a la API de OneSignal
+    await fetch("https://onesignal.com/api/v1/notifications", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Key ${OS_API_KEY}`,
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch(e) {
+    console.warn("OneSignal push error:", e);
+  }
+}
+
+// ─── CROSS-DEVICE NOTIFICATIONS via lm_notifs + OneSignal ────────────────────
 async function sendCrossNotif(db, setNotifs, {title, body, tag, para, de}) {
   const notif = {
     id: genId(),
     fecha: new Date().toLocaleString("es-AR"),
-    title,
-    body,
+    title, body,
     tag: tag||"lm",
-    para,   // "admin" | username del vendedor
-    de,     // quien la envía
+    para, de,
     leida: false,
   };
+  // Guardar en lm_notifs para Realtime (cuando la app está abierta)
   await db.addNotif(notif);
   setNotifs(n=>[notif,...n]);
+  // Enviar push via OneSignal (cuando la app está cerrada)
+  await sendPushNotif({ title, body, targetUsername: para });
 }
 
 // ─── PUSH NOTIFICATIONS ──────────────────────────────────────────────────────
@@ -752,9 +800,21 @@ export default function App() {
   if(!currentUser) return <Login users={users} onLogin={u=>{
     localStorage.setItem("lm_session", JSON.stringify(u));
     setCurrentUser(u);
+    // Registrar en OneSignal con username y rol
+    setTimeout(async () => {
+      try {
+        const OS = window.OneSignal;
+        if(OS) {
+          await OS.login(u.username);
+          await OS.User.addTags({ username: u.username, role: u.role });
+          await OS.Notifications.requestPermission();
+        }
+      } catch(e) { console.warn("OneSignal:", e); }
+    }, 1500);
   }}/>;
   return <MainApp
-    currentUser={currentUser} onLogout={()=>{
+    currentUser={currentUser} onLogout={async()=>{
+      try { const OS=window.OneSignal; if(OS) await OS.logout(); } catch(e) {}
       localStorage.removeItem("lm_session");
       setCurrentUser(null);
     }}
@@ -770,6 +830,14 @@ export default function App() {
     notifs={notifs} setNotifs={setNotifs}
     sandboxStock={sandboxStock} setSandboxStock={setSandboxStock}
     clients={clients} setClients={setClients}
+    onLogout={async()=>{
+      try {
+        const OS = window.OneSignal;
+        if(OS) await OS.logout();
+      } catch(e) {}
+      localStorage.removeItem("lm_session");
+      setCurrentUser(null);
+    }}
   />;
 }
 
