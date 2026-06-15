@@ -1307,7 +1307,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
             });
           }}
         />}
-        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile}/>}
+        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile} sandboxStock={sandboxStock} setSandboxStock={setSandboxStock}/>}
       </div>
     </div>
   );
@@ -3623,11 +3623,75 @@ function Compras({products,onStock,isMobile}) {
   );
 }
 
+// ─── SANDBOX STOCK MANAGER ────────────────────────────────────────────────────
+function SandboxStockManager({products, sandboxStock, setSandboxStock}) {
+  const [search, setSearch] = useState("");
+  const [edited, setEdited] = useState({});
+
+  const shown = useMemo(()=>{
+    const q = norm(search);
+    return products.filter(p=>!q||norm(p.name).includes(q)||normSKU(p.id).includes(normSKU(search))).slice(0,80);
+  }, [products, search]);
+
+  const getSandbox = (pid) => edited[pid] !== undefined ? edited[pid] : (sandboxStock[pid] ?? products.find(p=>p.id===pid)?.stock ?? 0);
+
+  const setVal = (pid, val) => setEdited(e=>({...e,[pid]:Math.max(0,+val||0)}));
+
+  const applyChanges = () => {
+    setSandboxStock(prev=>({...prev,...edited}));
+    setEdited({});
+  };
+
+  const hasChanges = Object.keys(edited).length > 0;
+
+  return (
+    <div>
+      <input value={search} onChange={e=>setSearch(e.target.value)}
+        placeholder="🔍 Buscar producto para editar su stock sandbox..."
+        style={{width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #d7bde2",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:12,background:"#fff"}}/>
+
+      {hasChanges && (
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#6c3483",borderRadius:10,padding:"10px 16px",marginBottom:12}}>
+          <span style={{color:"#fff",fontWeight:700,fontSize:13}}>{Object.keys(edited).length} cambio{Object.keys(edited).length!==1?"s":""} sin guardar</span>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>setEdited({})} style={{padding:"6px 12px",borderRadius:7,border:"1px solid #ffffff44",background:"transparent",color:"#fff",fontSize:12,cursor:"pointer"}}>Descartar</button>
+            <button onClick={applyChanges} style={{padding:"6px 14px",borderRadius:7,border:"none",background:"#fff",color:"#6c3483",fontWeight:800,fontSize:12,cursor:"pointer"}}>✅ Aplicar</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:8}}>
+        {shown.map(p=>{
+          const sbQty = getSandbox(p.id);
+          const realQty = sandboxStock[p.id] ?? p.stock;
+          const isEditing = edited[p.id] !== undefined;
+          const changed = isEditing && edited[p.id] !== realQty;
+          return (
+            <div key={p.id} style={{background:changed?"#f5eef8":"#fff",borderRadius:10,padding:"10px 12px",border:changed?"1.5px solid #9b59b6":"1.5px solid #e8daef",display:"flex",alignItems:"center",gap:10}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:600,fontSize:12,color:"#1a1a1a",lineHeight:1.3,marginBottom:2}}>{p.name}</div>
+                <div style={{fontSize:10,color:"#aaa"}}>{p.id} · Real: {p.stock}</div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:5,flexShrink:0}}>
+                <button onClick={()=>setVal(p.id,sbQty-1)} style={{width:26,height:26,borderRadius:6,border:"1.5px solid #d7bde2",background:"#fff",fontWeight:800,cursor:"pointer",fontSize:14,color:"#6c3483"}}>−</button>
+                <input type="number" value={sbQty} onChange={e=>setVal(p.id,e.target.value)}
+                  style={{width:44,textAlign:"center",padding:"3px",borderRadius:6,border:`1.5px solid ${changed?"#9b59b6":"#d7bde2"}`,fontWeight:700,fontSize:13,outline:"none",color:changed?"#6c3483":"#1a1a1a",background:changed?"#f5eef8":"#fff"}}/>
+                <button onClick={()=>setVal(p.id,sbQty+1)} style={{width:26,height:26,borderRadius:6,border:"1.5px solid #d7bde2",background:"#fff",fontWeight:800,cursor:"pointer",fontSize:14,color:"#6c3483"}}>+</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── ADMIN PANEL ──────────────────────────────────────────────────────────────
-function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,priceLists,setPriceLists,isMobile}) {
-  const [section, setSection] = useState("vendors");
+function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,priceLists,setPriceLists,isMobile,sandboxStock,setSandboxStock}) {
+  const [section, setSection] = useState("home");
 
   const SECTIONS = [
+    {k:"home",        label:"Administración",   icon:"🏠"},
     {k:"ventas",      label:"Ventas",           icon:"📈"},
     {k:"sandbox",     label:"Demo Sandbox",     icon:"🧪"},
     {k:"activity",    label:"Actividad",        icon:"📝"},
@@ -3673,6 +3737,37 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
           </button>
         ))}
       </div>}
+      {section==="home" && (
+        <div>
+          <div style={{fontWeight:800,fontSize:16,marginBottom:16,color:"#1a1a1a"}}>🏠 Central de Administración</div>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(160px,1fr))",gap:10,marginBottom:24}}>
+            {SECTIONS.filter(s=>s.k!=="home").map(s=>(
+              <div key={s.k} onClick={()=>setSection(s.k)}
+                style={{background:"#fff",borderRadius:12,padding:"18px 14px",boxShadow:"0 1px 6px #0001",cursor:"pointer",textAlign:"center",border:"2px solid transparent",transition:"border .15s"}}
+                onMouseEnter={e=>e.currentTarget.style.border="2px solid #c0392b"}
+                onMouseLeave={e=>e.currentTarget.style.border="2px solid transparent"}>
+                <div style={{fontSize:30,marginBottom:8}}>{s.icon}</div>
+                <div style={{fontWeight:700,fontSize:13,color:"#1a1a1a"}}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Stock Sandbox */}
+          <div style={{background:"#f5eef8",border:"1.5px solid #9b59b6",borderRadius:12,padding:20}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10,marginBottom:16}}>
+              <div>
+                <div style={{fontWeight:800,fontSize:15,color:"#6c3483"}}>🧪 Stock Sandbox</div>
+                <div style={{fontSize:12,color:"#888",marginTop:2}}>Configurá el stock que verá el vendedor Prueba para simular pedidos</div>
+              </div>
+              <button onClick={()=>{const sb={};products.forEach(p=>{sb[p.id]=p.stock;});setSandboxStock(sb);}}
+                style={{padding:"7px 14px",borderRadius:8,border:"1.5px solid #9b59b6",background:"#fff",color:"#6c3483",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                🔄 Resetear al stock real
+              </button>
+            </div>
+            <SandboxStockManager products={products} sandboxStock={sandboxStock} setSandboxStock={setSandboxStock}/>
+          </div>
+        </div>
+      )}
       {section==="ventas"      && <VentasPanel    orders={realOrders}/>}
       {section==="sandbox"     && (
         <div>
