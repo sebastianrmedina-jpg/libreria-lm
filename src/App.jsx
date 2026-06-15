@@ -3654,29 +3654,44 @@ function BarcodeScanner({onDetected, onClose}) {
 
     const loadZXing = () => {
       if(window.ZXing) { initScanner(); return; }
-      const script = document.createElement("script");
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/zxing-js/0.20.0/zxing.min.js";
-      script.onload = () => { if(active) initScanner(); };
-      script.onerror = () => { if(active) setError("No se pudo cargar el lector. Verificá tu conexión."); setLoading(false); };
-      document.head.appendChild(script);
+      // Try unpkg first, then jsDelivr as fallback
+      const tryLoad = (url, fallback) => {
+        const script = document.createElement("script");
+        script.src = url;
+        script.onload = () => { if(active) initScanner(); };
+        script.onerror = () => {
+          if(fallback) tryLoad(fallback, null);
+          else { if(active) { setError("No se pudo cargar el lector. Verificá tu conexión a internet."); setLoading(false); } }
+        };
+        document.head.appendChild(script);
+      };
+      tryLoad(
+        "https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js",
+        "https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"
+      );
     };
 
     const initScanner = async () => {
       try {
-        // Use ZXing BrowserMultiFormatReader for best EAN-13 support
-        const hints = new Map();
-        const formats = [
-          window.ZXing.BarcodeFormat.EAN_13,
-          window.ZXing.BarcodeFormat.EAN_8,
-          window.ZXing.BarcodeFormat.CODE_128,
-          window.ZXing.BarcodeFormat.CODE_39,
-          window.ZXing.BarcodeFormat.UPC_A,
-          window.ZXing.BarcodeFormat.UPC_E,
-        ];
-        hints.set(window.ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
-        hints.set(window.ZXing.DecodeHintType.TRY_HARDER, true);
+        // @zxing/library exposes ZXingBrowser or ZXing namespace
+        const ZXingLib = window.ZXingBrowser || window.ZXing;
+        if(!ZXingLib) { setError("No se pudo inicializar el lector. Recargá la pagina."); setLoading(false); return; }
 
-        const reader = new window.ZXing.BrowserMultiFormatReader(hints);
+        const hints = new Map();
+        const BarcodeFormat = ZXingLib.BarcodeFormat;
+        if(BarcodeFormat) {
+          hints.set(ZXingLib.DecodeHintType.POSSIBLE_FORMATS, [
+            BarcodeFormat.EAN_13, BarcodeFormat.EAN_8,
+            BarcodeFormat.CODE_128, BarcodeFormat.CODE_39,
+            BarcodeFormat.UPC_A, BarcodeFormat.UPC_E,
+          ]);
+          hints.set(ZXingLib.DecodeHintType.TRY_HARDER, true);
+        }
+
+        const ReaderClass = ZXingLib.BrowserMultiFormatReader || (ZXingLib.browser && ZXingLib.browser.BrowserMultiFormatReader);
+        if(!ReaderClass) { setError("Version del lector no compatible. Intentá recargar."); setLoading(false); return; }
+
+        const reader = new ReaderClass(hints);
         readerRef.current = reader;
 
         // Get camera stream
