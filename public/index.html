@@ -17,6 +17,20 @@
 
     <title>Libreria Madrid</title>
 
+    <!-- OneSignal SDK -->
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <script>
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      OneSignalDeferred.push(async function(OneSignal) {
+        await OneSignal.init({
+          appId: "00dbe0c1-e7bf-4f80-885c-1680381ed121",
+          serviceWorkerPath: "/OneSignalSDKWorker.js",
+          notifyButton: { enable: false },
+          allowLocalhostAsSecureOrigin: true,
+        });
+      });
+    </script>
+
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
