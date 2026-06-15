@@ -40,7 +40,7 @@ const TEST_VENDOR = "Prueba";
 const isTestOrder = (vendedor) => vendedor === TEST_VENDOR;
 
 const db = {
-  getUsers:     async () => { const {data,error} = await supabase.from("lm_users").select("*").order("name"); if(error) throw error; return (data||[]).map(u=>({...u,priceList:u.price_list||"default",vendedor:u.vendedor||"",canSeeAll:u.can_see_all!==false})); },
+  getUsers:     async () => { const {data,error} = await supabase.from("lm_users").select("*").order("name"); if(error) throw error; return (data||[]).map(u=>({...u,priceList:u.price_list||"default",vendedor:u.vendedor||"",canSeeAll:u.can_see_all!==false,phone:u.phone||"",cargo:u.cargo||"",avatar:u.avatar||"",barcodeEnabled:u.barcode_enabled||false})); },
   saveUser:     async (u) => {
     const {error} = await supaAdmin.from("lm_users").upsert({
       id: u.id,
@@ -51,7 +51,11 @@ const db = {
       email: u.email||"",
       vendedor: u.vendedor||"",
       price_list: u.priceList||"default",
-      can_see_all: u.canSeeAll!==false
+      can_see_all: u.canSeeAll!==false,
+      phone: u.phone||"",
+      cargo: u.cargo||"",
+      avatar: u.avatar||"",
+      barcode_enabled: u.barcodeEnabled||false,
     });
     if(error) { console.error("saveUser error:", error); throw error; }
   },
@@ -1295,7 +1299,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
               )}
               <Stock products={pricedProducts} onUpd={updProd} onDel={pid=>setProducts(p=>p.filter(x=>x.id!==pid))} onAdjust={(pid,qty)=>setProducts(p=>p.map(x=>x.id===pid?{...x,stock:x.stock+qty}:x))} isAdmin={isAdmin} addLog={addLog} stockLog={stockLog} setStockLog={setStockLog} isMobile={isMobile}/>
             </>}
-        {tab==="compras"    && <Compras products={products} onStock={addStock} isMobile={isMobile}/>}
+        {tab==="compras"    && <Compras products={products} onStock={addStock} isMobile={isMobile} canScan={currentUser.role==="admin"||isTestOrder(currentUser.vendedor||currentUser.name)||currentUser.barcodeEnabled}/>}
         {tab==="solicitud"  && <SolicitudCompra products={products} currentUser={currentUser} isAdmin={isAdmin} purchaseOrders={purchaseOrders} setPurchaseOrders={setPurchaseOrders} isMobile={isMobile} onStockExternal={addStock} addLog={addLog}
           onCreated={async(po)=>{
             await sendCrossNotif(db, setNotifs, {
@@ -3365,78 +3369,165 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
 // ─── ALTA DE MERCADERÍA ───────────────────────────────────────────────────────
 // ─── BARCODE SCANNER ──────────────────────────────────────────────────────────
 function BarcodeScanner({onDetected, onClose}) {
-  const scannerRef = React.useRef(null);
+  const videoRef = React.useRef(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [lastCode, setLastCode] = useState("");
+  const streamRef = React.useRef(null);
+  const readerRef = React.useRef(null);
 
   React.useEffect(() => {
-    let quagga;
-    const loadQuagga = async () => {
-      // Load quagga2 dynamically
-      if(!window.Quagga) {
-        const script = document.createElement("script");
-        script.src = "https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js";
-        script.onload = () => initQuagga();
-        script.onerror = () => setError("No se pudo cargar el lector. Verificá tu conexión.");
-        document.head.appendChild(script);
-      } else {
-        initQuagga();
+    let active = true;
+
+    const loadZXing = () => {
+      if(window.ZXing) { initScanner(); return; }
+      const script = document.createElement("script");
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/zxing-js/0.20.0/zxing.min.js";
+      script.onload = () => { if(active) initScanner(); };
+      script.onerror = () => { if(active) setError("No se pudo cargar el lector. Verificá tu conexión."); setLoading(false); };
+      document.head.appendChild(script);
+    };
+
+    const initScanner = async () => {
+      try {
+        // Use ZXing BrowserMultiFormatReader for best EAN-13 support
+        const hints = new Map();
+        const formats = [
+          window.ZXing.BarcodeFormat.EAN_13,
+          window.ZXing.BarcodeFormat.EAN_8,
+          window.ZXing.BarcodeFormat.CODE_128,
+          window.ZXing.BarcodeFormat.CODE_39,
+          window.ZXing.BarcodeFormat.UPC_A,
+          window.ZXing.BarcodeFormat.UPC_E,
+        ];
+        hints.set(window.ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+        hints.set(window.ZXing.DecodeHintType.TRY_HARDER, true);
+
+        const reader = new window.ZXing.BrowserMultiFormatReader(hints);
+        readerRef.current = reader;
+
+        // Get camera stream
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment", width: {ideal:1280}, height: {ideal:720} }
+        });
+        streamRef.current = stream;
+
+        if(!active) { stream.getTracks().forEach(t=>t.stop()); return; }
+
+        if(videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+          setLoading(false);
+
+          // Start decoding loop
+          const decode = async () => {
+            if(!active || !videoRef.current) return;
+            try {
+              const result = await reader.decodeFromVideoElement(videoRef.current);
+              if(result && active) {
+                const code = result.getText();
+                setLastCode(code);
+                // Stop and notify
+                cleanup();
+                onDetected(code);
+              }
+            } catch(e) {
+              // NotFoundException is normal — keep trying
+              if(active) setTimeout(decode, 150);
+            }
+          };
+          decode();
+        }
+      } catch(e) {
+        if(active) {
+          if(e.name === "NotAllowedError") setError("Permiso de cámara denegado. Habilitalo en la configuración del navegador.");
+          else setError("No se pudo acceder a la cámara: " + e.message);
+          setLoading(false);
+        }
       }
     };
 
-    const initQuagga = () => {
-      if(!scannerRef.current) return;
-      window.Quagga.init({
-        inputStream: {
-          type: "LiveStream",
-          target: scannerRef.current,
-          constraints: { facingMode: "environment", width: 640, height: 480 },
-        },
-        decoder: {
-          readers: ["ean_reader","ean_8_reader","code_128_reader","code_39_reader","upc_reader","upc_e_reader"],
-        },
-        locate: true,
-      }, (err) => {
-        if(err) { setError("No se pudo acceder a la cámara. Verificá los permisos."); setLoading(false); return; }
-        setLoading(false);
-        window.Quagga.start();
-        window.Quagga.onDetected((result) => {
-          const code = result.codeResult.code;
-          if(code) {
-            window.Quagga.stop();
-            onDetected(code);
-          }
-        });
-      });
+    const cleanup = () => {
+      active = false;
+      if(streamRef.current) { streamRef.current.getTracks().forEach(t=>t.stop()); streamRef.current = null; }
+      if(readerRef.current) { try { readerRef.current.reset(); } catch(e) {} readerRef.current = null; }
     };
 
-    loadQuagga();
-    return () => { if(window.Quagga) try { window.Quagga.stop(); } catch(e) {} };
+    loadZXing();
+    return cleanup;
   }, []);
 
+  const handleClose = () => {
+    if(streamRef.current) streamRef.current.getTracks().forEach(t=>t.stop());
+    if(readerRef.current) try { readerRef.current.reset(); } catch(e) {}
+    onClose();
+  };
+
   return (
-    <div style={{position:"fixed",inset:0,background:"#000c",zIndex:500,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
-      <div style={{background:"#1a1a1a",borderRadius:16,padding:20,width:"min(95vw,480px)",position:"relative"}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-          <div style={{fontWeight:800,fontSize:16,color:"#fff"}}>📷 Leer código de barras</div>
-          <button onClick={onClose} style={{background:"#333",border:"none",color:"#fff",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:18,fontWeight:700}}>✕</button>
-        </div>
-        {loading && <div style={{textAlign:"center",color:"#aaa",padding:20}}>Iniciando cámara...</div>}
-        {error && <div style={{background:"#fdecea",borderRadius:8,padding:12,color:"#c0392b",fontSize:13,marginBottom:12}}>{error}</div>}
-        <div ref={scannerRef} style={{width:"100%",borderRadius:10,overflow:"hidden",background:"#000",minHeight:240,position:"relative"}}>
-          {/* Quagga renders video here */}
-        </div>
-        {/* Scanning guide overlay */}
-        <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"70%",height:2,background:"#c0392b",boxShadow:"0 0 8px #c0392b",pointerEvents:"none"}}/>
-        <div style={{textAlign:"center",color:"#aaa",fontSize:12,marginTop:12}}>
-          Apuntá la cámara al código de barras
-        </div>
+    <div style={{position:"fixed",inset:0,background:"#000",zIndex:500,display:"flex",flexDirection:"column"}}>
+      {/* Header */}
+      <div style={{background:"#1a1a1a",padding:"14px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <div style={{fontWeight:800,fontSize:16,color:"#fff"}}>📷 Escanear código de barras</div>
+        <button onClick={handleClose}
+          style={{background:"#c0392b",border:"none",color:"#fff",borderRadius:10,padding:"8px 18px",cursor:"pointer",fontSize:14,fontWeight:800}}>
+          ✕ Cerrar
+        </button>
       </div>
+
+      {/* Camera view */}
+      <div style={{flex:1,position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#000"}}>
+        <video ref={videoRef} style={{width:"100%",height:"100%",objectFit:"cover"}} muted playsInline/>
+
+        {/* Scanning overlay */}
+        {!error && (
+          <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}>
+            {/* Guide box */}
+            <div style={{width:"80%",maxWidth:340,height:140,border:"2px solid #fff",borderRadius:12,position:"relative",boxShadow:"0 0 0 2000px #0005"}}>
+              {/* Corner markers */}
+              {[["0","0"],["0","auto"],["auto","0"],["auto","auto"]].map(([t,b],i)=>(
+                <div key={i} style={{position:"absolute",top:t==="0"?-2:"auto",bottom:b==="auto"?-2:"auto",left:i<2?-2:"auto",right:i>=2?-2:"auto",width:20,height:20,borderTop:t==="0"?"3px solid #c0392b":"none",borderBottom:b==="auto"?"3px solid #c0392b":"none",borderLeft:i<2?"3px solid #c0392b":"none",borderRight:i>=2?"3px solid #c0392b":"none"}}/>
+              ))}
+              {/* Scanning line */}
+              <div style={{position:"absolute",top:"50%",left:4,right:4,height:2,background:"#c0392b",boxShadow:"0 0 8px #c0392b",animation:"scan 1.5s ease-in-out infinite"}}/>
+            </div>
+            <div style={{color:"#fff",fontSize:13,fontWeight:600,marginTop:16,textShadow:"0 1px 4px #000"}}>
+              Apuntá al código de barras
+            </div>
+          </div>
+        )}
+
+        {loading && !error && (
+          <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"#000a"}}>
+            <div style={{color:"#fff",fontWeight:700,fontSize:15}}>Iniciando cámara...</div>
+          </div>
+        )}
+
+        {error && (
+          <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+            <div style={{background:"#fdecea",borderRadius:12,padding:20,textAlign:"center",maxWidth:320}}>
+              <div style={{fontSize:36,marginBottom:10}}>📵</div>
+              <div style={{fontWeight:700,color:"#c0392b",fontSize:14,marginBottom:8}}>{error}</div>
+              <button onClick={handleClose} style={{padding:"8px 20px",borderRadius:8,border:"none",background:"#c0392b",color:"#fff",fontWeight:700,cursor:"pointer"}}>Volver</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Bottom bar */}
+      <div style={{background:"#1a1a1a",padding:"14px 20px",flexShrink:0,textAlign:"center"}}>
+        <div style={{color:"#aaa",fontSize:12}}>Compatible con EAN-13, EAN-8, Code128, UPC</div>
+        <button onClick={handleClose}
+          style={{marginTop:10,width:"100%",padding:"12px",borderRadius:10,border:"1.5px solid #444",background:"transparent",color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer"}}>
+          ← Volver sin escanear
+        </button>
+      </div>
+
+      <style>{`@keyframes scan{0%,100%{top:10%}50%{top:85%}}`}</style>
     </div>
   );
 }
 
-function Compras({products,onStock,isMobile}) {
+function Compras({products,onStock,isMobile,canScan}) {
   const [search,setSearch]=useState("");
   const [items,setItems]=useState([]);
   const [ok,setOk]=useState(false);
@@ -3521,11 +3612,11 @@ function Compras({products,onStock,isMobile}) {
         <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px #0001"}}>
           <div style={{fontWeight:800,fontSize:14,marginBottom:10,color:"#1a1a1a"}}>📥 Buscá los productos recibidos</div>
 
-          {/* Scanner button — prominent */}
-          <button onClick={()=>setShowScanner(true)}
+          {/* Scanner button — only for admin/enabled users */}
+          {canScan && <button onClick={()=>setShowScanner(true)}
             style={{width:"100%",padding:"12px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#1a5276,#2980b9)",color:"#fff",fontWeight:800,fontSize:14,cursor:"pointer",marginBottom:10,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
             📷 Escanear código de barras
-          </button>
+          </button>}
 
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 O buscá por nombre o código SKU..."
             style={{width:"100%",padding:"10px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:14,outline:"none",boxSizing:"border-box"}}/>
@@ -3659,10 +3750,10 @@ function Compras({products,onStock,isMobile}) {
           <div style={{display:"flex",gap:8,marginBottom:10}}>
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscá los productos que recibiste..."
               style={{flex:1,padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none"}}/>
-            <button onClick={()=>setShowScanner(true)}
+            {canScan && <button onClick={()=>setShowScanner(true)}
               style={{padding:"8px 14px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#1a5276,#2980b9)",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",whiteSpace:"nowrap"}}>
               📷 Escanear
-            </button>
+            </button>}
           </div>
           {search&&<div style={{fontSize:11,color:"#aaa",marginBottom:6}}>{found.length} resultados</div>}
           <div style={{marginTop:12,borderTop:"1px solid #f0f0f0",paddingTop:12}}>
@@ -4419,15 +4510,32 @@ function VendorsPanel({vendors,setVendors}) {
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 function UsersPanel({users,setUsers,vendors,priceLists}) {
-  const [form, setForm] = useState({username:"",password:"",name:"",role:"vendedor",vendedor:"",priceList:"default",canSeeAll:true});
+  const [form, setForm] = useState({username:"",password:"",name:"",role:"vendedor",vendedor:"",priceList:"default",canSeeAll:true,email:"",phone:"",cargo:"",avatar:"",barcodeEnabled:false});
   const [editing, setEditing] = useState(null);
   const [showPass, setShowPass] = useState({});
+  const [avatarPreview, setAvatarPreview] = useState("");
 
-  const startEdit = (u) => { setEditing(u.id); setForm({username:u.username,password:u.password,name:u.name,role:u.role,email:u.email||"",vendedor:u.vendedor||"",priceList:u.priceList||"default",canSeeAll:u.canSeeAll!==false}); };
-  const cancelEdit = () => { setEditing(null); setForm({username:"",password:"",name:"",role:"vendedor"}); };
+  const startEdit = (u) => {
+    setEditing(u.id);
+    setForm({username:u.username,password:u.password,name:u.name,role:u.role,email:u.email||"",phone:u.phone||"",cargo:u.cargo||"",vendedor:u.vendedor||"",priceList:u.priceList||"default",canSeeAll:u.canSeeAll!==false,avatar:u.avatar||"",barcodeEnabled:u.barcodeEnabled||false});
+    setAvatarPreview(u.avatar||"");
+  };
+  const cancelEdit = () => { setEditing(null); setForm({username:"",password:"",name:"",role:"vendedor",vendedor:"",priceList:"default",canSeeAll:true,email:"",phone:"",cargo:"",avatar:"",barcodeEnabled:false}); setAvatarPreview(""); };
+
+  const handleAvatar = (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const b64 = ev.target.result;
+      setForm(f=>({...f,avatar:b64}));
+      setAvatarPreview(b64);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const save = async () => {
-    if(!form.username.trim()||!form.password.trim()||!form.name.trim()){alert("Completa todos los campos");return;}
+    if(!form.username.trim()||!form.password.trim()||!form.name.trim()){alert("Completá nombre, usuario y contraseña");return;}
     try {
       if(editing) {
         const updated = {...users.find(u=>u.id===editing), ...form, priceList:form.priceList||"default", canSeeAll:form.canSeeAll!==false};
@@ -4435,7 +4543,7 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
         await db.saveUser(updated);
       } else {
         if(users.find(u=>u.username===form.username.trim())){alert("Ese usuario ya existe");return;}
-        const newUser = {id:genId(),username:form.username.trim(),password:form.password,name:form.name.trim(),role:form.role||"vendedor",email:form.email||"",vendedor:form.vendedor||"",priceList:form.priceList||"default",canSeeAll:form.canSeeAll!==false};
+        const newUser = {id:genId(),username:form.username.trim(),password:form.password,name:form.name.trim(),role:form.role||"vendedor",email:form.email||"",phone:form.phone||"",cargo:form.cargo||"",vendedor:form.vendedor||"",priceList:form.priceList||"default",canSeeAll:form.canSeeAll!==false,avatar:form.avatar||"",barcodeEnabled:form.barcodeEnabled||false};
         setUsers(us=>[...us,newUser]);
         await db.saveUser(newUser);
       }
@@ -4444,33 +4552,69 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
       alert("Error al guardar: " + (e.message||JSON.stringify(e)));
     }
   };
+
   const remove = async (id) => {
     if(users.filter(u=>u.role==="admin").length===1&&users.find(u=>u.id===id)?.role==="admin"){alert("Debe haber al menos un administrador");return;}
     setUsers(us=>us.filter(u=>u.id!==id));
     await db.deleteUser(id);
   };
 
+  const Toggle = ({label,sub,val,onChange}) => (
+    <div style={{background:"#f9f9f9",borderRadius:8,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+      <div>
+        <div style={{fontWeight:700,fontSize:13}}>{label}</div>
+        {sub&&<div style={{fontSize:11,color:"#888",marginTop:2}}>{sub}</div>}
+      </div>
+      <button onClick={onChange} style={{padding:"6px 14px",borderRadius:20,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:val?"#1e8449":"#e5e5e5",color:val?"#fff":"#888",whiteSpace:"nowrap"}}>
+        {val?"✅ Sí":"🔒 No"}
+      </button>
+    </div>
+  );
+
   return (
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,alignItems:"start"}}>
       <div style={{background:"#fff",borderRadius:12,padding:24,boxShadow:"0 1px 4px #0001"}}>
-        <div style={{fontWeight:800,fontSize:15,marginBottom:16}}>{editing?"✏️️ Editar usuario":"+ Nuevo usuario"}</div>
-        <Field label="Nombre completo">
+        <div style={{fontWeight:800,fontSize:15,marginBottom:16}}>{editing?"✏️ Editar usuario":"+ Nuevo usuario"}</div>
+
+        {/* Avatar */}
+        <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:16,padding:"12px 14px",background:"#f9f9f9",borderRadius:10}}>
+          <div style={{width:60,height:60,borderRadius:"50%",background:"#e5e5e5",overflow:"hidden",flexShrink:0,border:"2px solid #ddd",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {avatarPreview
+              ? <img src={avatarPreview} alt="avatar" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+              : <span style={{fontSize:24}}>👤</span>}
+          </div>
+          <div>
+            <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>Foto de perfil</div>
+            <label style={{padding:"6px 12px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",color:"#555"}}>
+              📷 Subir foto
+              <input type="file" accept="image/*" onChange={handleAvatar} style={{display:"none"}}/>
+            </label>
+            {avatarPreview&&<button onClick={()=>{setAvatarPreview("");setForm(f=>({...f,avatar:""}));}} style={{marginLeft:6,padding:"6px 10px",borderRadius:7,border:"none",background:"#fdecea",color:RED,fontSize:11,cursor:"pointer",fontWeight:600}}>✕ Quitar</button>}
+          </div>
+        </div>
+
+        <Field label="Nombre completo *">
           <input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Ej: María García" style={inputStyle}/>
         </Field>
-        <Field label="Usuario (para login)">
+        <Field label="Cargo / Título">
+          <input value={form.cargo||""} onChange={e=>setForm(f=>({...f,cargo:e.target.value}))} placeholder="Ej: Representante Comercial" style={inputStyle}/>
+        </Field>
+        <Field label="Teléfono / WhatsApp">
+          <input value={form.phone||""} onChange={e=>setForm(f=>({...f,phone:e.target.value}))} placeholder="Ej: +54 11 1234-5678" style={inputStyle}/>
+        </Field>
+        <Field label="Email">
+          <input type="email" value={form.email||""} onChange={e=>setForm(f=>({...f,email:e.target.value}))} placeholder="vendedor@ejemplo.com" style={inputStyle}/>
+        </Field>
+        <Field label="Usuario (para login) *">
           <input value={form.username} onChange={e=>setForm(f=>({...f,username:e.target.value}))} placeholder="Ej: maria" style={inputStyle}/>
         </Field>
-        <Field label="Contraseña">
+        <Field label="Contraseña *">
           <div style={{position:"relative"}}>
             <input type={showPass.form?"text":"password"} value={form.password}
               onChange={e=>setForm(f=>({...f,password:e.target.value}))}
               placeholder="Contraseña segura" style={{...inputStyle,paddingRight:40}}/>
             <button onClick={()=>setShowPass(s=>({...s,form:!s.form}))} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:15,color:"#aaa"}}>{showPass.form?"🙈":"👁️"}</button>
           </div>
-        </Field>
-        <Field label="Email (para notificaciones)">
-          <input type="email" value={form.email||""} onChange={e=>setForm(f=>({...f,email:e.target.value}))}
-            placeholder="correo@ejemplo.com" style={inputStyle}/>
         </Field>
         <Field label="Rol">
           <select value={form.role} onChange={e=>setForm(f=>({...f,role:e.target.value}))} style={{...inputStyle,cursor:"pointer"}}>
@@ -4483,7 +4627,7 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
             <option value="">- Sin asignar -</option>
             {(vendors||[]).map(v=><option key={v} value={v}>{v}</option>)}
           </select>
-          <div style={{fontSize:10,color:"#888",marginTop:3}}>El pedido se asignará automáticamente a este vendedor cuando inicie sesión</div>
+          <div style={{fontSize:10,color:"#888",marginTop:3}}>El pedido se asignará automáticamente a este vendedor</div>
         </Field>
         <Field label="Lista de precios">
           <select value={form.priceList||"default"} onChange={e=>setForm(f=>({...f,priceList:e.target.value}))} style={{...inputStyle,cursor:"pointer"}}>
@@ -4491,21 +4635,9 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
               <option key={pl.id} value={pl.id}>{pl.name}{pl.discount>0?` (-${pl.discount}%)`:""}</option>
             ))}
           </select>
-          <div style={{fontSize:10,color:"#888",marginTop:3}}>El usuario verá los precios según esta lista</div>
         </Field>
-        <div style={{background:"#f9f9f9",borderRadius:8,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
-          <div>
-            <div style={{fontWeight:700,fontSize:13}}>Ver todos los pedidos</div>
-            <div style={{fontSize:11,color:"#888",marginTop:2}}>
-              {form.canSeeAll ? "Ve todos los pedidos de todos los vendedores" : "Solo ve sus propios pedidos"}
-            </div>
-          </div>
-          <button onClick={()=>setForm(f=>({...f,canSeeAll:!f.canSeeAll}))}
-            style={{padding:"6px 14px",borderRadius:20,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,
-              background:form.canSeeAll?"#1e8449":"#e5e5e5",color:form.canSeeAll?"#fff":"#888",transition:"all .2s",whiteSpace:"nowrap"}}>
-            {form.canSeeAll ? "✅ Habilitado" : "🔒 Solo los suyos"}
-          </button>
-        </div>
+        <Toggle label="Ver todos los pedidos" sub={form.canSeeAll?"Ve todos los pedidos de todos los vendedores":"Solo ve sus propios pedidos"} val={form.canSeeAll} onChange={()=>setForm(f=>({...f,canSeeAll:!f.canSeeAll}))}/>
+        <Toggle label="📷 Lector de código de barras" sub={form.barcodeEnabled?"Puede usar el lector en Alta de Mercancía":"Sin acceso al lector de código de barras"} val={form.barcodeEnabled} onChange={()=>setForm(f=>({...f,barcodeEnabled:!f.barcodeEnabled}))}/>
         <div style={{display:"flex",gap:8,marginTop:4}}>
           <button onClick={save} style={{flex:1,padding:"9px",borderRadius:8,border:"none",background:RED,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13}}>{editing?"Guardar cambios":"Crear usuario"}</button>
           {editing&&<button onClick={cancelEdit} style={{padding:"9px 14px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontWeight:600,color:"#666",fontSize:13}}>Cancelar</button>}
@@ -4516,20 +4648,29 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
         {users.map(u=>(
           <div key={u.id} style={{padding:"12px 14px",borderRadius:10,border:`1.5px solid ${editing===u.id?"#c0392b":"#f0f0f0"}`,marginBottom:8,background:editing===u.id?"#fdecea":"#fafafa"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <span style={{fontSize:22}}>{u.role==="admin"?"👑":"👤"}</span>
-              <div style={{flex:1}}>
-                <div style={{fontWeight:700,fontSize:13}}>{u.name}</div>
-                <div style={{fontSize:11,color:"#888",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+              {/* Avatar */}
+              <div style={{width:42,height:42,borderRadius:"50%",background:"#e5e5e5",overflow:"hidden",flexShrink:0,border:"2px solid #ddd",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {u.avatar
+                  ? <img src={u.avatar} alt={u.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                  : <span style={{fontSize:18}}>{u.role==="admin"?"👑":"👤"}</span>}
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:700,fontSize:13}}>{u.name}{u.cargo&&<span style={{fontWeight:400,color:"#888",fontSize:12}}> · {u.cargo}</span>}</div>
+                <div style={{fontSize:11,color:"#888",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginTop:2}}>
                   <span>@{u.username}</span>
                   <span style={{color:u.role==="admin"?RED:"#1a5276",fontWeight:600}}>{u.role==="admin"?"Admin":"Vendedor"}</span>
-                  {u.vendedor&&<span style={{color:"#6c3483",fontWeight:600}}>. 👤 {u.vendedor}</span>}
+                  {u.vendedor&&<span style={{color:"#6c3483",fontWeight:600}}>· 👤 {u.vendedor}</span>}
+                  {u.phone&&<span>· 📱 {u.phone}</span>}
+                  {u.email&&<span>· 📧 {u.email}</span>}
+                </div>
+                <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:4}}>
                   {u.priceList&&u.priceList!=="default"&&<span style={{background:"#fef9e7",color:"#e67e22",borderRadius:6,padding:"1px 6px",fontWeight:700,fontSize:10}}>💲 {(priceLists||[]).find(pl=>pl.id===u.priceList)?.name||u.priceList}</span>}
                   {u.canSeeAll===false&&<span style={{background:"#fdecea",color:"#c0392b",borderRadius:6,padding:"1px 6px",fontWeight:700,fontSize:10}}>🔒 Solo sus pedidos</span>}
-                  {u.email&&<span style={{color:"#aaa"}}>. {u.email}</span>}
+                  {u.barcodeEnabled&&<span style={{background:"#eaf4fc",color:"#1a5276",borderRadius:6,padding:"1px 6px",fontWeight:700,fontSize:10}}>📷 Lector activo</span>}
                 </div>
               </div>
-              <button onClick={()=>startEdit(u)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11}}>✏️️</button>
-              <button onClick={()=>remove(u.id)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:11}}>🗑</button>
+              <button onClick={()=>startEdit(u)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11,flexShrink:0}}>✏️</button>
+              <button onClick={()=>remove(u.id)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:11,flexShrink:0}}>🗑</button>
             </div>
           </div>
         ))}
