@@ -3363,6 +3363,79 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
 }
 
 // ─── ALTA DE MERCADERÍA ───────────────────────────────────────────────────────
+// ─── BARCODE SCANNER ──────────────────────────────────────────────────────────
+function BarcodeScanner({onDetected, onClose}) {
+  const scannerRef = React.useRef(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  React.useEffect(() => {
+    let quagga;
+    const loadQuagga = async () => {
+      // Load quagga2 dynamically
+      if(!window.Quagga) {
+        const script = document.createElement("script");
+        script.src = "https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js";
+        script.onload = () => initQuagga();
+        script.onerror = () => setError("No se pudo cargar el lector. Verificá tu conexión.");
+        document.head.appendChild(script);
+      } else {
+        initQuagga();
+      }
+    };
+
+    const initQuagga = () => {
+      if(!scannerRef.current) return;
+      window.Quagga.init({
+        inputStream: {
+          type: "LiveStream",
+          target: scannerRef.current,
+          constraints: { facingMode: "environment", width: 640, height: 480 },
+        },
+        decoder: {
+          readers: ["ean_reader","ean_8_reader","code_128_reader","code_39_reader","upc_reader","upc_e_reader"],
+        },
+        locate: true,
+      }, (err) => {
+        if(err) { setError("No se pudo acceder a la cámara. Verificá los permisos."); setLoading(false); return; }
+        setLoading(false);
+        window.Quagga.start();
+        window.Quagga.onDetected((result) => {
+          const code = result.codeResult.code;
+          if(code) {
+            window.Quagga.stop();
+            onDetected(code);
+          }
+        });
+      });
+    };
+
+    loadQuagga();
+    return () => { if(window.Quagga) try { window.Quagga.stop(); } catch(e) {} };
+  }, []);
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"#000c",zIndex:500,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"#1a1a1a",borderRadius:16,padding:20,width:"min(95vw,480px)",position:"relative"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+          <div style={{fontWeight:800,fontSize:16,color:"#fff"}}>📷 Leer código de barras</div>
+          <button onClick={onClose} style={{background:"#333",border:"none",color:"#fff",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:18,fontWeight:700}}>✕</button>
+        </div>
+        {loading && <div style={{textAlign:"center",color:"#aaa",padding:20}}>Iniciando cámara...</div>}
+        {error && <div style={{background:"#fdecea",borderRadius:8,padding:12,color:"#c0392b",fontSize:13,marginBottom:12}}>{error}</div>}
+        <div ref={scannerRef} style={{width:"100%",borderRadius:10,overflow:"hidden",background:"#000",minHeight:240,position:"relative"}}>
+          {/* Quagga renders video here */}
+        </div>
+        {/* Scanning guide overlay */}
+        <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"70%",height:2,background:"#c0392b",boxShadow:"0 0 8px #c0392b",pointerEvents:"none"}}/>
+        <div style={{textAlign:"center",color:"#aaa",fontSize:12,marginTop:12}}>
+          Apuntá la cámara al código de barras
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Compras({products,onStock,isMobile}) {
   const [search,setSearch]=useState("");
   const [items,setItems]=useState([]);
@@ -3370,7 +3443,26 @@ function Compras({products,onStock,isMobile}) {
   const [showManual, setShowManual] = useState(false);
   const [manualForm, setManualForm] = useState({sku:"", name:"", qty:1, cost:0});
   const [manualError, setManualError] = useState("");
-  const [mStep, setMStep] = useState(1); // mobile: 1=buscar, 2=detalle
+  const [mStep, setMStep] = useState(1);
+  const [showScanner, setShowScanner] = useState(false);
+  const [scanMsg, setScanMsg] = useState("");
+
+  const handleBarcode = (code) => {
+    setShowScanner(false);
+    // Search by barcode field first, then by SKU
+    const p = products.find(p=>p.barcode===code || normSKU(p.id)===normSKU(code));
+    if(p) {
+      if(!items.find(i=>i.pid===p.id)) {
+        setItems(x=>[...x,{pid:p.id,name:p.name,qty:1,cost:p.costPrice}]);
+        setScanMsg(`✅ ${p.name} agregado`);
+      } else {
+        setScanMsg(`ℹ️ ${p.name} ya está en la lista`);
+      }
+    } else {
+      setScanMsg(`⚠️ Código "${code}" no encontrado en el catálogo`);
+    }
+    setTimeout(()=>setScanMsg(""),3000);
+  }; // mobile: 1=buscar, 2=detalle
 
   const found=useMemo(()=>{
     const q=search.toLowerCase();
@@ -3404,6 +3496,8 @@ function Compras({products,onStock,isMobile}) {
   // ── MOBILE ──────────────────────────────────────────────────────────────────
   if(isMobile) return (
     <div style={{display:"flex",flexDirection:"column"}}>
+      {showScanner && <BarcodeScanner onDetected={handleBarcode} onClose={()=>setShowScanner(false)}/>}
+
       {/* Steps header */}
       <div style={{display:"flex",background:"#fff",borderRadius:10,padding:"10px 14px",marginBottom:12,boxShadow:"0 1px 4px #0001",gap:4}}>
         {[{n:1,l:"Buscar productos"},{n:2,l:"Detalle y confirmar"}].map(s=>(
@@ -3417,11 +3511,23 @@ function Compras({products,onStock,isMobile}) {
         ))}
       </div>
 
+      {/* Scan message */}
+      {scanMsg && <div style={{background:scanMsg.startsWith("✅")?"#eafaf1":scanMsg.startsWith("ℹ️")?"#eaf4fc":"#fef9e7",border:"1.5px solid",borderColor:scanMsg.startsWith("✅")?"#a9dfbf":scanMsg.startsWith("ℹ️")?"#aed6f1":"#f0d080",borderRadius:10,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:scanMsg.startsWith("✅")?"#1e8449":scanMsg.startsWith("ℹ️")?"#1a5276":"#b7770d"}}>
+        {scanMsg}
+      </div>}
+
       {/* Paso 1 — Buscar */}
       {mStep===1 && <>
         <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px #0001"}}>
           <div style={{fontWeight:800,fontSize:14,marginBottom:10,color:"#1a1a1a"}}>📥 Buscá los productos recibidos</div>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Nombre o código SKU..."
+
+          {/* Scanner button — prominent */}
+          <button onClick={()=>setShowScanner(true)}
+            style={{width:"100%",padding:"12px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#1a5276,#2980b9)",color:"#fff",fontWeight:800,fontSize:14,cursor:"pointer",marginBottom:10,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+            📷 Escanear código de barras
+          </button>
+
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 O buscá por nombre o código SKU..."
             style={{width:"100%",padding:"10px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:14,outline:"none",boxSizing:"border-box"}}/>
           {search&&<div style={{fontSize:11,color:"#aaa",marginTop:6}}>{found.length} resultados</div>}
 
@@ -3545,12 +3651,20 @@ function Compras({products,onStock,isMobile}) {
   // ── DESKTOP ──────────────────────────────────────────────────────────────────
   return (
     <div style={{display:"grid",gridTemplateColumns:"1fr 340px",gap:18,alignItems:"start"}}>
+      {showScanner && <BarcodeScanner onDetected={handleBarcode} onClose={()=>setShowScanner(false)}/>}
       <div>
         <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px #0001"}}>
           <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>📥 Ingresar al Stock</div>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscá los productos que recibiste..."
-            style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
-          {search&&<div style={{fontSize:11,color:"#aaa",marginTop:6}}>{found.length} resultados</div>}
+          {scanMsg && <div style={{background:scanMsg.startsWith("✅")?"#eafaf1":"#fef9e7",borderRadius:8,padding:"8px 12px",fontSize:13,fontWeight:600,marginBottom:10,color:scanMsg.startsWith("✅")?"#1e8449":"#b7770d"}}>{scanMsg}</div>}
+          <div style={{display:"flex",gap:8,marginBottom:10}}>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscá los productos que recibiste..."
+              style={{flex:1,padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none"}}/>
+            <button onClick={()=>setShowScanner(true)}
+              style={{padding:"8px 14px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#1a5276,#2980b9)",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",whiteSpace:"nowrap"}}>
+              📷 Escanear
+            </button>
+          </div>
+          {search&&<div style={{fontSize:11,color:"#aaa",marginBottom:6}}>{found.length} resultados</div>}
           <div style={{marginTop:12,borderTop:"1px solid #f0f0f0",paddingTop:12}}>
             <button onClick={()=>{setShowManual(s=>!s);setManualError("");}}
               style={{padding:"6px 14px",borderRadius:8,border:"1.5px solid #e67e22",background:showManual?"#fef9e7":"#fff",color:"#e67e22",fontWeight:700,fontSize:12,cursor:"pointer"}}>
@@ -3627,26 +3741,28 @@ function Compras({products,onStock,isMobile}) {
 function SandboxStockManager({products, sandboxStock, setSandboxStock}) {
   const [search, setSearch] = useState("");
   const [edited, setEdited] = useState({});
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
 
-  const shown = useMemo(()=>{
+  const filtered = useMemo(()=>{
     const q = norm(search);
-    return products.filter(p=>!q||norm(p.name).includes(q)||normSKU(p.id).includes(normSKU(search))).slice(0,80);
+    return products.filter(p=>!q||norm(p.name).includes(q)||normSKU(p.id).includes(normSKU(search)));
   }, [products, search]);
 
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const shown = filtered.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
+
+  // Reset to page 1 on search change
+  const handleSearch = (v) => { setSearch(v); setPage(1); };
+
   const getSandbox = (pid) => edited[pid] !== undefined ? edited[pid] : (sandboxStock[pid] ?? products.find(p=>p.id===pid)?.stock ?? 0);
-
   const setVal = (pid, val) => setEdited(e=>({...e,[pid]:Math.max(0,+val||0)}));
-
-  const applyChanges = () => {
-    setSandboxStock(prev=>({...prev,...edited}));
-    setEdited({});
-  };
-
+  const applyChanges = () => { setSandboxStock(prev=>({...prev,...edited})); setEdited({}); };
   const hasChanges = Object.keys(edited).length > 0;
 
   return (
     <div>
-      <input value={search} onChange={e=>setSearch(e.target.value)}
+      <input value={search} onChange={e=>handleSearch(e.target.value)}
         placeholder="🔍 Buscar producto para editar su stock sandbox..."
         style={{width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #d7bde2",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:12,background:"#fff"}}/>
 
@@ -3660,12 +3776,30 @@ function SandboxStockManager({products, sandboxStock, setSandboxStock}) {
         </div>
       )}
 
+      {/* Info y paginación arriba */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:8}}>
+        <span style={{fontSize:12,color:"#888"}}>{filtered.length} productos · página {page} de {totalPages}</span>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}
+            style={{padding:"5px 12px",borderRadius:7,border:"1.5px solid #d7bde2",background:page===1?"#f5f5f5":"#fff",color:page===1?"#ccc":"#6c3483",fontWeight:700,fontSize:12,cursor:page===1?"not-allowed":"pointer"}}>← Anterior</button>
+          {Array.from({length:Math.min(totalPages,5)},(_,i)=>{
+            // Show pages around current
+            let p = page <= 3 ? i+1 : page - 2 + i;
+            if(p > totalPages) return null;
+            return <button key={p} onClick={()=>setPage(p)}
+              style={{width:32,height:32,borderRadius:7,border:"1.5px solid",cursor:"pointer",fontSize:12,fontWeight:700,
+                borderColor:page===p?"#6c3483":"#d7bde2",background:page===p?"#6c3483":"#fff",color:page===p?"#fff":"#6c3483"}}>{p}</button>;
+          })}
+          <button onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages}
+            style={{padding:"5px 12px",borderRadius:7,border:"1.5px solid #d7bde2",background:page===totalPages?"#f5f5f5":"#fff",color:page===totalPages?"#ccc":"#6c3483",fontWeight:700,fontSize:12,cursor:page===totalPages?"not-allowed":"pointer"}}>Siguiente →</button>
+        </div>
+      </div>
+
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:8}}>
         {shown.map(p=>{
           const sbQty = getSandbox(p.id);
           const realQty = sandboxStock[p.id] ?? p.stock;
-          const isEditing = edited[p.id] !== undefined;
-          const changed = isEditing && edited[p.id] !== realQty;
+          const changed = edited[p.id] !== undefined && edited[p.id] !== realQty;
           return (
             <div key={p.id} style={{background:changed?"#f5eef8":"#fff",borderRadius:10,padding:"10px 12px",border:changed?"1.5px solid #9b59b6":"1.5px solid #e8daef",display:"flex",alignItems:"center",gap:10}}>
               <div style={{flex:1,minWidth:0}}>
@@ -3682,6 +3816,14 @@ function SandboxStockManager({products, sandboxStock, setSandboxStock}) {
           );
         })}
       </div>
+
+      {/* Paginación abajo */}
+      {totalPages>1 && <div style={{display:"flex",justifyContent:"center",gap:6,marginTop:14,flexWrap:"wrap"}}>
+        <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}
+          style={{padding:"5px 12px",borderRadius:7,border:"1.5px solid #d7bde2",background:page===1?"#f5f5f5":"#fff",color:page===1?"#ccc":"#6c3483",fontWeight:700,fontSize:12,cursor:page===1?"not-allowed":"pointer"}}>← Anterior</button>
+        <button onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages}
+          style={{padding:"5px 12px",borderRadius:7,border:"1.5px solid #d7bde2",background:page===totalPages?"#f5f5f5":"#fff",color:page===totalPages?"#ccc":"#6c3483",fontWeight:700,fontSize:12,cursor:page===totalPages?"not-allowed":"pointer"}}>Siguiente →</button>
+      </div>}
     </div>
   );
 }
@@ -3694,6 +3836,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
     {k:"home",        label:"Administración",   icon:"🏠"},
     {k:"ventas",      label:"Ventas",           icon:"📈"},
     {k:"sandbox",     label:"Demo Sandbox",     icon:"🧪"},
+    {k:"sandboxstock",label:"Stock Sandbox",     icon:"📦"},
     {k:"activity",    label:"Actividad",        icon:"📝"},
     {k:"vendors",     label:"Vendedores",       icon:"👥"},
     {k:"users",       label:"Usuarios",         icon:"🔐"},
@@ -3751,24 +3894,24 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
               </div>
             ))}
           </div>
-
-          {/* Stock Sandbox */}
-          <div style={{background:"#f5eef8",border:"1.5px solid #9b59b6",borderRadius:12,padding:20}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10,marginBottom:16}}>
-              <div>
-                <div style={{fontWeight:800,fontSize:15,color:"#6c3483"}}>🧪 Stock Sandbox</div>
-                <div style={{fontSize:12,color:"#888",marginTop:2}}>Configurá el stock que verá el vendedor Prueba para simular pedidos</div>
-              </div>
-              <button onClick={()=>{const sb={};products.forEach(p=>{sb[p.id]=p.stock;});setSandboxStock(sb);}}
-                style={{padding:"7px 14px",borderRadius:8,border:"1.5px solid #9b59b6",background:"#fff",color:"#6c3483",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-                🔄 Resetear al stock real
-              </button>
-            </div>
-            <SandboxStockManager products={products} sandboxStock={sandboxStock} setSandboxStock={setSandboxStock}/>
-          </div>
         </div>
       )}
       {section==="ventas"      && <VentasPanel    orders={realOrders}/>}
+      {section==="sandboxstock" && (
+        <div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10,marginBottom:16}}>
+            <div>
+              <div style={{fontWeight:800,fontSize:15,color:"#6c3483"}}>📦 Stock Sandbox</div>
+              <div style={{fontSize:12,color:"#888",marginTop:2}}>Configurá el stock que verá el vendedor Prueba para simular pedidos</div>
+            </div>
+            <button onClick={()=>{const sb={};products.forEach(p=>{sb[p.id]=p.stock;});setSandboxStock(sb);}}
+              style={{padding:"7px 14px",borderRadius:8,border:"1.5px solid #9b59b6",background:"#fff",color:"#6c3483",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+              🔄 Resetear al stock real
+            </button>
+          </div>
+          <SandboxStockManager products={products} sandboxStock={sandboxStock} setSandboxStock={setSandboxStock}/>
+        </div>
+      )}
       {section==="sandbox"     && (
         <div>
           <div style={{background:"#f5eef8",border:"1.5px solid #9b59b6",borderRadius:12,padding:"12px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
