@@ -169,6 +169,17 @@ function Bdg({stage}) {
   const c=SCFG[stage]||{};
   return <span style={{background:c.bg,color:c.color,border:`1px solid ${c.color}44`,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{c.icon} {c.label}</span>;
 }
+// ─── SAVE SPINNER ────────────────────────────────────────────────────────────
+function SaveSpinner({label="Guardando...", color="#c0392b"}) {
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"60px 20px",gap:16}}>
+      <div style={{width:48,height:48,borderRadius:"50%",border:`4px solid ${color}22`,borderTop:`4px solid ${color}`,animation:"lm-spin 0.8s linear infinite"}}/>
+      <div style={{fontWeight:700,fontSize:14,color:"#555"}}>{label}</div>
+      <style>{`@keyframes lm-spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+}
+
 function Field({label,children}) {
   return <div style={{marginBottom:12}}>
     <label style={{fontSize:12,fontWeight:600,color:"#666",display:"block",marginBottom:4}}>{label}</label>
@@ -640,9 +651,15 @@ function Login({users, onLogin}) {
 
 // ─── ROOT APP ─────────────────────────────────────────────────────────────────
 export default function App() {
-  // ── SANDBOX STOCK — copia en memoria para el vendedor Prueba ──
-  // Se inicializa con el stock real al cargar, nunca persiste en Supabase
-  const [sandboxStock, setSandboxStock] = useState({}); // { pid: qty }
+  // ── SANDBOX STOCK — copia para el vendedor Prueba, persiste en localStorage ──
+  const [sandboxStock, setSandboxStock] = useState({});
+  const updateSandboxStock = (updater) => {
+    setSandboxStock(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      try { localStorage.setItem("lm_sandbox_stock", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
   const isSandboxUser = (user) => user && isTestOrder(user.vendedor || user.name);
 
   const [currentUser, setCurrentUser] = useState(() => {
@@ -675,10 +692,21 @@ export default function App() {
         ]);
         setUsers(u); setVendors(v); setProducts(p);
         setOrders(o); setQuotes(q); setStockLog(sl); setActivity(act); setPriceLists(pl); setPurchaseOrders(po); setNotifs(n); setClients(cl);
-        // Inicializar sandbox con stock real
-        const sbInit = {};
-        p.forEach(prod => { sbInit[prod.id] = prod.stock; });
-        setSandboxStock(sbInit);
+        // Inicializar sandbox — recuperar de localStorage si existe, sino copiar stock real
+        try {
+          const saved = localStorage.getItem("lm_sandbox_stock");
+          if(saved) {
+            setSandboxStock(JSON.parse(saved));
+          } else {
+            const sbInit = {};
+            p.forEach(prod => { sbInit[prod.id] = prod.stock; });
+            setSandboxStock(sbInit);
+          }
+        } catch {
+          const sbInit = {};
+          p.forEach(prod => { sbInit[prod.id] = prod.stock; });
+          setSandboxStock(sbInit);
+        }
         // Refrescar sesión guardada con los datos actuales del usuario
         try {
           const saved = localStorage.getItem("lm_session");
@@ -805,7 +833,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const isSandbox = test || isTestOrder(order.vendedor);
     if(isSandbox) {
       // SANDBOX: descontar del stock paralelo en memoria, no tocar Supabase
-      setSandboxStock(prev => {
+      updateSandboxStock(prev => {
         const next = {...prev};
         orderWithNum.items.forEach(it => {
           next[it.pid] = Math.max(0, (next[it.pid] ?? 0) - it.qty);
@@ -866,7 +894,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     if(ord && ord.stage!=="entregado") {
       if(isSandboxOrder) {
         // SANDBOX: devolver stock al paralelo en memoria, nunca tocar Supabase
-        setSandboxStock(prev => {
+        updateSandboxStock(prev => {
           const next = {...prev};
           ord.items.forEach(it => { next[it.pid] = (next[it.pid] ?? 0) + it.qty; });
           return next;
@@ -1314,7 +1342,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
           onSubmitEdit={submitEdit} onApproveEdit={approveEdit} onRejectEdit={rejectEdit}
           currentUser={currentUser} isMobile={isMobile}/>}
         {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient}/>}
-        {tab==="clientes"   && <ClientesPanel clients={clients} onSave={saveClient} onDelete={deleteClient} onRequestDelete={requestDeleteClient} currentUser={currentUser} isMobile={isMobile}/>}
+        {tab==="clientes"   && <ClientesPanel clients={clients} onSave={saveClient} onDelete={deleteClient} onRequestDelete={requestDeleteClient} currentUser={currentUser} isMobile={isMobile} orders={orders}/>}
         {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient}/>}
         {tab==="precios"    && <Precios products={pricedProducts}/>}
         {tab==="stock"      && <>
@@ -1324,7 +1352,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                     <span style={{fontWeight:800,color:"#6c3483",fontSize:13}}>🧪 Modo Sandbox activo</span>
                     <span style={{color:"#888",fontSize:12,marginLeft:8}}>El stock que ves es una copia paralela. No afecta el stock real.</span>
                   </div>
-                  <button onClick={()=>{const sb={};products.forEach(p=>{sb[p.id]=p.stock;});setSandboxStock(sb);}}
+                  <button onClick={()=>{const sb={};products.forEach(p=>{sb[p.id]=p.stock;});updateSandboxStock(sb);}}
                     style={{padding:"6px 14px",borderRadius:8,border:"1.5px solid #9b59b6",background:"#fff",color:"#6c3483",fontWeight:700,fontSize:12,cursor:"pointer"}}>
                     🔄 Reiniciar sandbox
                   </button>
@@ -1664,56 +1692,58 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
           {!isAdmin && es==="aprobada" && showEditMode && (
             <div style={{background:"#eaf4fc",border:"1.5px solid #aed6f1",borderRadius:10,padding:"14px",marginBottom:14}} onClick={e=>e.stopPropagation()}>
               <div style={{fontWeight:800,fontSize:13,color:"#1a5276",marginBottom:10}}>✏️ Editando pedido</div>
-              {editItems.map((it,i)=>{
+              {editItems.map((it)=>{
                 const p = getP(it.pid);
                 return (
-                  <div key={it.pid} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #d6eaf8",flexWrap:"wrap"}}>
-                    <div style={{flex:1,fontSize:13,fontWeight:600,color:"#1a1a1a"}}>{p?.name||it.name}</div>
-                    <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <button onClick={()=>updEditItem(it.pid,it.qty-1)} style={{width:28,height:28,borderRadius:7,border:"1.5px solid #aed6f1",background:"#fff",fontWeight:800,cursor:"pointer",fontSize:14}}>−</button>
-                      <span style={{minWidth:28,textAlign:"center",fontWeight:700}}>{it.qty}</span>
-                      <button onClick={()=>updEditItem(it.pid,it.qty+1)} style={{width:28,height:28,borderRadius:7,border:"1.5px solid #aed6f1",background:"#fff",fontWeight:800,cursor:"pointer",fontSize:14}}>+</button>
+                  <div key={it.pid} style={{background:"#fff",borderRadius:8,padding:"10px 12px",marginBottom:8,border:"1px solid #d6eaf8"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                      <div style={{flex:1,fontSize:13,fontWeight:600,color:"#1a1a1a",marginRight:8,lineHeight:1.3}}>{p?.name||it.name}</div>
+                      <button onClick={()=>remEditItem(it.pid)} style={{background:"none",border:"none",color:"#c0392b",fontSize:20,cursor:"pointer",lineHeight:1,flexShrink:0}}>×</button>
                     </div>
-                    <span style={{fontWeight:700,color:RED,minWidth:80,textAlign:"right"}}>{fARS(it.price*it.qty)}</span>
-                    <button onClick={()=>remEditItem(it.pid)} style={{background:"none",border:"none",color:"#c0392b",fontSize:18,cursor:"pointer",lineHeight:1}}>×</button>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <button onClick={()=>updEditItem(it.pid,it.qty-1)} style={{width:32,height:32,borderRadius:8,border:"1.5px solid #aed6f1",background:"#fff",fontWeight:800,cursor:"pointer",fontSize:16}}>−</button>
+                        <span style={{minWidth:32,textAlign:"center",fontWeight:800,fontSize:15}}>{it.qty}</span>
+                        <button onClick={()=>updEditItem(it.pid,it.qty+1)} style={{width:32,height:32,borderRadius:8,border:"1.5px solid #aed6f1",background:"#fff",fontWeight:800,cursor:"pointer",fontSize:16}}>+</button>
+                      </div>
+                      <span style={{fontWeight:700,color:RED,fontSize:14}}>{fARS(it.price*it.qty)}</span>
+                    </div>
                   </div>
                 );
               })}
-              <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:15,color:RED,padding:"10px 0",borderTop:"2px solid #d6eaf8",margin:"8px 0"}}>
+              <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:15,color:RED,padding:"10px 0",borderTop:"2px solid #d6eaf8",margin:"4px 0 10px"}}>
                 <span>Nuevo total</span><span>{fARS(editTotal)}</span>
               </div>
-              <div style={{display:"flex",gap:8}}>
-                <button onClick={async()=>{if(!editItems.length)return;setSaving(true);await onSubmitEdit(o.id,editItems,editTotal);setShowEditMode(false);setSaving(false);}}
-                  disabled={!editItems.length||saving}
-                  style={{padding:"8px 16px",borderRadius:8,border:"none",background:editItems.length?"linear-gradient(135deg,#1a5276,#2980b9)":"#e5e5e5",color:editItems.length?"#fff":"#aaa",fontWeight:700,fontSize:13,cursor:editItems.length?"pointer":"not-allowed"}}>
-                  {saving?"Enviando...":"📤 Enviar para revisión"}
-                </button>
-                <button onClick={()=>setShowEditMode(false)}
-                  style={{padding:"8px 12px",borderRadius:8,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:13,cursor:"pointer"}}>Cancelar</button>
-              </div>
+              <button onClick={async()=>{if(!editItems.length)return;setSaving(true);await onSubmitEdit(o.id,editItems,editTotal);setShowEditMode(false);setSaving(false);}}
+                disabled={!editItems.length||saving}
+                style={{width:"100%",padding:"10px",borderRadius:9,border:"none",background:editItems.length?"linear-gradient(135deg,#1a5276,#2980b9)":"#e5e5e5",color:editItems.length?"#fff":"#aaa",fontWeight:800,fontSize:14,cursor:editItems.length?"pointer":"not-allowed",marginBottom:8}}>
+                {saving?"Enviando...":"📤 Enviar para revisión"}
+              </button>
+              <button onClick={()=>setShowEditMode(false)}
+                style={{width:"100%",padding:"9px",borderRadius:9,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontSize:13,cursor:"pointer"}}>Cancelar</button>
             </div>
           )}
 
-          {/* Admin: cambios en revisión — comparación original vs nuevo */}
+          {/* Admin: cambios en revisión — lista separada para mobile */}
           {isAdmin && es==="en revisión" && (
             <div style={{background:"#eaf4fc",border:"1.5px solid #aed6f1",borderRadius:10,padding:"14px",marginBottom:14}}>
               <div style={{fontWeight:800,fontSize:13,color:"#1a5276",marginBottom:12}}>👀 Revisión de cambios — {o.vendedor}</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-                <div>
-                  <div style={{fontSize:11,fontWeight:700,color:"#888",marginBottom:6}}>ORIGINAL</div>
-                  {o.items.map((it,i)=>{const p=getP(it.pid);return <div key={i} style={{fontSize:12,color:"#555",padding:"3px 0",borderBottom:"1px solid #f0f0f0"}}>{p?.name||it.name} × {it.qty} — {fARS(it.price*it.qty)}</div>;})}
-                  <div style={{fontWeight:700,fontSize:13,color:"#555",marginTop:6}}>{fARS(o.total)}</div>
-                </div>
-                <div>
-                  <div style={{fontSize:11,fontWeight:700,color:"#1a5276",marginBottom:6}}>NUEVO</div>
-                  {(o.editItems||[]).map((it,i)=>{
-                    const p=getP(it.pid);
-                    const orig=o.items.find(x=>x.pid===it.pid);
-                    const changed=!orig||orig.qty!==it.qty;
-                    return <div key={i} style={{fontSize:12,color:changed?"#1a5276":"#555",fontWeight:changed?700:400,padding:"3px 0",borderBottom:"1px solid #f0f0f0"}}>{p?.name||it.name} × {it.qty} — {fARS(it.price*it.qty)}{changed?" ✏️":""}</div>;
-                  })}
-                  <div style={{fontWeight:800,fontSize:13,color:RED,marginTop:6}}>{fARS((o.editItems||[]).reduce((s,it)=>s+it.price*it.qty,0))}</div>
-                </div>
+              {/* Original */}
+              <div style={{marginBottom:10}}>
+                <div style={{fontSize:10,fontWeight:800,color:"#888",letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>Original</div>
+                {o.items.map((it,i)=>{const p=getP(it.pid);return <div key={i} style={{fontSize:12,color:"#555",padding:"4px 0",borderBottom:"1px solid #f0f0f0",display:"flex",justifyContent:"space-between"}}><span>{p?.name||it.name} × {it.qty}</span><span>{fARS(it.price*it.qty)}</span></div>;})}
+                <div style={{fontWeight:700,fontSize:13,color:"#555",marginTop:6,textAlign:"right"}}>{fARS(o.total)}</div>
+              </div>
+              {/* Nuevo */}
+              <div style={{background:"#fff",borderRadius:8,padding:"10px 12px",border:"1.5px solid #aed6f1",marginBottom:12}}>
+                <div style={{fontSize:10,fontWeight:800,color:"#1a5276",letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>Nuevo ✏️</div>
+                {(o.editItems||[]).map((it,i)=>{
+                  const p=getP(it.pid);
+                  const orig=o.items.find(x=>x.pid===it.pid);
+                  const changed=!orig||orig.qty!==it.qty;
+                  return <div key={i} style={{fontSize:12,color:changed?"#1a5276":"#555",fontWeight:changed?700:400,padding:"4px 0",borderBottom:"1px solid #f0f0f0",display:"flex",justifyContent:"space-between"}}><span>{p?.name||it.name} × {it.qty}{changed?" ✏️":""}</span><span>{fARS(it.price*it.qty)}</span></div>;
+                })}
+                <div style={{fontWeight:800,fontSize:13,color:RED,marginTop:6,textAlign:"right"}}>{fARS((o.editItems||[]).reduce((s,it)=>s+it.price*it.qty,0))}</div>
               </div>
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                 <button onClick={async()=>{setSaving(true);await onApproveEdit(o.id);setSaving(false);}}
@@ -1796,6 +1826,23 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
             {idx>0&&o.stage!=="entregado"&&!es&&<button onClick={()=>onStage(o.id,STAGES[idx-1])} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",cursor:"pointer",background:"#fff",color:"#666",fontWeight:600,fontSize:13}}>← Retroceder</button>}
             <button onClick={()=>printDoc(o, o.stage==="reserva"?"reserva":"confirmado")} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #d6eaf8",cursor:"pointer",background:"#fff",color:"#1a5276",fontWeight:600,fontSize:13}}>
               🖨️ {o.stage==="reserva"?(o.docNum||"Imprimir"):(o.compNum||"Imprimir")}
+            </button>
+            <button onClick={()=>{
+              const doc = o.stage==="reserva"?"reserva":"confirmado";
+              const num = o.stage==="reserva"?(o.docNum||""):(o.compNum||"");
+              const items = o.items.map(it=>`• ${it.name} x${it.qty} — ${fARS(it.price*it.qty)}`).join("
+");
+              const txt = `*Libreria Madrid*
+*${num}*
+Cliente: ${o.client}
+Fecha: ${o.date}
+
+${items}
+
+*Total: ${fARS(o.total)}*`;
+              window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`, "_blank");
+            }} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #d5f5e3",cursor:"pointer",background:"#fff",color:"#1e8449",fontWeight:600,fontSize:13}}>
+              💬 WhatsApp
             </button>
             {/* Solicitar edición — solo vendedor, solo si no hay edición en curso */}
             {!isAdmin && !es && o.stage!=="entregado" && (
@@ -1909,7 +1956,111 @@ function ClientSelector({clients, onSelect, onSaveClient, currentUser}) {
 }
 
 // ─── CLIENTES PANEL ───────────────────────────────────────────────────────────
-function ClientesPanel({clients, onSave, onDelete, onRequestDelete, currentUser, isMobile}) {
+// ─── CLIENT HISTORIAL ────────────────────────────────────────────────────────
+function ClientHistorial({client, orders, period, setPeriod, onBack}) {
+  const now = new Date();
+  const days = period==="30" ? 30 : period==="180" ? 180 : 365;
+  const cutoff = new Date(now.getTime() - days*24*60*60*1000);
+
+  const parseDate = (d) => {
+    if(!d) return null;
+    const [day,mon,yr] = d.split("/");
+    return new Date(+yr, +mon-1, +day);
+  };
+
+  const clientOrders = useMemo(()=>
+    orders.filter(o=>{
+      if(o.isSandbox) return false;
+      const matches = o.client===client.name || o.clientId===client.id;
+      if(!matches) return false;
+      const dt = parseDate(o.date);
+      return dt && dt >= cutoff;
+    }).sort((a,b)=>(parseDate(b.date)||0)-(parseDate(a.date)||0))
+  ,[orders, client, period]);
+
+  const totalGastado = clientOrders.filter(o=>o.stage==="entregado").reduce((s,o)=>s+o.total,0);
+  const totalPedidos = clientOrders.length;
+
+  return (
+    <div>
+      <button onClick={onBack} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",color:"#555",fontWeight:600,fontSize:13,cursor:"pointer",marginBottom:12}}>
+        ← Volver a clientes
+      </button>
+
+      {/* Header cliente */}
+      <div style={{background:"#fff",borderRadius:12,padding:"16px 18px",marginBottom:12,boxShadow:"0 1px 4px #0001"}}>
+        <div style={{fontWeight:800,fontSize:16}}>{client.name}</div>
+        <div style={{fontSize:12,color:"#888",marginTop:3}}>
+          {client.phone&&<span>📱 {client.phone}</span>}
+          {client.email&&<span style={{marginLeft:10}}>📧 {client.email}</span>}
+          {client.cuit&&<span style={{marginLeft:10}}>🪪 {client.cuit}</span>}
+        </div>
+      </div>
+
+      {/* Filtro período */}
+      <div style={{display:"flex",gap:8,marginBottom:12}}>
+        {[["30","30 días"],["180","6 meses"],["365","1 año"]].map(([val,label])=>(
+          <button key={val} onClick={()=>setPeriod(val)}
+            style={{padding:"7px 14px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:12,fontWeight:700,
+              borderColor:period===val?"#c0392b":"#e5e5e5",
+              background:period===val?"#fdecea":"#fff",
+              color:period===val?"#c0392b":"#666"}}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* KPIs */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
+        <div style={{background:"#fff",borderRadius:12,padding:"12px 14px",boxShadow:"0 1px 4px #0001",borderLeft:"3px solid #c0392b"}}>
+          <div style={{fontSize:22,fontWeight:900,color:"#c0392b"}}>{totalPedidos}</div>
+          <div style={{fontSize:10,color:"#888",fontWeight:600,marginTop:2}}>Pedidos</div>
+        </div>
+        <div style={{background:"#fff",borderRadius:12,padding:"12px 14px",boxShadow:"0 1px 4px #0001",borderLeft:"3px solid #1e8449"}}>
+          <div style={{fontSize:16,fontWeight:900,color:"#1e8449"}}>{fARS(totalGastado)}</div>
+          <div style={{fontSize:10,color:"#888",fontWeight:600,marginTop:2}}>Total entregado</div>
+        </div>
+        <div style={{background:"#fff",borderRadius:12,padding:"12px 14px",boxShadow:"0 1px 4px #0001",borderLeft:"3px solid #1a5276"}}>
+          <div style={{fontSize:16,fontWeight:900,color:"#1a5276"}}>{totalPedidos>0?fARS(totalGastado/totalPedidos):"$0"}</div>
+          <div style={{fontSize:10,color:"#888",fontWeight:600,marginTop:2}}>Ticket prom.</div>
+        </div>
+      </div>
+
+      {/* Lista de pedidos */}
+      {clientOrders.length===0
+        ? <div style={{textAlign:"center",padding:40,background:"#fff",borderRadius:12,color:"#aaa"}}>
+            <div style={{fontSize:36,marginBottom:8}}>📋</div>
+            <div style={{fontWeight:600}}>Sin pedidos en los últimos {period==="30"?"30 días":period==="180"?"6 meses":"año"}</div>
+          </div>
+        : clientOrders.map(o=>(
+          <div key={o.id} style={{background:"#fff",borderRadius:12,padding:"13px 16px",marginBottom:8,boxShadow:"0 1px 4px #0001"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:13}}>{o.docNum||o.compNum||o.id.slice(0,8)}</div>
+                <div style={{fontSize:11,color:"#aaa"}}>{o.date} · 👤 {o.vendedor}</div>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontWeight:800,fontSize:14,color:"#c0392b"}}>{fARS(o.total)}</div>
+                <Bdg stage={o.stage}/>
+              </div>
+            </div>
+            <div style={{borderTop:"1px solid #f5f5f5",paddingTop:6,marginTop:4}}>
+              {o.items.slice(0,3).map((it,i)=>(
+                <div key={i} style={{fontSize:11,color:"#888",display:"flex",justifyContent:"space-between"}}>
+                  <span>{it.name} × {it.qty}</span>
+                  <span>{fARS(it.price*it.qty)}</span>
+                </div>
+              ))}
+              {o.items.length>3&&<div style={{fontSize:10,color:"#aaa",marginTop:2}}>+{o.items.length-3} productos más</div>}
+            </div>
+          </div>
+        ))
+      }
+    </div>
+  );
+}
+
+function ClientesPanel({clients, onSave, onDelete, onRequestDelete, currentUser, isMobile, orders=[]}) {
   const isAdmin = currentUser.role === "admin";
   const [view, setView] = useState("lista");
   const [search, setSearch] = useState("");
@@ -1917,6 +2068,8 @@ function ClientesPanel({clients, onSave, onDelete, onRequestDelete, currentUser,
   const [form, setForm] = useState({name:"",phone:"",email:"",cuit:"",address:"",notes:""});
   const [delForm, setDelForm] = useState({id:null,reason:""});
   const [saving, setSaving] = useState(false);
+  const [historialClient, setHistorialClient] = useState(null);
+  const [historialPeriod, setHistorialPeriod] = useState("30"); // days
 
   const filtered = useMemo(()=>{
     const q = norm(search);
@@ -1953,6 +2106,11 @@ function ClientesPanel({clients, onSave, onDelete, onRequestDelete, currentUser,
         </button>
       </div>
 
+      {/* HISTORIAL */}
+      {view==="historial" && historialClient && (
+        <ClientHistorial client={historialClient} orders={orders} period={historialPeriod} setPeriod={setHistorialPeriod} onBack={()=>setView("lista")}/>
+      )}
+
       {/* LISTA */}
       {view==="lista" && <>
         <input value={search} onChange={e=>setSearch(e.target.value)}
@@ -1980,7 +2138,8 @@ function ClientesPanel({clients, onSave, onDelete, onRequestDelete, currentUser,
                   </div>}
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:5,flexShrink:0}}>
-                  <button onClick={()=>startEdit(c)} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11,fontWeight:600}}>✏️</button>
+                  <button onClick={()=>{setHistorialClient(c);setView("historial");}} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #eaf4fc",background:"#fff",color:"#1a5276",cursor:"pointer",fontSize:11,fontWeight:600}}>📋</button>
+            <button onClick={()=>startEdit(c)} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11,fontWeight:600}}>✏️</button>
                   {isAdmin
                     ? <button onClick={()=>{if(window.confirm(`¿Eliminar a "${c.name}"?`))onDelete(c.id);}} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #fcc",background:"#fff",color:"#c0392b",cursor:"pointer",fontSize:11}}>🗑</button>
                     : !c.deleteRequested&&<button onClick={()=>setDelForm({id:c.id,reason:""})} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #fcc",background:"#fff",color:"#c0392b",cursor:"pointer",fontSize:10,fontWeight:600}}>Solicitar baja</button>
@@ -2167,20 +2326,24 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
   const [cart,setCart]=useState([]);
   const [globalDisc,setGlobalDisc]=useState({type:"%",value:""});
   const [ok,setOk]=useState(false);
+  const [saving,setSaving]=useState(false);
   const [mStep,setMStep]=useState(1);
 
   const subtotal=cart.reduce((s,i)=>s+applyItemDiscount(i.price,i.qty,i.disc),0);
   const total=applyGlobalDiscount(subtotal,globalDisc);
   const globalDiscAmt=subtotal-total;
 
-  const submit=()=>{
+  const submit=async ()=>{
     if(!selectedClient){alert("Seleccioná un cliente");return;}
     if(!vendedor&&currentUser.role==="admin"){alert("Seleccioná un vendedor");return;}
     if(!cart.length){alert("Agregá productos");return;}
-    onAdd({id:genId(),client:selectedClient.name,clientId:selectedClient.id,notes,vendedor:vendedor||currentUser.vendedor||currentUser.name,items:cart,total,subtotal,globalDisc,stage:"reserva",date:today()});
+    setSaving(true);
+    await onAdd({id:genId(),client:selectedClient.name,clientId:selectedClient.id,notes,vendedor:vendedor||currentUser.vendedor||currentUser.name,items:cart,total,subtotal,globalDisc,stage:"reserva",date:today()});
+    setSaving(false);
     setOk(true); setTimeout(()=>onDone(),1400);
   };
 
+  if(saving) return <SaveSpinner label="Registrando pedido..." color={RED}/>;
   if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>✅</div><div style={{fontWeight:800,color:"#1e8449",fontSize:20,marginTop:12}}>¡Pedido registrado!</div></div>;
 
   if(isMobile) {
@@ -2307,7 +2470,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
   );
 }
 
-function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,onTabChange,currentUser,isMobile}) {
+function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,onTabChange,currentUser,isMobile,clients,onSaveClient}) {
   const [view,setView]=useState("lista");
   const [expanded,setExpanded]=useState(null);
   const getP=id=>products.find(p=>p.id===id);
@@ -2317,7 +2480,7 @@ function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,on
         <button onClick={()=>setView("lista")} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="lista"?`linear-gradient(135deg,${REDD},${RED})`:"transparent",color:view==="lista"?"#fff":"#555"}}>📄 Lista de Cotizaciones ({quotes.filter(q=>!q.convertida).length})</button>
         <button onClick={()=>setView("nueva")} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="nueva"?`linear-gradient(135deg,${REDD},${RED})`:"transparent",color:view==="nueva"?"#fff":"#555"}}>➕ Nueva Cotización</button>
       </div>
-      {view==="nueva" && <NuevaCotizacion products={products} vendors={vendors} onAdd={async(q)=>{await onAdd(q);setView("lista");}} currentUser={currentUser} isMobile={isMobile}/>}
+      {view==="nueva" && <NuevaCotizacion products={products} vendors={vendors} onAdd={async(q)=>{await onAdd(q);setView("lista");}} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={onSaveClient}/>}
       {view==="lista" && (quotes.length===0
         ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{fontSize:48}}>📄</div><div style={{marginTop:8}}>No hay cotizaciones aún</div></div>
         : quotes.map(q=><QuoteCard key={q.id} q={q} exp={expanded===q.id} toggle={()=>setExpanded(expanded===q.id?null:q.id)} getP={getP} onDel={onDel} onConvert={async(qt)=>{await onConvert(qt);onTabChange("central");}} onExtend={onExtend}/>)
@@ -2429,6 +2592,23 @@ function QuoteCard({q,exp,toggle,getP,onDel,onConvert,onExtend}) {
           {q.notes&&<div style={{background:"#f9f9f9",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#555",marginBottom:12}}>💬 {q.notes}</div>}
           <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
             <button onClick={()=>printDoc(q,"cotizacion")} style={{padding:"8px 12px",borderRadius:8,border:`1.5px solid ${PURPLEBG}`,cursor:"pointer",background:"#fff",color:PURPLE,fontWeight:600,fontSize:13}}>🖨️ Imprimir</button>
+            <button onClick={()=>{
+              const items = q.items.map(it=>`• ${it.name} x${it.qty} — ${fARS(it.price*it.qty)}`).join("
+");
+              const disc = q.globalDisc?.value ? `
+Descuento: ${fmtDisc(q.globalDisc)}` : "";
+              const txt = `*Libreria Madrid - Cotización*
+*${q.docNum||""}*
+Cliente: ${q.client}
+Fecha: ${q.date} · Válida: ${q.validity||"48 horas"}
+
+${items}${disc}
+
+*Total: ${fARS(q.total)}*`;
+              window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`, "_blank");
+            }} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #d5f5e3",cursor:"pointer",background:"#fff",color:"#1e8449",fontWeight:600,fontSize:13}}>
+              💬 WhatsApp
+            </button>
             {!q.convertida
               ? <button onClick={()=>onConvert(q)} disabled={isVencida}
                   style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:isVencida?"not-allowed":"pointer",background:isVencida?"#e5e5e5":"linear-gradient(135deg,#922b21,#c0392b)",color:isVencida?"#aaa":"#fff",fontWeight:700,fontSize:13}}>
@@ -2456,14 +2636,15 @@ function QuoteDelBtn({onConfirm}) {
   return <button onClick={()=>setC(true)} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>🗑 Eliminar</button>;
 }
 
-function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile}) {
+function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,onSaveClient}) {
   const PURPLE="#6c3483"; const PURPLEG="linear-gradient(135deg,#6c3483,#9b59b6)";
-  const [client,setClient]=useState("");
+  const [selectedClient,setSelectedClient]=useState(null);
   const [notes,setNotes]=useState("");
   const [vendedor,setVendedor]=useState(currentUser?.role!=="admin" ? (currentUser?.vendedor||currentUser?.name||"") : "");
   const [validity,setValidity]=useState("48 horas");
   const [cart,setCart]=useState([]);
   const [globalDisc,setGlobalDisc]=useState({type:"%",value:""});
+  const [saving,setSaving]=useState(false);
   const [ok,setOk]=useState(false);
   const [mStep,setMStep]=useState(1);
 
@@ -2472,21 +2653,23 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile}) {
   const globalDiscAmt = subtotal - total;
 
   const submit=async()=>{
-    if(!client.trim()){alert("Ingresá el cliente");return;}
+    if(!selectedClient){alert("Seleccioná un cliente");return;}
     if(!cart.length){alert("Agregá productos");return;}
-    const q={id:genId(),client:client.trim(),notes,vendedor,validity,items:cart,total,subtotal,globalDisc,date:today()};
-    setOk(true);
+    setSaving(true);
+    const q={id:genId(),client:selectedClient.name,clientId:selectedClient.id,notes,vendedor,validity,items:cart,total,subtotal,globalDisc,date:today()};
     await onAdd(q);
+    setSaving(false);
+    setOk(true);
   };
 
+  if(saving) return <SaveSpinner label="Guardando cotización..." color={PURPLE}/>;
   if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>📄</div><div style={{fontWeight:800,color:PURPLE,fontSize:20,marginTop:12}}>¡Cotización guardada!</div></div>;
 
   // ── MOBILE — flujo 3 pasos ──
   if(isMobile) return (
     <div style={{display:"flex",flexDirection:"column",minHeight:"100%"}}>
-      {/* Steps header */}
       <div style={{display:"flex",background:"#fff",borderRadius:10,padding:"10px 14px",marginBottom:12,boxShadow:"0 1px 4px #0001",gap:4}}>
-        {[{n:1,l:"Datos"},{n:2,l:"Productos"},{n:3,l:"Confirmar"}].map(s=>(
+        {[{n:1,l:"Cliente"},{n:2,l:"Productos"},{n:3,l:"Confirmar"}].map(s=>(
           <div key={s.n} onClick={()=>mStep>s.n&&setMStep(s.n)}
             style={{flex:1,textAlign:"center",padding:"6px 4px",borderRadius:8,
               background:mStep===s.n?"#f5eef8":mStep>s.n?"#f9f9f9":"transparent",
@@ -2497,27 +2680,29 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile}) {
         ))}
       </div>
 
-      {/* Paso 1 — Datos */}
+      {/* Paso 1 — Cliente */}
       {mStep===1 && (
         <div style={{background:"#fff",borderRadius:12,padding:16,boxShadow:"0 1px 4px #0001"}}>
-          <div style={{background:"#f5eef8",borderRadius:8,padding:"8px 12px",fontSize:12,color:PURPLE,marginBottom:14}}>
-            ℹ️ Las cotizaciones <strong>no descuentan stock</strong>. Son solo presupuestos para el cliente.
+          <div style={{background:"#f5eef8",borderRadius:8,padding:"8px 12px",fontSize:12,color:PURPLE,marginBottom:12}}>
+            ℹ️ Las cotizaciones <strong>no descuentan stock</strong>. Son solo presupuestos.
           </div>
-          <Field label="Cliente *"><input value={client} onChange={e=>setClient(e.target.value)} placeholder="Nombre del cliente" style={inputStyle}/></Field>
-          {currentUser?.role==="admin"
-            ? <Field label="Vendedor"><select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,cursor:"pointer"}}>
-                <option value="">- Sin asignar -</option>
-                {vendors.map(v=><option key={v} value={v}>{v}</option>)}
-              </select></Field>
-            : <div style={{marginBottom:12,background:"#f5f5f5",borderRadius:8,padding:"9px 12px",fontSize:13,color:"#555"}}>
-                <span style={{fontSize:11,fontWeight:700,color:"#888",display:"block",marginBottom:2}}>VENDEDOR</span>
-                <span style={{fontWeight:700}}>{vendedor||currentUser?.name}</span>
+          <div style={{fontWeight:800,fontSize:14,marginBottom:12}}>👥 Seleccioná el cliente</div>
+          {selectedClient
+            ? <div style={{background:"#f5eef8",border:"1.5px solid #d7bde2",borderRadius:10,padding:"12px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:24}}>✅</span>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:700,fontSize:14,color:PURPLE}}>{selectedClient.name}</div>
+                  <div style={{fontSize:12,color:"#888"}}>📱 {selectedClient.phone}</div>
+                </div>
+                <button onClick={()=>setSelectedClient(null)} style={{padding:"4px 10px",borderRadius:7,border:"1px solid #d7bde2",background:"#fff",color:PURPLE,fontSize:11,fontWeight:600,cursor:"pointer"}}>Cambiar</button>
               </div>
+            : <ClientSelector clients={clients||[]} onSelect={setSelectedClient} onSaveClient={onSaveClient} currentUser={currentUser}/>
           }
+          {currentUser?.role==="admin"&&<Field label="Vendedor"><select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,cursor:"pointer"}}><option value="">- Sin asignar -</option>{vendors.map(v=><option key={v} value={v}>{v}</option>)}</select></Field>}
           <Field label="Válida hasta"><input value={validity} onChange={e=>setValidity(e.target.value)} placeholder="Ej: 48 horas" style={inputStyle}/></Field>
           <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones, condiciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
-          <button onClick={()=>{if(!client.trim()){alert("Ingresá el cliente");return;}setMStep(2);}}
-            style={{width:"100%",padding:"12px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:PURPLEG,color:"#fff",marginTop:8}}>
+          <button onClick={()=>{if(!selectedClient){alert("Seleccioná un cliente");return;}setMStep(2);}}
+            style={{width:"100%",padding:"12px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:selectedClient?PURPLEG:"#e5e5e5",color:selectedClient?"#fff":"#aaa",marginTop:8}}>
             Siguiente → Productos
           </button>
         </div>
@@ -2545,7 +2730,7 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile}) {
       {mStep===3 && (
         <div style={{background:"#fff",borderRadius:12,padding:16,boxShadow:"0 1px 4px #0001"}}>
           <div style={{fontWeight:800,fontSize:15,marginBottom:14,color:PURPLE}}>📄 Confirmar cotización</div>
-          <div style={{fontSize:13,color:"#555",marginBottom:8}}>👤 <strong>{client}</strong> · {vendedor} · {validity}</div>
+          <div style={{fontSize:13,color:"#555",marginBottom:8}}>👤 <strong>{selectedClient?.name}</strong> · {vendedor} · {validity}</div>
           <div style={{borderTop:"1px solid #f5f5f5",paddingTop:8,marginBottom:8}}>
             {cart.map(i=>{
               const lineTotal=applyItemDiscount(i.price,i.qty,i.disc);
@@ -2596,7 +2781,16 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile}) {
           <div style={{background:"#e8daef",borderRadius:8,padding:"7px 12px",fontSize:12,color:PURPLE,marginBottom:14}}>
             ℹ️ Las cotizaciones <strong>no descuentan stock</strong>. Son solo presupuestos para el cliente.
           </div>
-          <Field label="Cliente *"><input value={client} onChange={e=>setClient(e.target.value)} placeholder="Nombre del cliente" style={inputStyle}/></Field>
+          {selectedClient
+            ? <div style={{background:"#f5eef8",border:"1.5px solid #d7bde2",borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:20}}>✅</span>
+                <div style={{flex:1}}><div style={{fontWeight:700,fontSize:13,color:PURPLE}}>{selectedClient.name}</div><div style={{fontSize:11,color:"#888"}}>📱 {selectedClient.phone}</div></div>
+                <button onClick={()=>setSelectedClient(null)} style={{padding:"3px 8px",borderRadius:6,border:"1px solid #d7bde2",background:"#fff",color:PURPLE,fontSize:11,cursor:"pointer"}}>Cambiar</button>
+              </div>
+            : <div style={{marginBottom:12}}><div style={{fontSize:11,fontWeight:700,color:"#666",marginBottom:6}}>CLIENTE *</div>
+                <ClientSelector clients={clients||[]} onSelect={setSelectedClient} onSaveClient={onSaveClient} currentUser={currentUser}/>
+              </div>
+          }
           {currentUser?.role==="admin"
             ? <Field label="Vendedor">
                 <select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,color:vendedor?"#1a1a1a":"#aaa",cursor:"pointer"}}>
@@ -2642,8 +2836,8 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile}) {
             <span>Subtotal</span><span>{fARS(subtotal)}</span>
           </div>}
           <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:17,color:PURPLE,padding:"8px 0",borderTop:"2px solid #f5f5f5",margin:"6px 0 14px"}}><span>Total</span><span>{fARS(total)}</span></div>
-          <button onClick={submit} disabled={!cart.length||!client.trim()} style={{width:"100%",padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:(!cart.length||!client.trim())?"#e5e5e5":PURPLEG,color:(!cart.length||!client.trim())?"#aaa":"#fff"}}>
-            📄 Guardar Cotización
+          <button onClick={submit} disabled={!cart.length||!selectedClient||saving} style={{width:"100%",padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:(!cart.length||!selectedClient)?"#e5e5e5":PURPLEG,color:(!cart.length||!selectedClient)?"#aaa":"#fff"}}>
+            {saving?"Guardando...":"📄 Guardar Cotización"}
           </button>
         </div>
       </div>
@@ -4283,7 +4477,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
               <div style={{fontWeight:800,fontSize:15,color:"#6c3483"}}>📦 Stock Sandbox</div>
               <div style={{fontSize:12,color:"#888",marginTop:2}}>Configurá el stock que verá el vendedor Prueba para simular pedidos</div>
             </div>
-            <button onClick={()=>{const sb={};products.forEach(p=>{sb[p.id]=p.stock;});setSandboxStock(sb);}}
+            <button onClick={()=>{const sb={};products.forEach(p=>{sb[p.id]=p.stock;});updateSandboxStock(sb);}}
               style={{padding:"7px 14px",borderRadius:8,border:"1.5px solid #9b59b6",background:"#fff",color:"#6c3483",fontWeight:700,fontSize:12,cursor:"pointer"}}>
               🔄 Resetear al stock real
             </button>
