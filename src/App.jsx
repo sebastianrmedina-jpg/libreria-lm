@@ -1844,15 +1844,17 @@ function ProductSelector({products,cart,setCart,isMobile}) {
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("todos");
   const [catOpen,setCatOpen]=useState(false);
+  const [soloStock,setSoloStock]=useState(false);
   const CATS=useMemo(()=>["todos",...new Set(products.map(p=>p.category))].sort(),[products]);
   const shown=useMemo(()=>{
     const q=search.toLowerCase();
     return products.filter(p=>{
       if(cat!=="todos"&&p.category!==cat)return false;
+      if(soloStock&&p.stock<=0)return false;
       if(q)return norm(p.name).includes(norm(q))||normSKU(p.id).includes(normSKU(q));
       return true;
     }).slice(0,80);
-  },[products,search,cat]);
+  },[products,search,cat,soloStock]);
   const addC=p=>setCart(c=>{const ex=c.find(i=>i.pid===p.id);return ex?c.map(i=>i.pid===p.id?{...i,qty:i.qty+1}:i):[...c,{pid:p.id,qty:1,price:p.salePrice,name:p.name}];});
   const setQ=(pid,qty)=>{if(qty<=0)setCart(c=>c.filter(i=>i.pid!==pid));else setCart(c=>c.map(i=>i.pid===pid?{...i,qty}:i));};
   return (
@@ -1868,6 +1870,15 @@ function ProductSelector({products,cart,setCart,isMobile}) {
           </div>)}
         </div>
         {search&&<div style={{fontSize:11,color:"#aaa",marginTop:6}}>{shown.length} resultados</div>}
+        {/* Filtro solo con stock */}
+        <button onClick={()=>setSoloStock(s=>!s)}
+          style={{marginTop:8,padding:"7px 14px",borderRadius:8,border:"1.5px solid",cursor:"pointer",fontSize:12,fontWeight:700,
+            borderColor:soloStock?"#1e8449":"#e5e5e5",
+            background:soloStock?"#eafaf1":"#fff",
+            color:soloStock?"#1e8449":"#888",
+            display:"flex",alignItems:"center",gap:6}}>
+          📦 {soloStock?"Solo con stock ✓":"Mostrar solo con stock"}
+        </button>
       </div>
       {isMobile
         ? <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -4571,114 +4582,103 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
     </div>
   );
 
+  const isMobilePanel = useIsMobile();
+  const [view, setView] = useState("lista");
+
   return (
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,alignItems:"start"}}>
-      <div style={{background:"#fff",borderRadius:12,padding:24,boxShadow:"0 1px 4px #0001"}}>
-        <div style={{fontWeight:800,fontSize:15,marginBottom:16}}>{editing?"✏️ Editar usuario":"+ Nuevo usuario"}</div>
-
-        {/* Avatar */}
-        <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:16,padding:"12px 14px",background:"#f9f9f9",borderRadius:10}}>
-          <div style={{width:60,height:60,borderRadius:"50%",background:"#e5e5e5",overflow:"hidden",flexShrink:0,border:"2px solid #ddd",display:"flex",alignItems:"center",justifyContent:"center"}}>
-            {avatarPreview
-              ? <img src={avatarPreview} alt="avatar" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-              : <span style={{fontSize:24}}>👤</span>}
-          </div>
-          <div>
-            <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>Foto de perfil</div>
-            <label style={{padding:"6px 12px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",color:"#555"}}>
-              📷 Subir foto
-              <input type="file" accept="image/*" onChange={handleAvatar} style={{display:"none"}}/>
-            </label>
-            {avatarPreview&&<button onClick={()=>{setAvatarPreview("");setForm(f=>({...f,avatar:""}));}} style={{marginLeft:6,padding:"6px 10px",borderRadius:7,border:"none",background:"#fdecea",color:RED,fontSize:11,cursor:"pointer",fontWeight:600}}>✕ Quitar</button>}
-          </div>
-        </div>
-
-        <Field label="Nombre completo *">
-          <input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Ej: María García" style={inputStyle}/>
-        </Field>
-        <Field label="Cargo / Título">
-          <input value={form.cargo||""} onChange={e=>setForm(f=>({...f,cargo:e.target.value}))} placeholder="Ej: Representante Comercial" style={inputStyle}/>
-        </Field>
-        <Field label="Teléfono / WhatsApp">
-          <input value={form.phone||""} onChange={e=>setForm(f=>({...f,phone:e.target.value}))} placeholder="Ej: +54 11 1234-5678" style={inputStyle}/>
-        </Field>
-        <Field label="Email">
-          <input type="email" value={form.email||""} onChange={e=>setForm(f=>({...f,email:e.target.value}))} placeholder="vendedor@ejemplo.com" style={inputStyle}/>
-        </Field>
-        <Field label="Usuario (para login) *">
-          <input value={form.username} onChange={e=>setForm(f=>({...f,username:e.target.value}))} placeholder="Ej: maria" style={inputStyle}/>
-        </Field>
-        <Field label="Contraseña *">
-          <div style={{position:"relative"}}>
-            <input type={showPass.form?"text":"password"} value={form.password}
-              onChange={e=>setForm(f=>({...f,password:e.target.value}))}
-              placeholder="Contraseña segura" style={{...inputStyle,paddingRight:40}}/>
-            <button onClick={()=>setShowPass(s=>({...s,form:!s.form}))} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:15,color:"#aaa"}}>{showPass.form?"🙈":"👁️"}</button>
-          </div>
-        </Field>
-        <Field label="Rol">
-          <select value={form.role} onChange={e=>setForm(f=>({...f,role:e.target.value}))} style={{...inputStyle,cursor:"pointer"}}>
-            <option value="vendedor">Vendedor</option>
-            <option value="admin">Administrador</option>
-          </select>
-        </Field>
-        <Field label="Vendedor asignado">
-          <select value={form.vendedor||""} onChange={e=>setForm(f=>({...f,vendedor:e.target.value}))} style={{...inputStyle,cursor:"pointer",color:form.vendedor?"#1a1a1a":"#aaa"}}>
-            <option value="">- Sin asignar -</option>
-            {(vendors||[]).map(v=><option key={v} value={v}>{v}</option>)}
-          </select>
-          <div style={{fontSize:10,color:"#888",marginTop:3}}>El pedido se asignará automáticamente a este vendedor</div>
-        </Field>
-        <Field label="Lista de precios">
-          <select value={form.priceList||"default"} onChange={e=>setForm(f=>({...f,priceList:e.target.value}))} style={{...inputStyle,cursor:"pointer"}}>
-            {(priceLists||[{id:"default",name:"Normal",discount:0}]).map(pl=>(
-              <option key={pl.id} value={pl.id}>{pl.name}{pl.discount>0?` (-${pl.discount}%)`:""}</option>
-            ))}
-          </select>
-        </Field>
-        <Toggle label="Ver todos los pedidos" sub={form.canSeeAll?"Ve todos los pedidos de todos los vendedores":"Solo ve sus propios pedidos"} val={form.canSeeAll} onChange={()=>setForm(f=>({...f,canSeeAll:!f.canSeeAll}))}/>
-        <Toggle label="📷 Lector de código de barras" sub={form.barcodeEnabled?"Puede usar el lector en Alta de Mercancía":"Sin acceso al lector de código de barras"} val={form.barcodeEnabled} onChange={()=>setForm(f=>({...f,barcodeEnabled:!f.barcodeEnabled}))}/>
-        <div style={{display:"flex",gap:8,marginTop:4}}>
-          <button onClick={save} style={{flex:1,padding:"9px",borderRadius:8,border:"none",background:RED,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13}}>{editing?"Guardar cambios":"Crear usuario"}</button>
-          {editing&&<button onClick={cancelEdit} style={{padding:"9px 14px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontWeight:600,color:"#666",fontSize:13}}>Cancelar</button>}
-        </div>
+    <div>
+      <div style={{background:"#fff",borderRadius:12,padding:4,marginBottom:16,display:"flex",gap:4,boxShadow:"0 1px 4px #0001"}}>
+        <button onClick={()=>{setView("lista");cancelEdit();}} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="lista"?`linear-gradient(135deg,#922b21,${RED})`:"transparent",color:view==="lista"?"#fff":"#555"}}>
+          🔐 Usuarios ({users.length})
+        </button>
+        <button onClick={()=>setView("form")} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="form"?`linear-gradient(135deg,#922b21,${RED})`:"transparent",color:view==="form"?"#fff":"#555"}}>
+          {editing?"✏️ Editando":"+ Nuevo usuario"}
+        </button>
       </div>
-      <div style={{background:"#fff",borderRadius:12,padding:24,boxShadow:"0 1px 4px #0001"}}>
-        <div style={{fontWeight:800,fontSize:15,marginBottom:16}}>🔐 Usuarios ({users.length})</div>
-        {users.map(u=>(
-          <div key={u.id} style={{padding:"12px 14px",borderRadius:10,border:`1.5px solid ${editing===u.id?"#c0392b":"#f0f0f0"}`,marginBottom:8,background:editing===u.id?"#fdecea":"#fafafa"}}>
-            <div style={{display:"flex",alignItems:"center",gap:10}}>
-              {/* Avatar */}
-              <div style={{width:42,height:42,borderRadius:"50%",background:"#e5e5e5",overflow:"hidden",flexShrink:0,border:"2px solid #ddd",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                {u.avatar
-                  ? <img src={u.avatar} alt={u.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                  : <span style={{fontSize:18}}>{u.role==="admin"?"👑":"👤"}</span>}
-              </div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontWeight:700,fontSize:13}}>{u.name}{u.cargo&&<span style={{fontWeight:400,color:"#888",fontSize:12}}> · {u.cargo}</span>}</div>
-                <div style={{fontSize:11,color:"#888",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginTop:2}}>
-                  <span>@{u.username}</span>
-                  <span style={{color:u.role==="admin"?RED:"#1a5276",fontWeight:600}}>{u.role==="admin"?"Admin":"Vendedor"}</span>
-                  {u.vendedor&&<span style={{color:"#6c3483",fontWeight:600}}>· 👤 {u.vendedor}</span>}
-                  {u.phone&&<span>· 📱 {u.phone}</span>}
-                  {u.email&&<span>· 📧 {u.email}</span>}
+
+      {view==="lista" && (
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {users.map(u=>(
+            <div key={u.id} style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 4px #0001",border:`1.5px solid ${editing===u.id?"#c0392b":"#f0f0f0"}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <div style={{width:48,height:48,borderRadius:"50%",background:u.avatar?"transparent":"linear-gradient(135deg,#7b1a1a,#c0392b)",overflow:"hidden",flexShrink:0,border:"2px solid #f0f0f0",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {u.avatar ? <img src={u.avatar} alt={u.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontSize:20}}>{u.role==="admin"?"👑":"👤"}</span>}
                 </div>
-                <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:4}}>
-                  {u.priceList&&u.priceList!=="default"&&<span style={{background:"#fef9e7",color:"#e67e22",borderRadius:6,padding:"1px 6px",fontWeight:700,fontSize:10}}>💲 {(priceLists||[]).find(pl=>pl.id===u.priceList)?.name||u.priceList}</span>}
-                  {u.canSeeAll===false&&<span style={{background:"#fdecea",color:"#c0392b",borderRadius:6,padding:"1px 6px",fontWeight:700,fontSize:10}}>🔒 Solo sus pedidos</span>}
-                  {u.barcodeEnabled&&<span style={{background:"#eaf4fc",color:"#1a5276",borderRadius:6,padding:"1px 6px",fontWeight:700,fontSize:10}}>📷 Lector activo</span>}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:14}}>{u.name}{u.cargo&&<span style={{fontWeight:400,color:"#888",fontSize:12}}> · {u.cargo}</span>}</div>
+                  <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:4}}>
+                    <span style={{background:u.role==="admin"?"#fdecea":"#eaf4fc",color:u.role==="admin"?RED:"#1a5276",borderRadius:6,padding:"1px 8px",fontWeight:700,fontSize:10}}>{u.role==="admin"?"Admin":"Vendedor"}</span>
+                    {u.vendedor&&<span style={{background:"#f5eef8",color:"#6c3483",borderRadius:6,padding:"1px 8px",fontWeight:700,fontSize:10}}>👤 {u.vendedor}</span>}
+                    {u.barcodeEnabled&&<span style={{background:"#eaf4fc",color:"#1a5276",borderRadius:6,padding:"1px 8px",fontWeight:700,fontSize:10}}>📷 Lector</span>}
+                    {u.canSeeAll===false&&<span style={{background:"#fef9e7",color:"#b7770d",borderRadius:6,padding:"1px 8px",fontWeight:700,fontSize:10}}>🔒 Solo suyos</span>}
+                  </div>
+                  {(u.phone||u.email)&&<div style={{fontSize:11,color:"#aaa",marginTop:4}}>{u.phone&&<span>📱 {u.phone}</span>}{u.phone&&u.email&&" · "}{u.email&&<span>📧 {u.email}</span>}</div>}
+                </div>
+                <div style={{display:"flex",gap:6,flexShrink:0}}>
+                  <button onClick={()=>{startEdit(u);setView("form");}} style={{padding:"6px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12,fontWeight:600}}>✏️ Editar</button>
+                  <button onClick={()=>remove(u.id)} style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:12}}>🗑</button>
                 </div>
               </div>
-              <button onClick={()=>startEdit(u)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11,flexShrink:0}}>✏️</button>
-              <button onClick={()=>remove(u.id)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:11,flexShrink:0}}>🗑</button>
+            </div>
+          ))}
+          <button onClick={()=>setView("form")} style={{width:"100%",padding:"12px",borderRadius:12,border:"2px dashed #e5e5e5",background:"#fafafa",color:"#888",fontWeight:700,fontSize:13,cursor:"pointer",marginTop:4}}>
+            + Agregar nuevo usuario
+          </button>
+        </div>
+      )}
+
+      {view==="form" && (
+        <div style={{background:"#fff",borderRadius:12,padding:24,boxShadow:"0 1px 4px #0001"}}>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:16}}>{editing?"✏️ Editando usuario":"+ Nuevo usuario"}</div>
+          <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:16,padding:"14px 16px",background:"#f9f9f9",borderRadius:12}}>
+            <div style={{width:72,height:72,borderRadius:"50%",background:avatarPreview?"transparent":"linear-gradient(135deg,#7b1a1a,#c0392b)",overflow:"hidden",flexShrink:0,border:"3px solid #fff",boxShadow:"0 2px 8px #0002",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              {avatarPreview ? <img src={avatarPreview} alt="avatar" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontSize:28}}>👤</span>}
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>Foto de perfil</div>
+              <label style={{display:"inline-block",padding:"8px 14px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",color:"#555"}}>
+                📷 Subir foto
+                <input type="file" accept="image/*" onChange={handleAvatar} style={{display:"none"}}/>
+              </label>
+              {avatarPreview&&<button onClick={()=>{setAvatarPreview("");setForm(f=>({...f,avatar:""}));}} style={{marginLeft:8,padding:"8px 12px",borderRadius:8,border:"none",background:"#fdecea",color:RED,fontSize:12,cursor:"pointer",fontWeight:600}}>✕ Quitar</button>}
+              <div style={{fontSize:11,color:"#aaa",marginTop:6}}>Aparecerá en el PDF y lista de usuarios</div>
             </div>
           </div>
-        ))}
-      </div>
+          <Field label="Nombre completo *"><input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Ej: María García" style={inputStyle}/></Field>
+          <Field label="Cargo / Título"><input value={form.cargo||""} onChange={e=>setForm(f=>({...f,cargo:e.target.value}))} placeholder="Ej: Representante Comercial" style={inputStyle}/></Field>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="Teléfono"><input value={form.phone||""} onChange={e=>setForm(f=>({...f,phone:e.target.value}))} placeholder="+54 11 1234-5678" style={inputStyle}/></Field>
+            <Field label="Email"><input type="email" value={form.email||""} onChange={e=>setForm(f=>({...f,email:e.target.value}))} placeholder="vendedor@ejemplo.com" style={inputStyle}/></Field>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="Usuario *"><input value={form.username} onChange={e=>setForm(f=>({...f,username:e.target.value}))} placeholder="Ej: maria" style={inputStyle}/></Field>
+            <Field label="Contraseña *">
+              <div style={{position:"relative"}}>
+                <input type={showPass.form?"text":"password"} value={form.password} onChange={e=>setForm(f=>({...f,password:e.target.value}))} placeholder="••••••••" style={{...inputStyle,paddingRight:40}}/>
+                <button onClick={()=>setShowPass(s=>({...s,form:!s.form}))} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:15,color:"#aaa"}}>{showPass.form?"🙈":"👁️"}</button>
+              </div>
+            </Field>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="Rol"><select value={form.role} onChange={e=>setForm(f=>({...f,role:e.target.value}))} style={{...inputStyle,cursor:"pointer"}}><option value="vendedor">Vendedor</option><option value="admin">Administrador</option></select></Field>
+            <Field label="Vendedor asignado"><select value={form.vendedor||""} onChange={e=>setForm(f=>({...f,vendedor:e.target.value}))} style={{...inputStyle,cursor:"pointer",color:form.vendedor?"#1a1a1a":"#aaa"}}><option value="">- Sin asignar -</option>{(vendors||[]).map(v=><option key={v} value={v}>{v}</option>)}</select></Field>
+          </div>
+          <Field label="Lista de precios">
+            <select value={form.priceList||"default"} onChange={e=>setForm(f=>({...f,priceList:e.target.value}))} style={{...inputStyle,cursor:"pointer"}}>
+              {(priceLists||[{id:"default",name:"Normal",discount:0}]).map(pl=>(<option key={pl.id} value={pl.id}>{pl.name}{pl.discount>0?` (-${pl.discount}%)`:""}</option>))}
+            </select>
+          </Field>
+          <Toggle label="Ver todos los pedidos" sub={form.canSeeAll?"Ve todos los pedidos":"Solo sus propios pedidos"} val={form.canSeeAll} onChange={()=>setForm(f=>({...f,canSeeAll:!f.canSeeAll}))}/>
+          <Toggle label="📷 Lector de código de barras" sub={form.barcodeEnabled?"Puede usar el lector":"Sin acceso al lector"} val={form.barcodeEnabled} onChange={()=>setForm(f=>({...f,barcodeEnabled:!f.barcodeEnabled}))}/>
+          <div style={{display:"flex",gap:8,marginTop:8}}>
+            <button onClick={save} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:RED,color:"#fff",fontWeight:800,cursor:"pointer",fontSize:14}}>{editing?"💾 Guardar cambios":"✅ Crear usuario"}</button>
+            <button onClick={()=>{cancelEdit();setView("lista");}} style={{padding:"11px 16px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontWeight:600,color:"#666"}}>Cancelar</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
 // ── Excel Import ──────────────────────────────────────────────────────────────
 function ExcelPanel({products,setProducts}) {
   const fileRef = useRef();
