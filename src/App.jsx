@@ -102,6 +102,10 @@ const db = {
   updateNotif:  async (id,data) => { const {error} = await supaAdmin.from("lm_notifs").update(data).eq("id",id); if(error) throw error; },
   deleteNotif:  async (id) => { const {error} = await supaAdmin.from("lm_notifs").delete().eq("id",id); if(error) throw error; },
   clearNotifs:  async () => { const {error} = await supaAdmin.from("lm_notifs").delete().neq("id","none"); if(error) throw error; },
+  // Clients
+  getClients:   async () => { const {data,error} = await supabase.from("lm_clients").select("*").order("name"); if(error) throw error; return (data||[]).map(r=>({id:r.id,name:r.name,phone:r.phone||"",email:r.email||"",cuit:r.cuit||"",address:r.address||"",notes:r.notes||"",deleteRequested:r.delete_requested||false,deleteReason:r.delete_reason||"",createdBy:r.created_by||"",createdAt:r.created_at||""})); },
+  saveClient:   async (c) => { const {error} = await supaAdmin.from("lm_clients").upsert({id:c.id,name:c.name,phone:c.phone||"",email:c.email||"",cuit:c.cuit||"",address:c.address||"",notes:c.notes||"",delete_requested:c.deleteRequested||false,delete_reason:c.deleteReason||"",created_by:c.createdBy||"",created_at:c.createdAt||""}); if(error) throw error; },
+  deleteClient: async (id) => { const {error} = await supaAdmin.from("lm_clients").delete().eq("id",id); if(error) throw error; },
   // Counters
   nextCounter: async (id) => {
     const {data,error} = await supaAdmin.rpc("increment_counter", {counter_id: id});
@@ -658,18 +662,19 @@ export default function App() {
   const [priceLists, setPriceLists] = useState([{id:"default",name:"Normal",discount:0}]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [notifs, setNotifs]     = useState([]);
+  const [clients, setClients]   = useState([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(null);
 
   useEffect(() => {
     async function loadAll() {
       try {
-        const [u,v,p,o,q,sl,act,pl,po,n] = await Promise.all([
+        const [u,v,p,o,q,sl,act,pl,po,n,cl] = await Promise.all([
           db.getUsers(), db.getVendors(), db.getProducts(),
-          db.getOrders(), db.getQuotes(), db.getStockLog(), db.getActivity(), db.getPriceLists(), db.getPurchaseOrders(), db.getNotifs(),
+          db.getOrders(), db.getQuotes(), db.getStockLog(), db.getActivity(), db.getPriceLists(), db.getPurchaseOrders(), db.getNotifs(), db.getClients(),
         ]);
         setUsers(u); setVendors(v); setProducts(p);
-        setOrders(o); setQuotes(q); setStockLog(sl); setActivity(act); setPriceLists(pl); setPurchaseOrders(po); setNotifs(n);
+        setOrders(o); setQuotes(q); setStockLog(sl); setActivity(act); setPriceLists(pl); setPurchaseOrders(po); setNotifs(n); setClients(cl);
         // Inicializar sandbox con stock real
         const sbInit = {};
         p.forEach(prod => { sbInit[prod.id] = prod.stock; });
@@ -736,11 +741,12 @@ export default function App() {
     purchaseOrders={purchaseOrders} setPurchaseOrders={setPurchaseOrders}
     notifs={notifs} setNotifs={setNotifs}
     sandboxStock={sandboxStock} setSandboxStock={setSandboxStock}
+    clients={clients} setClients={setClients}
   />;
 }
 
 // ─── MAIN APP (authenticated) ─────────────────────────────────────────────────
-function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,products,setProducts,orders,setOrders,quotes,setQuotes,stockLog,setStockLog,activity,setActivity,priceLists,setPriceLists,purchaseOrders,setPurchaseOrders,notifs,setNotifs,sandboxStock,setSandboxStock}) {
+function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,products,setProducts,orders,setOrders,quotes,setQuotes,stockLog,setStockLog,activity,setActivity,priceLists,setPriceLists,purchaseOrders,setPurchaseOrders,notifs,setNotifs,sandboxStock,setSandboxStock,clients,setClients}) {
   const isAdmin = currentUser.role === "admin";
   const [tab, setTab] = useState("central");
   const [showNotifs, setShowNotifs] = useState(false);
@@ -1016,6 +1022,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   const TABS = [
     {k:"central",   label:"Central",           icon:"📋", roles:["admin","vendedor"]},
     {k:"nuevo",     label:"Nuevo Pedido",       icon:"🛒", roles:["admin","vendedor"]},
+    {k:"clientes",  label:"Clientes",           icon:"👥", roles:["admin","vendedor"]},
     {k:"cotizacion",label:"Cotizaciones",       icon:"📄", roles:["admin","vendedor"]},
     {k:"precios",   label:"Precios",            icon:"💲", roles:["admin","vendedor"]},
     {k:"stock",     label:"Stock",              icon:"📦", roles:["admin","vendedor"]},
@@ -1023,6 +1030,31 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     {k:"solicitud",  label:"Solicitud Compra", icon:"📋", roles:["admin","vendedor"]},
     {k:"admin",     label:"Administracion",     icon:"★",   roles:["admin"]},
   ].filter(t=>t.roles.includes(currentUser.role));
+
+  // ── CLIENT FUNCTIONS ──────────────────────────────────────────────────────
+  const saveClient = async (client) => {
+    const isNew = !clients.find(c=>c.id===client.id);
+    setClients(prev => isNew ? [client,...prev] : prev.map(c=>c.id===client.id?client:c));
+    await db.saveClient(client);
+    if(isNew) await logActivity("Cliente creado", `${client.name}`, client.id, "cliente");
+  };
+  const deleteClient = async (id) => {
+    setClients(prev=>prev.filter(c=>c.id!==id));
+    await db.deleteClient(id);
+    await logActivity("Cliente eliminado", `ID: ${id}`, id, "cliente");
+  };
+  const requestDeleteClient = async (id, reason) => {
+    const client = clients.find(c=>c.id===id);
+    if(!client) return;
+    const updated = {...client, deleteRequested:true, deleteReason:reason};
+    setClients(prev=>prev.map(c=>c.id===id?updated:c));
+    await db.saveClient(updated);
+    await sendCrossNotif(db, setNotifs, {
+      title:"🗑 Solicitud de baja de cliente",
+      body:`${currentUser.name} solicita eliminar a "${client.name}". Motivo: "${reason}"`,
+      tag:`del-client-${id}`, para:"admin", de:currentUser.name
+    });
+  };
 
   const isMobile = useIsMobile();
   const [mobileMenu, setMobileMenu] = useState(false);
@@ -1281,8 +1313,9 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
           onRequestEdit={requestEdit} onApproveEditRequest={approveEditRequest} onRejectEditRequest={rejectEditRequest}
           onSubmitEdit={submitEdit} onApproveEdit={approveEdit} onRejectEdit={rejectEdit}
           currentUser={currentUser} isMobile={isMobile}/>}
-        {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile}/>}
-        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile}/>}
+        {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient}/>}
+        {tab==="clientes"   && <ClientesPanel clients={clients} onSave={saveClient} onDelete={deleteClient} onRequestDelete={requestDeleteClient} currentUser={currentUser} isMobile={isMobile}/>}
+        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient}/>}
         {tab==="precios"    && <Precios products={pricedProducts}/>}
         {tab==="stock"      && <>
               {isTestUser && (
@@ -1795,6 +1828,210 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
 }
 
 // ─── PRECIOS ──────────────────────────────────────────────────────────────────
+// ─── CLIENT SELECTOR (usado en Nuevo Pedido y Cotizaciones) ──────────────────
+function ClientSelector({clients, onSelect, onSaveClient, currentUser}) {
+  const [search, setSearch] = useState("");
+  const [showNew, setShowNew] = useState(false);
+  const [form, setForm] = useState({name:"", phone:""});
+  const [saving, setSaving] = useState(false);
+
+  const found = useMemo(()=>{
+    const q = norm(search);
+    return q ? clients.filter(c=>norm(c.name).includes(q)||c.phone.includes(search)||norm(c.cuit||"").includes(q)).slice(0,8) : clients.slice(0,5);
+  }, [clients, search]);
+
+  const createAndSelect = async () => {
+    if(!form.name.trim()||!form.phone.trim()) { alert("Nombre y teléfono son obligatorios"); return; }
+    setSaving(true);
+    const newClient = {id:genId(), name:form.name.trim(), phone:form.phone.trim(), email:"", cuit:"", address:"", notes:"", deleteRequested:false, deleteReason:"", createdBy:currentUser.name, createdAt:today()};
+    await onSaveClient(newClient);
+    onSelect(newClient);
+    setSaving(false);
+  };
+
+  return (
+    <div>
+      <input value={search} onChange={e=>setSearch(e.target.value)}
+        placeholder="🔍 Buscar cliente por nombre o teléfono..."
+        style={{width:"100%",padding:"10px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:8}}/>
+
+      {/* Results */}
+      <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
+        {found.map(c=>(
+          <div key={c.id} onClick={()=>onSelect(c)}
+            style={{background:"#f9f9f9",borderRadius:10,padding:"11px 14px",cursor:"pointer",border:"1.5px solid #f0f0f0",display:"flex",alignItems:"center",gap:10}}
+            onMouseEnter={e=>e.currentTarget.style.borderColor="#c0392b"}
+            onMouseLeave={e=>e.currentTarget.style.borderColor="#f0f0f0"}>
+            <span style={{fontSize:20}}>👤</span>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:700,fontSize:13}}>{c.name}</div>
+              <div style={{fontSize:11,color:"#888"}}>📱 {c.phone}{c.email&&` · 📧 ${c.email}`}</div>
+            </div>
+            <span style={{color:"#c0392b",fontSize:18}}>›</span>
+          </div>
+        ))}
+        {found.length===0&&search&&<div style={{textAlign:"center",color:"#aaa",fontSize:13,padding:"12px 0"}}>No se encontró "{search}"</div>}
+      </div>
+
+      {/* Separator */}
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+        <div style={{flex:1,height:1,background:"#e5e5e5"}}/>
+        <span style={{fontSize:11,color:"#aaa",fontWeight:600}}>o</span>
+        <div style={{flex:1,height:1,background:"#e5e5e5"}}/>
+      </div>
+
+      {/* Quick new client */}
+      {!showNew
+        ? <button onClick={()=>setShowNew(true)}
+            style={{width:"100%",padding:"10px",borderRadius:10,border:"1.5px dashed #aed6f1",background:"#f0f8ff",color:"#1a5276",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+            ➕ Cliente nuevo
+          </button>
+        : <div style={{background:"#f0f8ff",border:"1.5px solid #aed6f1",borderRadius:10,padding:"12px 14px"}}>
+            <div style={{fontWeight:700,fontSize:12,color:"#1a5276",marginBottom:10}}>➕ Nuevo cliente rápido</div>
+            <Field label="Nombre / Razón social *">
+              <input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Ej: Librería Nueva" style={inputStyle}/>
+            </Field>
+            <Field label="Teléfono *">
+              <input value={form.phone} onChange={e=>setForm(f=>({...f,phone:e.target.value}))} placeholder="+54 11 1234-5678" style={inputStyle}/>
+            </Field>
+            <div style={{fontSize:11,color:"#888",marginBottom:10}}>Los datos opcionales (CUIT, email, dirección) se completan desde la sección Clientes.</div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={createAndSelect} disabled={saving||!form.name.trim()||!form.phone.trim()}
+                style={{flex:1,padding:"9px",borderRadius:8,border:"none",background:(!form.name.trim()||!form.phone.trim())?"#e5e5e5":"#1a5276",color:(!form.name.trim()||!form.phone.trim())?"#aaa":"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+                {saving?"Creando...":"✅ Crear y usar"}
+              </button>
+              <button onClick={()=>setShowNew(false)} style={{padding:"9px 14px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontSize:13,cursor:"pointer"}}>Cancelar</button>
+            </div>
+          </div>
+      }
+    </div>
+  );
+}
+
+// ─── CLIENTES PANEL ───────────────────────────────────────────────────────────
+function ClientesPanel({clients, onSave, onDelete, onRequestDelete, currentUser, isMobile}) {
+  const isAdmin = currentUser.role === "admin";
+  const [view, setView] = useState("lista");
+  const [search, setSearch] = useState("");
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({name:"",phone:"",email:"",cuit:"",address:"",notes:""});
+  const [delForm, setDelForm] = useState({id:null,reason:""});
+  const [saving, setSaving] = useState(false);
+
+  const filtered = useMemo(()=>{
+    const q = norm(search);
+    return q ? clients.filter(c=>norm(c.name).includes(q)||c.phone.includes(search)||norm(c.cuit||"").includes(q)) : clients;
+  }, [clients, search]);
+
+  const startEdit = (c) => {
+    setEditing(c.id);
+    setForm({name:c.name,phone:c.phone,email:c.email||"",cuit:c.cuit||"",address:c.address||"",notes:c.notes||""});
+    setView("form");
+  };
+  const cancelEdit = () => { setEditing(null); setForm({name:"",phone:"",email:"",cuit:"",address:"",notes:""}); setView("lista"); };
+
+  const save = async () => {
+    if(!form.name.trim()||!form.phone.trim()){alert("Nombre y teléfono son obligatorios");return;}
+    setSaving(true);
+    const client = editing
+      ? {...clients.find(c=>c.id===editing), ...form}
+      : {id:genId(), ...form, deleteRequested:false, deleteReason:"", createdBy:currentUser.name, createdAt:today()};
+    await onSave(client);
+    setSaving(false);
+    cancelEdit();
+  };
+
+  return (
+    <div>
+      {/* Tabs */}
+      <div style={{background:"#fff",borderRadius:12,padding:4,marginBottom:14,display:"flex",gap:4,boxShadow:"0 1px 4px #0001"}}>
+        <button onClick={()=>{cancelEdit();setView("lista");}} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="lista"?`linear-gradient(135deg,#922b21,#c0392b)`:"transparent",color:view==="lista"?"#fff":"#555"}}>
+          👥 Clientes ({clients.length})
+        </button>
+        <button onClick={()=>setView("form")} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="form"?`linear-gradient(135deg,#922b21,#c0392b)`:"transparent",color:view==="form"?"#fff":"#555"}}>
+          {editing?"✏️ Editando":"+ Nuevo cliente"}
+        </button>
+      </div>
+
+      {/* LISTA */}
+      {view==="lista" && <>
+        <input value={search} onChange={e=>setSearch(e.target.value)}
+          placeholder="🔍 Buscar por nombre, teléfono o CUIT..."
+          style={{width:"100%",padding:"10px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:12}}/>
+        {filtered.length===0
+          ? <div style={{textAlign:"center",padding:40,color:"#aaa",background:"#fff",borderRadius:12}}>
+              <div style={{fontSize:40,marginBottom:8}}>👥</div>
+              <div>{search?"No se encontraron clientes":"No hay clientes aún. ¡Agregá el primero!"}</div>
+            </div>
+          : filtered.map(c=>(
+            <div key={c.id} style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 4px #0001",marginBottom:8,border:"1.5px solid #f0f0f0"}}>
+              <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+                <span style={{fontSize:26,flexShrink:0}}>👤</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:14}}>{c.name}</div>
+                  <div style={{fontSize:12,color:"#555",marginTop:3}}>📱 {c.phone}</div>
+                  {c.email&&<div style={{fontSize:12,color:"#888"}}>📧 {c.email}</div>}
+                  {c.cuit&&<div style={{fontSize:12,color:"#888"}}>🪪 CUIT: {c.cuit}</div>}
+                  {c.address&&<div style={{fontSize:12,color:"#888"}}>📍 {c.address}</div>}
+                  {c.notes&&<div style={{fontSize:11,color:"#aaa",marginTop:4,fontStyle:"italic"}}>"{c.notes}"</div>}
+                  {c.deleteRequested&&<div style={{background:"#fef9e7",border:"1px solid #f0d080",borderRadius:6,padding:"4px 8px",fontSize:11,color:"#b7770d",fontWeight:600,marginTop:6}}>
+                    ⏳ Solicitud de baja pendiente — "{c.deleteReason}"
+                    {isAdmin&&<button onClick={()=>onDelete(c.id)} style={{marginLeft:8,padding:"2px 8px",borderRadius:4,border:"none",background:"#c0392b",color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer"}}>Aprobar baja</button>}
+                  </div>}
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:5,flexShrink:0}}>
+                  <button onClick={()=>startEdit(c)} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11,fontWeight:600}}>✏️</button>
+                  {isAdmin
+                    ? <button onClick={()=>{if(window.confirm(`¿Eliminar a "${c.name}"?`))onDelete(c.id);}} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #fcc",background:"#fff",color:"#c0392b",cursor:"pointer",fontSize:11}}>🗑</button>
+                    : !c.deleteRequested&&<button onClick={()=>setDelForm({id:c.id,reason:""})} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #fcc",background:"#fff",color:"#c0392b",cursor:"pointer",fontSize:10,fontWeight:600}}>Solicitar baja</button>
+                  }
+                </div>
+              </div>
+              {delForm.id===c.id&&<div style={{marginTop:10,background:"#fef9e7",border:"1.5px solid #f0d080",borderRadius:8,padding:"10px 12px"}} onClick={e=>e.stopPropagation()}>
+                <div style={{fontSize:12,fontWeight:700,color:"#b7770d",marginBottom:6}}>Motivo de la solicitud de baja</div>
+                <input value={delForm.reason} onChange={e=>setDelForm(f=>({...f,reason:e.target.value}))} placeholder="Ej: Cliente duplicado..." style={{...inputStyle,fontSize:12,marginBottom:8}}/>
+                <div style={{display:"flex",gap:6}}>
+                  <button onClick={async()=>{if(!delForm.reason.trim()){alert("Escribí un motivo");return;}await onRequestDelete(delForm.id,delForm.reason);setDelForm({id:null,reason:""}); }}
+                    style={{flex:1,padding:"7px",borderRadius:7,border:"none",background:"#b7770d",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer"}}>Enviar solicitud</button>
+                  <button onClick={()=>setDelForm({id:null,reason:""})} style={{padding:"7px 12px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontSize:12,cursor:"pointer"}}>Cancelar</button>
+                </div>
+              </div>}
+            </div>
+          ))
+        }
+        <button onClick={()=>setView("form")} style={{width:"100%",padding:"12px",borderRadius:12,border:"2px dashed #e5e5e5",background:"#fafafa",color:"#888",fontWeight:700,fontSize:13,cursor:"pointer",marginTop:4}}>
+          + Agregar nuevo cliente
+        </button>
+      </>}
+
+      {/* FORM */}
+      {view==="form" && (
+        <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 1px 4px #0001"}}>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>{editing?"✏️ Editar cliente":"+ Nuevo cliente"}</div>
+          <div style={{background:"#fdecea",borderRadius:8,padding:"7px 12px",fontSize:11,color:"#922b21",fontWeight:600,marginBottom:12}}>
+            Los campos con <span style={{color:"#c0392b"}}>*</span> son obligatorios
+          </div>
+          <Field label="Nombre / Razón social *"><input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Ej: Papelería El Centro" style={inputStyle}/></Field>
+          <Field label="Teléfono *"><input value={form.phone} onChange={e=>setForm(f=>({...f,phone:e.target.value}))} placeholder="+54 11 1234-5678" type="tel" style={inputStyle}/></Field>
+          <div style={{display:"flex",alignItems:"center",gap:10,margin:"14px 0 12px"}}>
+            <div style={{flex:1,height:1,background:"#e5e5e5"}}/>
+            <span style={{fontSize:10,color:"#aaa",fontWeight:700,letterSpacing:1}}>DATOS OPCIONALES</span>
+            <div style={{flex:1,height:1,background:"#e5e5e5"}}/>
+          </div>
+          <Field label="CUIT / DNI"><input value={form.cuit} onChange={e=>setForm(f=>({...f,cuit:e.target.value}))} placeholder="Ej: 30-71234567-8" style={inputStyle}/></Field>
+          <Field label="Email"><input type="email" value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))} placeholder="contacto@empresa.com" style={inputStyle}/></Field>
+          <Field label="Dirección"><input value={form.address} onChange={e=>setForm(f=>({...f,address:e.target.value}))} placeholder="Ej: Av. Corrientes 1234, CABA" style={inputStyle}/></Field>
+          <Field label="Notas internas"><textarea value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="Condiciones especiales, contacto preferido..." style={{...inputStyle,resize:"vertical",minHeight:60}}/></Field>
+          <div style={{display:"flex",gap:8,marginTop:8}}>
+            <button onClick={save} disabled={saving} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:"#c0392b",color:"#fff",fontWeight:800,cursor:"pointer",fontSize:14}}>{saving?"Guardando...":editing?"💾 Guardar cambios":"✅ Crear cliente"}</button>
+            <button onClick={cancelEdit} style={{padding:"11px 16px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontWeight:600,color:"#666"}}>Cancelar</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Precios({products}) {
   const [search,setSearch]=useState("");
   const [sortBy,setSortBy]=useState("name");
@@ -1923,8 +2160,8 @@ function ProductSelector({products,cart,setCart,isMobile}) {
   );
 }
 
-function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile}) {
-  const [client,setClient]=useState("");
+function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSaveClient}) {
+  const [selectedClient, setSelectedClient] = useState(null);
   const [notes,setNotes]=useState("");
   const [vendedor,setVendedor]=useState(currentUser.role==="vendedor"?(currentUser.vendedor||currentUser.name):"");
   const [cart,setCart]=useState([]);
@@ -1937,10 +2174,10 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile}) {
   const globalDiscAmt=subtotal-total;
 
   const submit=()=>{
-    if(!client.trim()){alert("Ingresá el cliente");return;}
+    if(!selectedClient){alert("Seleccioná un cliente");return;}
     if(!vendedor&&currentUser.role==="admin"){alert("Seleccioná un vendedor");return;}
     if(!cart.length){alert("Agregá productos");return;}
-    onAdd({id:genId(),client:client.trim(),notes,vendedor:vendedor||currentUser.vendedor||currentUser.name,items:cart,total,subtotal,globalDisc,stage:"reserva",date:today()});
+    onAdd({id:genId(),client:selectedClient.name,clientId:selectedClient.id,notes,vendedor:vendedor||currentUser.vendedor||currentUser.name,items:cart,total,subtotal,globalDisc,stage:"reserva",date:today()});
     setOk(true); setTimeout(()=>onDone(),1400);
   };
 
@@ -1962,11 +2199,22 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile}) {
 
         {mStep===1 && (
           <div style={{background:"#fff",borderRadius:12,padding:16,boxShadow:"0 1px 4px #0001"}}>
-            <Field label="Cliente *"><input value={client} onChange={e=>setClient(e.target.value)} placeholder="Nombre del cliente" style={inputStyle}/></Field>
-            {currentUser.role==="admin"&&<Field label="Vendedor *"><select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,color:vendedor?"#1a1a1a":"#aaa",cursor:"pointer"}}><option value="">— Seleccioná vendedor —</option>{vendors.map(v=><option key={v} value={v}>{v}</option>)}</select></Field>}
+            <div style={{fontWeight:800,fontSize:14,marginBottom:12}}>👥 Seleccioná el cliente</div>
+            {selectedClient
+              ? <div style={{background:"#fdecea",border:"1.5px solid #f5b7b1",borderRadius:10,padding:"12px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
+                  <span style={{fontSize:24}}>✅</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:14,color:"#922b21"}}>{selectedClient.name}</div>
+                    <div style={{fontSize:12,color:"#c0392b"}}>📱 {selectedClient.phone}</div>
+                  </div>
+                  <button onClick={()=>setSelectedClient(null)} style={{padding:"4px 10px",borderRadius:7,border:"1px solid #f5b7b1",background:"#fff",color:"#c0392b",fontSize:11,fontWeight:600,cursor:"pointer"}}>Cambiar</button>
+                </div>
+              : <ClientSelector clients={clients} onSelect={c=>{setSelectedClient(c);}} onSaveClient={onSaveClient} currentUser={currentUser}/>
+            }
+            {currentUser.role==="admin"&&<Field label="Vendedor *"><select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,cursor:"pointer",color:vendedor?"#1a1a1a":"#aaa",marginBottom:8}}><option value="">— Seleccioná vendedor —</option>{vendors.map(v=><option key={v} value={v}>{v}</option>)}</select></Field>}
             <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
-            <button onClick={()=>{if(!client.trim()){alert("Ingresá el cliente");return;}if(!vendedor&&currentUser.role==="admin"){alert("Seleccioná un vendedor");return;}setMStep(2);}}
-              style={{width:"100%",padding:"12px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",marginTop:8}}>
+            <button onClick={()=>{if(!selectedClient){alert("Seleccioná un cliente");return;}if(!vendedor&&currentUser.role==="admin"){alert("Seleccioná un vendedor");return;}setMStep(2);}}
+              style={{width:"100%",padding:"12px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:selectedClient?`linear-gradient(135deg,${REDD},${RED})`:"#e5e5e5",color:selectedClient?"#fff":"#aaa",marginTop:8}}>
               Siguiente → Productos
             </button>
           </div>
@@ -1992,7 +2240,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile}) {
         {mStep===3 && (
           <div style={{background:"#fff",borderRadius:12,padding:16,boxShadow:"0 1px 4px #0001"}}>
             <div style={{fontWeight:800,fontSize:15,marginBottom:14,color:"#1a1a1a"}}>📋 Confirmar pedido</div>
-            <div style={{fontSize:13,color:"#555",marginBottom:4}}>👤 <strong>{client}</strong> · {vendedor}</div>
+            <div style={{fontSize:13,color:"#555",marginBottom:4}}>👤 <strong>{selectedClient?.name}</strong> · {vendedor}</div>
             <div style={{borderTop:"1px solid #f5f5f5",margin:"8px 0",paddingTop:8}}>
               {cart.map(i=><div key={i.pid} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"3px 0",color:"#555"}}><span style={{flex:1,marginRight:6}}>{i.name} × {i.qty}</span><span style={{fontWeight:600}}>{fARS(i.price*i.qty)}</span></div>)}
             </div>
@@ -2016,7 +2264,21 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile}) {
       <div style={{position:"sticky",top:16}}>
         <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 2px 12px #0002"}}>
           <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>📋 Resumen del Pedido</div>
-          <Field label="Cliente *"><input value={client} onChange={e=>setClient(e.target.value)} placeholder="Nombre del cliente" style={inputStyle}/></Field>
+          {/* Client selector */}
+          {selectedClient
+            ? <div style={{background:"#fdecea",border:"1.5px solid #f5b7b1",borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:20}}>✅</span>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:700,fontSize:13,color:"#922b21"}}>{selectedClient.name}</div>
+                  <div style={{fontSize:11,color:"#c0392b"}}>📱 {selectedClient.phone}</div>
+                </div>
+                <button onClick={()=>setSelectedClient(null)} style={{padding:"3px 8px",borderRadius:6,border:"1px solid #f5b7b1",background:"#fff",color:"#c0392b",fontSize:11,cursor:"pointer"}}>Cambiar</button>
+              </div>
+            : <div style={{marginBottom:12}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#666",marginBottom:6}}>CLIENTE *</div>
+                <ClientSelector clients={clients} onSelect={setSelectedClient} onSaveClient={onSaveClient} currentUser={currentUser}/>
+              </div>
+          }
           {currentUser.role==="admin"&&<Field label="Vendedor *"><select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,color:vendedor?"#1a1a1a":"#aaa",cursor:"pointer"}}><option value="">— Seleccioná vendedor —</option>{vendors.map(v=><option key={v} value={v}>{v}</option>)}</select></Field>}
           <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
           <div style={{borderTop:"1px solid #f5f5f5",margin:"4px 0 8px",paddingTop:10}}>
@@ -2036,7 +2298,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile}) {
             </div>
           </div>
           <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:17,color:RED,padding:"8px 0",borderTop:"2px solid #f5f5f5",marginBottom:14}}><span>Total</span><span>{fARS(total)}</span></div>
-          <button onClick={submit} disabled={!cart.length||!client.trim()||(!vendedor&&currentUser.role==="admin")} style={{width:"100%",padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:(!cart.length||!client.trim()||(!vendedor&&currentUser.role==="admin"))?"#e5e5e5":`linear-gradient(135deg,${REDD},${RED})`,color:(!cart.length||!client.trim()||(!vendedor&&currentUser.role==="admin"))?"#aaa":"#fff"}}>
+          <button onClick={submit} disabled={!cart.length||!selectedClient||(!vendedor&&currentUser.role==="admin")} style={{width:"100%",padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:(!cart.length||!selectedClient||(!vendedor&&currentUser.role==="admin"))?"#e5e5e5":`linear-gradient(135deg,${REDD},${RED})`,color:(!cart.length||!selectedClient||(!vendedor&&currentUser.role==="admin"))?"#aaa":"#fff"}}>
             ✅ Registrar como Reserva
           </button>
         </div>
