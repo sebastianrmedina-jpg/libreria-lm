@@ -1296,7 +1296,17 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
               <Stock products={pricedProducts} onUpd={updProd} onDel={pid=>setProducts(p=>p.filter(x=>x.id!==pid))} onAdjust={(pid,qty)=>setProducts(p=>p.map(x=>x.id===pid?{...x,stock:x.stock+qty}:x))} isAdmin={isAdmin} addLog={addLog} stockLog={stockLog} setStockLog={setStockLog} isMobile={isMobile}/>
             </>}
         {tab==="compras"    && <Compras products={products} onStock={addStock} isMobile={isMobile}/>}
-        {tab==="solicitud"  && <SolicitudCompra products={products} currentUser={currentUser} isAdmin={isAdmin} purchaseOrders={purchaseOrders} setPurchaseOrders={setPurchaseOrders} isMobile={isMobile} onStockExternal={addStock} addLog={addLog}/>}
+        {tab==="solicitud"  && <SolicitudCompra products={products} currentUser={currentUser} isAdmin={isAdmin} purchaseOrders={purchaseOrders} setPurchaseOrders={setPurchaseOrders} isMobile={isMobile} onStockExternal={addStock} addLog={addLog}
+          onCreated={async(po)=>{
+            await sendCrossNotif(db, setNotifs, {
+              title:"📋 Nueva solicitud de compra",
+              body:`${po.vendedor} creó una solicitud con ${po.items.length} producto${po.items.length!==1?"s":""}`,
+              tag:`po-new-${po.id}`,
+              para:"admin",
+              de:po.vendedor
+            });
+          }}
+        />}
         {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile}/>}
       </div>
     </div>
@@ -2914,7 +2924,7 @@ function exportSolicitudXLSX(po) {
   XLSX.writeFile(wb, `Solicitud_${po.id.slice(-6).toUpperCase()}_${po.fecha.replace(/\//g,"-")}.xlsx`);
 }
 
-function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchaseOrders,isMobile,onStockExternal,addLog}) {
+function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchaseOrders,isMobile,onStockExternal,addLog,onCreated}) {
   const [view, setView] = useState("lista"); // lista | nueva | detalle
   const [selected, setSelected] = useState(null);
   const [showAddProduct, setShowAddProduct] = useState(false);
@@ -2944,6 +2954,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
       fechaCierre: "",
     };
     await savePO(po);
+    if(onCreated) await onCreated(po);
     setCart([]); setNotas(""); setItemNotas({});
     setSaving(false);
     setView("lista");
