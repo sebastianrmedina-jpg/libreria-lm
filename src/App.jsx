@@ -2030,7 +2030,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile}) {
   );
 }
 
-function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,onTabChange,currentUser}) {
+function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,onTabChange,currentUser,isMobile}) {
   const [view,setView]=useState("lista");
   const [expanded,setExpanded]=useState(null);
   const getP=id=>products.find(p=>p.id===id);
@@ -2040,7 +2040,7 @@ function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,on
         <button onClick={()=>setView("lista")} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="lista"?`linear-gradient(135deg,${REDD},${RED})`:"transparent",color:view==="lista"?"#fff":"#555"}}>📄 Lista de Cotizaciones ({quotes.filter(q=>!q.convertida).length})</button>
         <button onClick={()=>setView("nueva")} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="nueva"?`linear-gradient(135deg,${REDD},${RED})`:"transparent",color:view==="nueva"?"#fff":"#555"}}>➕ Nueva Cotización</button>
       </div>
-      {view==="nueva" && <NuevaCotizacion products={products} vendors={vendors} onAdd={async(q)=>{await onAdd(q);setView("lista");}} currentUser={currentUser}/>}
+      {view==="nueva" && <NuevaCotizacion products={products} vendors={vendors} onAdd={async(q)=>{await onAdd(q);setView("lista");}} currentUser={currentUser} isMobile={isMobile}/>}
       {view==="lista" && (quotes.length===0
         ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{fontSize:48}}>📄</div><div style={{marginTop:8}}>No hay cotizaciones aún</div></div>
         : quotes.map(q=><QuoteCard key={q.id} q={q} exp={expanded===q.id} toggle={()=>setExpanded(expanded===q.id?null:q.id)} getP={getP} onDel={onDel} onConvert={async(qt)=>{await onConvert(qt);onTabChange("central");}} onExtend={onExtend}/>)
@@ -2179,7 +2179,8 @@ function QuoteDelBtn({onConfirm}) {
   return <button onClick={()=>setC(true)} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>🗑 Eliminar</button>;
 }
 
-function NuevaCotizacion({products,vendors,onAdd,currentUser}) {
+function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile}) {
+  const PURPLE="#6c3483"; const PURPLEG="linear-gradient(135deg,#6c3483,#9b59b6)";
   const [client,setClient]=useState("");
   const [notes,setNotes]=useState("");
   const [vendedor,setVendedor]=useState(currentUser?.role!=="admin" ? (currentUser?.vendedor||currentUser?.name||"") : "");
@@ -2187,6 +2188,7 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser}) {
   const [cart,setCart]=useState([]);
   const [globalDisc,setGlobalDisc]=useState({type:"%",value:""});
   const [ok,setOk]=useState(false);
+  const [mStep,setMStep]=useState(1);
 
   const subtotal = cart.reduce((s,i)=>s+applyItemDiscount(i.price,i.qty,i.disc),0);
   const total    = applyGlobalDiscount(subtotal, globalDisc);
@@ -2199,7 +2201,112 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser}) {
     setOk(true);
     await onAdd(q);
   };
-  if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>📄</div><div style={{fontWeight:800,color:"#6c3483",fontSize:20,marginTop:12}}>!Cotización guardada!</div></div>;
+
+  if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>📄</div><div style={{fontWeight:800,color:PURPLE,fontSize:20,marginTop:12}}>¡Cotización guardada!</div></div>;
+
+  // ── MOBILE — flujo 3 pasos ──
+  if(isMobile) return (
+    <div style={{display:"flex",flexDirection:"column",minHeight:"100%"}}>
+      {/* Steps header */}
+      <div style={{display:"flex",background:"#fff",borderRadius:10,padding:"10px 14px",marginBottom:12,boxShadow:"0 1px 4px #0001",gap:4}}>
+        {[{n:1,l:"Datos"},{n:2,l:"Productos"},{n:3,l:"Confirmar"}].map(s=>(
+          <div key={s.n} onClick={()=>mStep>s.n&&setMStep(s.n)}
+            style={{flex:1,textAlign:"center",padding:"6px 4px",borderRadius:8,
+              background:mStep===s.n?"#f5eef8":mStep>s.n?"#f9f9f9":"transparent",
+              cursor:mStep>s.n?"pointer":"default"}}>
+            <div style={{fontWeight:800,fontSize:13,color:mStep===s.n?PURPLE:mStep>s.n?"#888":"#ccc"}}>{s.n}</div>
+            <div style={{fontSize:10,color:mStep===s.n?PURPLE:mStep>s.n?"#888":"#ccc",fontWeight:600}}>{s.l}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Paso 1 — Datos */}
+      {mStep===1 && (
+        <div style={{background:"#fff",borderRadius:12,padding:16,boxShadow:"0 1px 4px #0001"}}>
+          <div style={{background:"#f5eef8",borderRadius:8,padding:"8px 12px",fontSize:12,color:PURPLE,marginBottom:14}}>
+            ℹ️ Las cotizaciones <strong>no descuentan stock</strong>. Son solo presupuestos para el cliente.
+          </div>
+          <Field label="Cliente *"><input value={client} onChange={e=>setClient(e.target.value)} placeholder="Nombre del cliente" style={inputStyle}/></Field>
+          {currentUser?.role==="admin"
+            ? <Field label="Vendedor"><select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,cursor:"pointer"}}>
+                <option value="">- Sin asignar -</option>
+                {vendors.map(v=><option key={v} value={v}>{v}</option>)}
+              </select></Field>
+            : <div style={{marginBottom:12,background:"#f5f5f5",borderRadius:8,padding:"9px 12px",fontSize:13,color:"#555"}}>
+                <span style={{fontSize:11,fontWeight:700,color:"#888",display:"block",marginBottom:2}}>VENDEDOR</span>
+                <span style={{fontWeight:700}}>{vendedor||currentUser?.name}</span>
+              </div>
+          }
+          <Field label="Válida hasta"><input value={validity} onChange={e=>setValidity(e.target.value)} placeholder="Ej: 48 horas" style={inputStyle}/></Field>
+          <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones, condiciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
+          <button onClick={()=>{if(!client.trim()){alert("Ingresá el cliente");return;}setMStep(2);}}
+            style={{width:"100%",padding:"12px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:PURPLEG,color:"#fff",marginTop:8}}>
+            Siguiente → Productos
+          </button>
+        </div>
+      )}
+
+      {/* Paso 2 — Productos */}
+      {mStep===2 && (
+        <div style={{flex:1,overflow:"auto",paddingBottom:cart.length>0?72:0}}>
+          <ProductSelector products={products} cart={cart} setCart={setCart} isMobile={true}/>
+        </div>
+      )}
+      {mStep===2 && cart.length>0 && (
+        <div style={{position:"fixed",bottom:0,left:0,right:0,background:PURPLEG,color:"#fff",padding:"13px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",zIndex:200,boxShadow:"0 -3px 16px #0003"}}>
+          <div>
+            <div style={{fontWeight:800,fontSize:15}}>{fARS(total)}</div>
+            <div style={{fontSize:11,opacity:.85}}>{cart.length} producto{cart.length!==1?"s":""} seleccionado{cart.length!==1?"s":""}</div>
+          </div>
+          <button onClick={()=>setMStep(3)} style={{padding:"10px 20px",borderRadius:10,border:"none",background:"#fff",color:PURPLE,fontWeight:800,fontSize:14,cursor:"pointer",boxShadow:"0 2px 8px #0002"}}>
+            Ver resumen →
+          </button>
+        </div>
+      )}
+
+      {/* Paso 3 — Confirmar */}
+      {mStep===3 && (
+        <div style={{background:"#fff",borderRadius:12,padding:16,boxShadow:"0 1px 4px #0001"}}>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:14,color:PURPLE}}>📄 Confirmar cotización</div>
+          <div style={{fontSize:13,color:"#555",marginBottom:8}}>👤 <strong>{client}</strong> · {vendedor} · {validity}</div>
+          <div style={{borderTop:"1px solid #f5f5f5",paddingTop:8,marginBottom:8}}>
+            {cart.map(i=>{
+              const lineTotal=applyItemDiscount(i.price,i.qty,i.disc);
+              const hasD=parseFloat(i.disc?.value)>0;
+              return <div key={i.pid} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"3px 0",color:"#555"}}>
+                <span style={{flex:1,marginRight:6}}>{i.name} × {i.qty}</span>
+                <span style={{fontWeight:600,color:hasD?PURPLE:undefined}}>{fARS(lineTotal)}</span>
+              </div>;
+            })}
+          </div>
+          {/* Descuento global mobile */}
+          <div style={{background:"#f5eef8",border:"1.5px solid #e8daef",borderRadius:8,padding:"10px 12px",marginBottom:8}}>
+            <div style={{fontSize:11,color:PURPLE,fontWeight:700,marginBottom:6}}>DESCUENTO GLOBAL</div>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <select value={globalDisc.type} onChange={e=>setGlobalDisc(d=>({...d,type:e.target.value}))}
+                style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48}}>
+                <option value="%">%</option><option value="$">$</option>
+              </select>
+              <input type="number" min="0" value={globalDisc.value} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))}
+                placeholder="0" style={{flex:1,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
+              {globalDiscAmt>0&&<span style={{fontSize:11,color:PURPLE,fontWeight:700,whiteSpace:"nowrap"}}>-{fARS(globalDiscAmt)}</span>}
+            </div>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:17,color:PURPLE,padding:"8px 0",borderTop:"2px solid #f5f5f5",marginBottom:14}}>
+            <span>Total</span><span>{fARS(total)}</span>
+          </div>
+          <button onClick={submit} style={{width:"100%",padding:"12px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:PURPLEG,color:"#fff"}}>
+            📄 Guardar Cotización
+          </button>
+          <button onClick={()=>setMStep(2)} style={{width:"100%",padding:"10px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer",marginTop:8}}>
+            ← Volver a productos
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  // ── DESKTOP ──
   return (
     <div style={{display:"grid",gridTemplateColumns:"1fr 330px",gap:18,alignItems:"start"}}>
       <div>
@@ -2208,8 +2315,8 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser}) {
       </div>
       <div style={{position:"sticky",top:16}}>
         <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 2px 12px #0002",border:"2px solid #e8daef"}}>
-          <div style={{fontWeight:800,fontSize:15,marginBottom:14,color:"#6c3483"}}>📄 Resumen de Cotización</div>
-          <div style={{background:"#e8daef",borderRadius:8,padding:"7px 12px",fontSize:12,color:"#6c3483",marginBottom:14}}>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:14,color:PURPLE}}>📄 Resumen de Cotización</div>
+          <div style={{background:"#e8daef",borderRadius:8,padding:"7px 12px",fontSize:12,color:PURPLE,marginBottom:14}}>
             ℹ️ Las cotizaciones <strong>no descuentan stock</strong>. Son solo presupuestos para el cliente.
           </div>
           <Field label="Cliente *"><input value={client} onChange={e=>setClient(e.target.value)} placeholder="Nombre del cliente" style={inputStyle}/></Field>
@@ -2236,31 +2343,29 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser}) {
                 <span style={{flex:1,lineHeight:1.3}}>{i.name} x {i.qty}</span>
                 <div style={{textAlign:"right",whiteSpace:"nowrap"}}>
                   {hasD&&<div style={{fontSize:10,color:"#aaa",textDecoration:"line-through"}}>{fARS(i.price*i.qty)}</div>}
-                  <span style={{fontWeight:600,color:hasD?"#6c3483":undefined}}>{fARS(lineTotal)}</span>
-                  {hasD&&<span style={{fontSize:10,color:"#6c3483",marginLeft:3}}>{fmtDisc(i.disc)}</span>}
+                  <span style={{fontWeight:600,color:hasD?PURPLE:undefined}}>{fARS(lineTotal)}</span>
+                  {hasD&&<span style={{fontSize:10,color:PURPLE,marginLeft:3}}>{fmtDisc(i.disc)}</span>}
                 </div>
               </div>;
             })}
           </div>
-          {/* Global discount */}
           <div style={{background:"#f5f0fa",border:"1.5px solid #e8daef",borderRadius:8,padding:"10px 12px",marginBottom:8}}>
-            <div style={{fontSize:11,color:"#6c3483",fontWeight:700,marginBottom:6}}>DESCUENTO GLOBAL</div>
+            <div style={{fontSize:11,color:PURPLE,fontWeight:700,marginBottom:6}}>DESCUENTO GLOBAL</div>
             <div style={{display:"flex",gap:6,alignItems:"center"}}>
               <select value={globalDisc.type} onChange={e=>setGlobalDisc(d=>({...d,type:e.target.value}))}
                 style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48}}>
-                <option value="%">%</option>
-                <option value="$">$</option>
+                <option value="%">%</option><option value="$">$</option>
               </select>
               <input type="number" min="0" value={globalDisc.value} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))}
                 placeholder="0" style={{flex:1,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
-              {globalDiscAmt>0&&<span style={{fontSize:11,color:"#6c3483",fontWeight:700,whiteSpace:"nowrap"}}>-{fARS(globalDiscAmt)}</span>}
+              {globalDiscAmt>0&&<span style={{fontSize:11,color:PURPLE,fontWeight:700,whiteSpace:"nowrap"}}>-{fARS(globalDiscAmt)}</span>}
             </div>
           </div>
           {globalDiscAmt>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#888",padding:"2px 0"}}>
             <span>Subtotal</span><span>{fARS(subtotal)}</span>
           </div>}
-          <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:17,color:"#6c3483",padding:"8px 0",borderTop:"2px solid #f5f5f5",margin:"6px 0 14px"}}><span>Total</span><span>{fARS(total)}</span></div>
-          <button onClick={submit} disabled={!cart.length||!client.trim()} style={{width:"100%",padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:(!cart.length||!client.trim())?"#e5e5e5":"linear-gradient(135deg,#6c3483,#9b59b6)",color:(!cart.length||!client.trim())?"#aaa":"#fff"}}>
+          <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:17,color:PURPLE,padding:"8px 0",borderTop:"2px solid #f5f5f5",margin:"6px 0 14px"}}><span>Total</span><span>{fARS(total)}</span></div>
+          <button onClick={submit} disabled={!cart.length||!client.trim()} style={{width:"100%",padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:(!cart.length||!client.trim())?"#e5e5e5":PURPLEG,color:(!cart.length||!client.trim())?"#aaa":"#fff"}}>
             📄 Guardar Cotización
           </button>
         </div>
@@ -3265,11 +3370,13 @@ function Compras({products,onStock,isMobile}) {
   const [showManual, setShowManual] = useState(false);
   const [manualForm, setManualForm] = useState({sku:"", name:"", qty:1, cost:0});
   const [manualError, setManualError] = useState("");
+  const [mStep, setMStep] = useState(1); // mobile: 1=buscar, 2=detalle
 
   const found=useMemo(()=>{
     const q=search.toLowerCase();
     return q?products.filter(p=>norm(p.name).includes(norm(q))||normSKU(p.id).includes(normSKU(q))).slice(0,50):[];
   },[products,search]);
+
   const addI=p=>{if(!items.find(i=>i.pid===p.id))setItems(x=>[...x,{pid:p.id,name:p.name,qty:1,cost:p.costPrice}]);};
   const remI=pid=>setItems(x=>x.filter(i=>i.pid!==pid));
   const updI=(pid,f,v)=>setItems(x=>x.map(i=>i.pid===pid?{...i,[f]:v}:i));
@@ -3288,9 +3395,154 @@ function Compras({products,onStock,isMobile}) {
 
   const submit=()=>{
     items.forEach(i=>onStock(i.pid,+i.qty,+i.cost));
-    setItems([]); setOk(true); setTimeout(()=>{setOk(false);},2000);
+    setItems([]); setSearch(""); setMStep(1);
+    setOk(true); setTimeout(()=>setOk(false),2000);
   };
+
   if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>📦</div><div style={{fontWeight:800,color:"#1e8449",fontSize:20,marginTop:12}}>¡Stock actualizado!</div></div>;
+
+  // ── MOBILE ──────────────────────────────────────────────────────────────────
+  if(isMobile) return (
+    <div style={{display:"flex",flexDirection:"column"}}>
+      {/* Steps header */}
+      <div style={{display:"flex",background:"#fff",borderRadius:10,padding:"10px 14px",marginBottom:12,boxShadow:"0 1px 4px #0001",gap:4}}>
+        {[{n:1,l:"Buscar productos"},{n:2,l:"Detalle y confirmar"}].map(s=>(
+          <div key={s.n} onClick={()=>mStep>s.n&&setMStep(s.n)}
+            style={{flex:1,textAlign:"center",padding:"6px 4px",borderRadius:8,
+              background:mStep===s.n?"#eafaf1":mStep>s.n?"#f9f9f9":"transparent",
+              cursor:mStep>s.n?"pointer":"default"}}>
+            <div style={{fontWeight:800,fontSize:13,color:mStep===s.n?"#1e8449":mStep>s.n?"#888":"#ccc"}}>{s.n}</div>
+            <div style={{fontSize:10,color:mStep===s.n?"#1e8449":mStep>s.n?"#888":"#ccc",fontWeight:600}}>{s.l}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Paso 1 — Buscar */}
+      {mStep===1 && <>
+        <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px #0001"}}>
+          <div style={{fontWeight:800,fontSize:14,marginBottom:10,color:"#1a1a1a"}}>📥 Buscá los productos recibidos</div>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Nombre o código SKU..."
+            style={{width:"100%",padding:"10px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:14,outline:"none",boxSizing:"border-box"}}/>
+          {search&&<div style={{fontSize:11,color:"#aaa",marginTop:6}}>{found.length} resultados</div>}
+
+          {/* Producto manual */}
+          <div style={{marginTop:12,borderTop:"1px solid #f0f0f0",paddingTop:12}}>
+            <button onClick={()=>{setShowManual(s=>!s);setManualError("");}}
+              style={{width:"100%",padding:"9px",borderRadius:8,border:"1.5px solid #e67e22",background:showManual?"#fef9e7":"#fff",color:"#e67e22",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+              {showManual?"✕ Cancelar":"➕ Producto no está en el catálogo"}
+            </button>
+            {showManual && (
+              <div style={{background:"#fef9e7",border:"1.5px solid #e67e22",borderRadius:10,padding:14,marginTop:10}}>
+                <div style={{fontWeight:700,fontSize:13,color:"#e67e22",marginBottom:6}}>⚠️ Producto nuevo (excepcional)</div>
+                <Field label="SKU *"><input value={manualForm.sku} onChange={e=>setManualForm(f=>({...f,sku:e.target.value.toUpperCase()}))} placeholder="Ej: PROD-001" style={inputStyle}/></Field>
+                <Field label="Detalle *"><input value={manualForm.name} onChange={e=>setManualForm(f=>({...f,name:e.target.value}))} placeholder="Nombre completo del producto" style={inputStyle}/></Field>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <Field label="Cantidad"><input type="number" min={1} value={manualForm.qty} onChange={e=>setManualForm(f=>({...f,qty:e.target.value}))} style={inputStyle}/></Field>
+                  <Field label="Costo ($)"><input type="number" min={0} value={manualForm.cost} onChange={e=>setManualForm(f=>({...f,cost:e.target.value}))} style={inputStyle}/></Field>
+                </div>
+                {manualError && <div style={{color:"#c0392b",fontSize:12,margin:"6px 0",fontWeight:600}}>⚠️ {manualError}</div>}
+                <button onClick={addManual} style={{width:"100%",padding:"10px",borderRadius:8,border:"none",background:"#e67e22",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",marginTop:4}}>
+                  ➕ Agregar a la compra
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Resultados */}
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {found.length>0 ? found.map(p=>{
+            const inL=items.find(i=>i.pid===p.id);
+            return (
+              <div key={p.id} style={{background:"#fff",borderRadius:10,padding:"12px 14px",display:"flex",alignItems:"center",gap:12,boxShadow:"0 1px 4px #0001",border:inL?"2px solid #1e8449":"2px solid transparent"}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:13,color:"#1a1a1a",lineHeight:1.3}}>{p.name}</div>
+                  <div style={{fontSize:11,color:"#aaa",marginTop:2}}>{p.id} · Stock: <strong>{p.stock}</strong></div>
+                </div>
+                <button onClick={()=>addI(p)} disabled={!!inL}
+                  style={{padding:"8px 14px",borderRadius:8,border:"none",fontSize:13,fontWeight:700,
+                    background:inL?"#d5f5e3":"#1e8449",color:inL?"#1a5276":"#fff",
+                    cursor:inL?"not-allowed":"pointer",flexShrink:0,whiteSpace:"nowrap"}}>
+                  {inL?"✓ Agregado":"+ Agregar"}
+                </button>
+              </div>
+            );
+          }) : <div style={{padding:20,color:"#aaa",fontSize:13,textAlign:"center",background:"#fff",borderRadius:10}}>
+            {search?"Sin resultados":"Escribí el nombre o código del producto"}
+          </div>}
+        </div>
+
+        {/* Barra flotante */}
+        {items.length>0 && (
+          <div style={{position:"fixed",bottom:0,left:0,right:0,background:"linear-gradient(135deg,#1a5e20,#1e8449)",color:"#fff",padding:"13px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",zIndex:200,boxShadow:"0 -3px 16px #0003"}}>
+            <div>
+              <div style={{fontWeight:800,fontSize:15}}>{fARS(totalCost)}</div>
+              <div style={{fontSize:11,opacity:.85}}>{items.length} producto{items.length!==1?"s":""} agregado{items.length!==1?"s":""}</div>
+            </div>
+            <button onClick={()=>setMStep(2)} style={{padding:"10px 20px",borderRadius:10,border:"none",background:"#fff",color:"#1e8449",fontWeight:800,fontSize:14,cursor:"pointer"}}>
+              Ver detalle →
+            </button>
+          </div>
+        )}
+      </>}
+
+      {/* Paso 2 — Detalle y confirmar */}
+      {mStep===2 && (
+        <div style={{paddingBottom:80}}>
+          <div style={{fontWeight:800,fontSize:14,marginBottom:12,color:"#1a1a1a"}}>🧾 Detalle de Compra</div>
+          {items.map(it=>(
+            <div key={it.pid} style={{background:"#fff",borderRadius:12,padding:14,marginBottom:10,boxShadow:"0 1px 4px #0001",border:it.esNuevo?"1.5px solid #e67e22":"none"}}>
+              {it.esNuevo && <div style={{fontSize:10,color:"#e67e22",fontWeight:700,marginBottom:4}}>⚠️ NUEVO en catálogo</div>}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+                <div style={{flex:1,marginRight:8}}>
+                  <div style={{fontWeight:700,fontSize:13,lineHeight:1.3}}>{it.name}</div>
+                  <div style={{fontSize:11,color:"#aaa",marginTop:2}}>SKU: {it.pid}</div>
+                </div>
+                <button onClick={()=>remI(it.pid)} style={{background:"none",border:"none",cursor:"pointer",color:RED,fontSize:22,lineHeight:1,padding:0}}>×</button>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div>
+                  <div style={{fontSize:11,color:"#888",fontWeight:700,marginBottom:4}}>CANTIDAD</div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <button onClick={()=>updI(it.pid,"qty",Math.max(1,it.qty-1))} style={{width:32,height:32,borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",fontWeight:800,fontSize:16,cursor:"pointer"}}>−</button>
+                    <input type="number" min={1} value={it.qty} onChange={e=>updI(it.pid,"qty",+e.target.value)}
+                      style={{width:48,textAlign:"center",padding:"5px",borderRadius:7,border:"1.5px solid #e5e5e5",fontWeight:700,fontSize:14,outline:"none"}}/>
+                    <button onClick={()=>updI(it.pid,"qty",it.qty+1)} style={{width:32,height:32,borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",fontWeight:800,fontSize:16,cursor:"pointer"}}>+</button>
+                  </div>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:"#888",fontWeight:700,marginBottom:4}}>P. COSTO ($)</div>
+                  <input type="number" value={it.cost} onChange={e=>updI(it.pid,"cost",+e.target.value)}
+                    style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:14,fontWeight:700,outline:"none",boxSizing:"border-box"}}/>
+                </div>
+              </div>
+              <div style={{fontSize:12,color:"#666",marginTop:8,display:"flex",gap:16}}>
+                <span>Subtotal: <strong>{fARS(it.qty*it.cost)}</strong></span>
+                <span>Venta est.: <strong style={{color:RED}}>{fARS(it.cost*1.5)}</strong></span>
+              </div>
+            </div>
+          ))}
+
+          <button onClick={()=>setMStep(1)} style={{width:"100%",padding:"10px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer",marginBottom:8}}>
+            ← Seguir agregando productos
+          </button>
+
+          {/* Barra flotante confirmar */}
+          <div style={{position:"fixed",bottom:0,left:0,right:0,background:"linear-gradient(135deg,#1a5e20,#1e8449)",color:"#fff",padding:"13px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",zIndex:200,boxShadow:"0 -3px 16px #0003"}}>
+            <div>
+              <div style={{fontWeight:800,fontSize:15}}>{fARS(totalCost)}</div>
+              <div style={{fontSize:11,opacity:.85}}>{items.length} producto{items.length!==1?"s":""}</div>
+            </div>
+            <button onClick={submit} style={{padding:"10px 20px",borderRadius:10,border:"none",background:"#fff",color:"#1e8449",fontWeight:800,fontSize:14,cursor:"pointer"}}>
+              📦 Ingresar al Stock
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // ── DESKTOP ──────────────────────────────────────────────────────────────────
   return (
     <div style={{display:"grid",gridTemplateColumns:"1fr 340px",gap:18,alignItems:"start"}}>
       <div>
@@ -3299,7 +3551,6 @@ function Compras({products,onStock,isMobile}) {
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscá los productos que recibiste..."
             style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
           {search&&<div style={{fontSize:11,color:"#aaa",marginTop:6}}>{found.length} resultados</div>}
-          {/* Producto manual */}
           <div style={{marginTop:12,borderTop:"1px solid #f0f0f0",paddingTop:12}}>
             <button onClick={()=>{setShowManual(s=>!s);setManualError("");}}
               style={{padding:"6px 14px",borderRadius:8,border:"1.5px solid #e67e22",background:showManual?"#fef9e7":"#fff",color:"#e67e22",fontWeight:700,fontSize:12,cursor:"pointer"}}>
@@ -3308,50 +3559,31 @@ function Compras({products,onStock,isMobile}) {
             {showManual && (
               <div style={{background:"#fef9e7",border:"1.5px solid #e67e22",borderRadius:10,padding:14,marginTop:10}}>
                 <div style={{fontWeight:700,fontSize:13,color:"#e67e22",marginBottom:10}}>⚠️ Producto nuevo (excepcional)</div>
-                <div style={{fontSize:11,color:"#888",marginBottom:12,lineHeight:1.5}}>
-                  Solo usá esto si el producto no figura en el Excel. Generará un nuevo SKU en el catálogo.
-                </div>
+                <div style={{fontSize:11,color:"#888",marginBottom:12,lineHeight:1.5}}>Solo usá esto si el producto no figura en el Excel.</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-                  <div>
-                    <div style={{fontSize:10,fontWeight:700,color:"#666",marginBottom:4}}>SKU *</div>
-                    <input value={manualForm.sku} onChange={e=>setManualForm(f=>({...f,sku:e.target.value.toUpperCase()}))}
-                      placeholder="Ej: PROD-001"
-                      style={{...inputStyle,fontSize:12,padding:"6px 10px"}}/>
-                  </div>
-                  <div>
-                    <div style={{fontSize:10,fontWeight:700,color:"#666",marginBottom:4}}>Cantidad *</div>
-                    <input type="number" min={1} value={manualForm.qty} onChange={e=>setManualForm(f=>({...f,qty:e.target.value}))}
-                      style={{...inputStyle,fontSize:12,padding:"6px 10px"}}/>
-                  </div>
+                  <div><div style={{fontSize:10,fontWeight:700,color:"#666",marginBottom:4}}>SKU *</div>
+                    <input value={manualForm.sku} onChange={e=>setManualForm(f=>({...f,sku:e.target.value.toUpperCase()}))} placeholder="Ej: PROD-001" style={{...inputStyle,fontSize:12,padding:"6px 10px"}}/></div>
+                  <div><div style={{fontSize:10,fontWeight:700,color:"#666",marginBottom:4}}>Cantidad *</div>
+                    <input type="number" min={1} value={manualForm.qty} onChange={e=>setManualForm(f=>({...f,qty:e.target.value}))} style={{...inputStyle,fontSize:12,padding:"6px 10px"}}/></div>
                 </div>
-                <div style={{marginBottom:8}}>
-                  <div style={{fontSize:10,fontWeight:700,color:"#666",marginBottom:4}}>Detalle del producto *</div>
-                  <input value={manualForm.name} onChange={e=>setManualForm(f=>({...f,name:e.target.value}))}
-                    placeholder="Nombre completo del producto"
-                    style={{...inputStyle,fontSize:12,padding:"6px 10px"}}/>
-                </div>
-                <div style={{marginBottom:12}}>
-                  <div style={{fontSize:10,fontWeight:700,color:"#666",marginBottom:4}}>Precio de costo ($)</div>
-                  <input type="number" min={0} value={manualForm.cost} onChange={e=>setManualForm(f=>({...f,cost:e.target.value}))}
-                    style={{...inputStyle,fontSize:12,padding:"6px 10px"}}/>
-                </div>
+                <div style={{marginBottom:8}}><div style={{fontSize:10,fontWeight:700,color:"#666",marginBottom:4}}>Detalle *</div>
+                  <input value={manualForm.name} onChange={e=>setManualForm(f=>({...f,name:e.target.value}))} placeholder="Nombre completo" style={{...inputStyle,fontSize:12,padding:"6px 10px"}}/></div>
+                <div style={{marginBottom:12}}><div style={{fontSize:10,fontWeight:700,color:"#666",marginBottom:4}}>Precio de costo ($)</div>
+                  <input type="number" min={0} value={manualForm.cost} onChange={e=>setManualForm(f=>({...f,cost:e.target.value}))} style={{...inputStyle,fontSize:12,padding:"6px 10px"}}/></div>
                 {manualError && <div style={{color:"#c0392b",fontSize:12,marginBottom:8,fontWeight:600}}>⚠️ {manualError}</div>}
-                <button onClick={addManual}
-                  style={{width:"100%",padding:"8px",borderRadius:8,border:"none",background:"#e67e22",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>
-                  ➕ Agregar a la compra
-                </button>
+                <button onClick={addManual} style={{width:"100%",padding:"8px",borderRadius:8,border:"none",background:"#e67e22",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>➕ Agregar a la compra</button>
               </div>
             )}
           </div>
         </div>
-        <div style={{display:isMobile?"flex":"grid",flexDirection:isMobile?"column":undefined,gridTemplateColumns:isMobile?undefined:"repeat(auto-fill,minmax(195px,1fr))",gap:isMobile?8:10,padding:isMobile?"0 12px":0}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(195px,1fr))",gap:10}}>
           {found.length>0
             ? found.map(p=>{
                 const inL=items.find(i=>i.pid===p.id);
                 return <div key={p.id} style={{background:"#fff",borderRadius:10,padding:14,border:inL?"2px solid #1e8449":"2px solid transparent",boxShadow:"0 1px 4px #0001"}}>
                   <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",marginBottom:3,lineHeight:1.3}}>{p.name}</div>
-                  <div style={{fontSize:10,color:"#aaa",marginBottom:8}}>{p.id} . Stock actual: <strong>{p.stock}</strong></div>
-                  <button onClick={()=>addI(p)} disabled={!!inL} style={{width:"100%",padding:"7px",borderRadius:7,border:"none",fontSize:12,fontWeight:700,background:inL?"#d5f5e3":"#1e8449",color:inL?"#1a5276":"#fff",cursor:inL?"not-allowed":"pointer"}}>{inL?"✓ Agregado":"+ Agregar a la compra"}</button>
+                  <div style={{fontSize:10,color:"#aaa",marginBottom:8}}>{p.id} · Stock: <strong>{p.stock}</strong></div>
+                  <button onClick={()=>addI(p)} disabled={!!inL} style={{width:"100%",padding:"7px",borderRadius:7,border:"none",fontSize:12,fontWeight:700,background:inL?"#d5f5e3":"#1e8449",color:inL?"#1a5276":"#fff",cursor:inL?"not-allowed":"pointer"}}>{inL?"✓ Agregado":"+ Agregar"}</button>
                 </div>;
               })
             : <div style={{padding:20,color:"#aaa",fontSize:13}}>{search?"Sin resultados.":"Escribí el nombre del producto a ingresar."}</div>
@@ -3377,7 +3609,7 @@ function Compras({products,onStock,isMobile}) {
                     <div style={{flex:1}}><div style={{fontSize:10,color:"#aaa",marginBottom:3}}>P. Costo ($)</div>
                       <input type="number" value={it.cost} onChange={e=>updI(it.pid,"cost",+e.target.value)} style={{...inputStyle,padding:"5px 7px",fontSize:12}}/></div>
                   </div>
-                  <div style={{fontSize:11,color:"#666",marginTop:6}}>Subtotal: <strong>{fARS(it.qty*it.cost)}</strong> · Nuevo venta: <strong style={{color:RED}}>{fARS(it.cost*1.5)}</strong></div>
+                  <div style={{fontSize:11,color:"#666",marginTop:6}}>Subtotal: <strong>{fARS(it.qty*it.cost)}</strong> · Venta: <strong style={{color:RED}}>{fARS(it.cost*1.5)}</strong></div>
                 </div>
               ))
           }
