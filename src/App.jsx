@@ -223,6 +223,24 @@ function quoteStatus(q) {
   return { status: "vencida", hoursLeft: 0 };
 }
 
+// ─── CROSS-DEVICE NOTIFICATIONS via lm_notifs ────────────────────────────────
+// Escribe en lm_notifs → Realtime lo entrega al destinatario
+// para: "admin" | "vendedor" | username específico
+async function sendCrossNotif(db, setNotifs, {title, body, tag, para, de}) {
+  const notif = {
+    id: genId(),
+    fecha: new Date().toLocaleString("es-AR"),
+    title,
+    body,
+    tag: tag||"lm",
+    para,   // "admin" | username del vendedor
+    de,     // quien la envía
+    leida: false,
+  };
+  await db.addNotif(notif);
+  setNotifs(n=>[notif,...n]);
+}
+
 // ─── PUSH NOTIFICATIONS ──────────────────────────────────────────────────────
 const VAPID_PUBLIC_KEY = null; // Sin servidor VAPID — usamos Notification API directa
 
@@ -866,7 +884,9 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const updated = orders.map(o=>o.id===id ? {...o, editStatus:"solicitada", editReason:reason} : o);
     setOrders(updated);
     await db.upsertOrder(updated.find(o=>o.id===id));
-    sendLocalNotif("✏️ Solicitud de edición", `${orders.find(o=>o.id===id)?.vendedor} quiere editar un pedido`, `edit-req-${id}`);
+    const ord0 = orders.find(o=>o.id===id);
+    await sendCrossNotif(db, setNotifs, {title:"✏️ Solicitud de edición", body:`${ord0?.vendedor} quiere editar un pedido (${ord0?.client})`, tag:`edit-req-${id}`, para:"admin", de:ord0?.vendedor||""});
+    sendLocalNotif("✏️ Solicitud enviada", `Esperá la aprobación del admin`, `edit-req-${id}`);
   };
 
   // Fase 2a: admin aprueba la solicitud → vendedor puede editar
@@ -874,7 +894,8 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const updated = orders.map(o=>o.id===id ? {...o, editStatus:"aprobada", editRejectReason:""} : o);
     setOrders(updated);
     await db.upsertOrder(updated.find(o=>o.id===id));
-    sendLocalNotif("✅ Edición aprobada", `Tu solicitud de edición fue aprobada`, `edit-apr-${id}`);
+    const ordApr = orders.find(o=>o.id===id);
+    await sendCrossNotif(db, setNotifs, {title:"✅ Edición aprobada", body:`Tu solicitud para editar el pedido de ${ordApr?.client} fue aprobada`, tag:`edit-apr-${id}`, para:ordApr?.vendedor||"", de:"admin"});
   };
 
   // Fase 2b: admin rechaza la solicitud
@@ -882,7 +903,8 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const updated = orders.map(o=>o.id===id ? {...o, editStatus:"rechazada", editRejectReason:reason} : o);
     setOrders(updated);
     await db.upsertOrder(updated.find(o=>o.id===id));
-    sendLocalNotif("❌ Edición rechazada", `Tu solicitud de edición fue rechazada`, `edit-rej-${id}`);
+    const ordRej = orders.find(o=>o.id===id);
+    await sendCrossNotif(db, setNotifs, {title:"❌ Edición rechazada", body:`Tu solicitud para editar el pedido de ${ordRej?.client} fue rechazada. Motivo: "${reason}"`, tag:`edit-rej-${id}`, para:ordRej?.vendedor||"", de:"admin"});
   };
 
   // Fase 3: vendedor guarda los cambios editados
@@ -890,7 +912,9 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const updated = orders.map(o=>o.id===id ? {...o, editStatus:"en revisión", editItems:newItems, editTotal:newTotal} : o);
     setOrders(updated);
     await db.upsertOrder(updated.find(o=>o.id===id));
-    sendLocalNotif("👀 Cambios para revisar", `${orders.find(o=>o.id===id)?.vendedor} editó un pedido — revisá los cambios`, `edit-sub-${id}`);
+    const ordSub = orders.find(o=>o.id===id);
+    await sendCrossNotif(db, setNotifs, {title:"👀 Cambios para revisar", body:`${ordSub?.vendedor} editó el pedido de ${ordSub?.client} — revisá los cambios`, tag:`edit-sub-${id}`, para:"admin", de:ordSub?.vendedor||""});
+    sendLocalNotif("📤 Cambios enviados", `El admin revisará tu edición`, `edit-sub-${id}`);
   };
 
   // Fase 4a: admin aprueba los cambios finales
@@ -917,7 +941,8 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const updated = orders.map(o=>o.id===id ? {...o, items:ord.editItems, total:newTotal, editStatus:"", editItems:null, editReason:"", editRejectReason:""} : o);
     setOrders(updated);
     await db.upsertOrder(updated.find(o=>o.id===id));
-    sendLocalNotif("✅ Cambios aprobados", `Tu edición del pedido fue aprobada`, `edit-ok-${id}`);
+    const ordOk = updated.find(o=>o.id===id);
+    await sendCrossNotif(db, setNotifs, {title:"✅ Cambios aprobados", body:`Tu edición del pedido de ${ordOk?.client} fue aprobada`, tag:`edit-ok-${id}`, para:ordOk?.vendedor||"", de:"admin"});
     await logActivity("Edición aprobada", `Pedido ${ord.docNum||ord.compNum||""} editado`, id, "pedido");
   };
 
@@ -926,7 +951,8 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const updated = orders.map(o=>o.id===id ? {...o, editStatus:"cambios rechazados", editRejectReason:reason, editItems:null} : o);
     setOrders(updated);
     await db.upsertOrder(updated.find(o=>o.id===id));
-    sendLocalNotif("❌ Cambios rechazados", `El admin rechazó tu edición`, `edit-no-${id}`);
+    const ordNo = orders.find(o=>o.id===id);
+    await sendCrossNotif(db, setNotifs, {title:"❌ Cambios rechazados", body:`El admin rechazó tu edición del pedido de ${ordNo?.client}. Motivo: "${reason}"`, tag:`edit-no-${id}`, para:ordNo?.vendedor||"", de:"admin"});
   };
   const addQuote = async (quote) => {
     const test = isTestOrder(quote.vendedor);
@@ -1044,7 +1070,18 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       .on("postgres_changes", {event:"DELETE", schema:"public", table:"lm_quotes"}, (payload) => {
         setQuotes(prev => prev.filter(x => x.id !== payload.old.id));
       })
-      // SOLICITUDES DE COMPRA
+      // NOTIFICACIONES CRUZADAS — escuchar lm_notifs dirigidas a este usuario
+      .on("postgres_changes", {event:"INSERT", schema:"public", table:"lm_notifs"}, (payload) => {
+        const n = payload.new;
+        // Mostrar solo si está dirigida a este usuario o al rol admin
+        const esAdmin = currentUser.role === "admin";
+        const dirigidaAMi = n.para === currentUser.username || n.para === currentUser.name || n.para === currentUser.vendedor;
+        const dirigidaAAdmin = n.para === "admin" && esAdmin;
+        if((dirigidaAMi || dirigidaAAdmin) && n.de !== currentUser.name && n.de !== currentUser.vendedor) {
+          sendLocalNotif(n.title, n.body, n.tag);
+          setNotifs(prev => prev.find(x=>x.id===n.id) ? prev : [n,...prev]);
+        }
+      })
       .on("postgres_changes", {event:"INSERT", schema:"public", table:"lm_purchase_orders"}, (payload) => {
         const po = payload.new;
         setPurchaseOrders(prev => prev.find(x=>x.id===po.id) ? prev : [{...po, fechaCierre:po.fecha_cierre},...prev]);
