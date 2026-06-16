@@ -269,7 +269,11 @@ async function registerOneSignal(username, role) {
     const OS = await getOneSignal();
     if(!OS) return;
     await OS.login(username);
-    await OS.User.addTags({ username, role: role||"vendedor" });
+    // OneSignal v16: set external_id tags via User.addTag
+    try {
+      await OS.User.addTag("username", username);
+      await OS.User.addTag("role", role||"vendedor");
+    } catch(e) { console.warn("addTag:", e); }
   } catch(e) {
     console.warn("OneSignal register error:", e);
   }
@@ -715,13 +719,6 @@ function Login({users, onLogin}) {
 export default function App() {
   // ── SANDBOX STOCK — copia para el vendedor Prueba, persiste en localStorage ──
   const [sandboxStock, setSandboxStock] = useState({});
-  const updateSandboxStock = (updater) => {
-    setSandboxStock(prev => {
-      const next = typeof updater === "function" ? updater(prev) : updater;
-      try { localStorage.setItem("lm_sandbox_stock", JSON.stringify(next)); } catch {}
-      return next;
-    });
-  };
   const isSandboxUser = (user) => user && isTestOrder(user.vendedor || user.name);
 
   const [currentUser, setCurrentUser] = useState(() => {
@@ -848,6 +845,14 @@ export default function App() {
 
 // ─── MAIN APP (authenticated) ─────────────────────────────────────────────────
 function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,products,setProducts,orders,setOrders,quotes,setQuotes,stockLog,setStockLog,activity,setActivity,priceLists,setPriceLists,purchaseOrders,setPurchaseOrders,notifs,setNotifs,sandboxStock,setSandboxStock,clients,setClients}) {
+  // updateSandboxStock persists to localStorage on every change
+  const updateSandboxStock = (updater) => {
+    setSandboxStock(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      try { localStorage.setItem("lm_sandbox_stock", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
   const isAdmin = currentUser.role === "admin";
   const [tab, setTab] = useState("central");
   const [showNotifs, setShowNotifs] = useState(false);
@@ -1076,16 +1081,23 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       await logActivity("Nueva cotización", `${quoteWithNum.docNum} - ${quoteWithNum.client} - ${fARS(quoteWithNum.total)} - Vendedor: ${quoteWithNum.vendedor||"-"}`, quoteWithNum.id, "cotizacion");
     }
   };
-  const delQuote = async (id) => { setQuotes(q=>q.filter(x=>x.id!==id)); await db.deleteQuote(id); };
+  const delQuote = async (id) => {
+    const q = quotes.find(x=>x.id===id);
+    setQuotes(qs=>qs.filter(x=>x.id!==id));
+    if(q && !isTestOrder(q.vendedor)) await db.deleteQuote(id);
+  };
   const extendQuote = async (id, reason) => {
     const updated = quotes.map(q => q.id===id ? {...q, extendida:true, extendReason:reason, extendDate:today()} : q);
     setQuotes(updated);
     const quo = updated.find(x=>x.id===id);
-    await db.upsertQuote({...quo, extend_reason:reason, extend_date:today()});
+    if(quo && !isTestOrder(quo.vendedor)) {
+      await db.upsertQuote({...quo, extend_reason:reason, extend_date:today()});
+    }
   };
 
   // Convierte una cotización en reserva — descuenta stock y arranca el circuito de ventas
   const convertQuoteToOrder = async (quote) => {
+    const isSandbox = isTestOrder(quote.vendedor);
     const order = {
       id: genId(),
       client: quote.client,
@@ -1101,11 +1113,14 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       fromQuote: true,
     };
     await addOrder(order);
-    await logActivity("Cotización convertida a reserva", `${quote.docNum||""} - ${quote.client} - ${fARS(quote.total)}`, quote.id, "cotizacion");
-    // Marcar la cotización como convertida (no eliminar, queda como historial)
+    // Marcar la cotización como convertida
     const updated = {...quote, convertida: true, ordenId: order.id};
     setQuotes(q=>q.map(x=>x.id===quote.id?updated:x));
-    await db.upsertQuote({...updated});
+    // Solo tocar Supabase si NO es sandbox
+    if(!isSandbox) {
+      await db.upsertQuote({...updated});
+      await logActivity("Cotización convertida a reserva", `${quote.docNum||""} - ${quote.client} - ${fARS(quote.total)}`, quote.id, "cotizacion");
+    }
   };
   const updProd = async (upd) => {
     const prev = products.find(p=>p.id===upd.id);
@@ -1405,7 +1420,10 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                   setNotifPermission(granted ? "granted" : "denied");
                   if(granted) {
                     await OS.login(currentUser.username);
-                    await OS.User.addTags({ username: currentUser.username, role: currentUser.role });
+                    try {
+                      await OS.User.addTag("username", currentUser.username);
+                      await OS.User.addTag("role", currentUser.role);
+                    } catch(e) { console.warn("addTag:", e); }
                   }
                 } catch(e) {
                   console.warn("OneSignal:", e);
