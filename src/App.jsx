@@ -897,15 +897,13 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     await db.addActivity(entry);
   };
   const addOrder = async (order) => {
-    // Assign Reserva-XXXXXX correlative number (skip counter for test orders)
     const test = isTestOrder(order.vendedor);
     const n = test ? 0 : await db.nextCounter("reserva");
     const orderWithNum = {...order, docNum: test ? "TEST-000000" : fmtDocNum("Reserva", n), isTest: test, isSandbox: test};
+    const isSandbox = test;
 
-    // Detectar sandbox también si el vendedor es Prueba aunque el flag no esté
-    const isSandbox = test || isTestOrder(order.vendedor);
     if(isSandbox) {
-      // SANDBOX: descontar del stock paralelo en memoria, no tocar Supabase
+      // SANDBOX: solo en memoria + localStorage, no tocar Supabase ni notificaciones
       updateSandboxStock(prev => {
         const next = {...prev};
         orderWithNum.items.forEach(it => {
@@ -913,17 +911,20 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
         });
         return next;
       });
-    } else {
-      const updatedProds = products.map(x=>{const it=orderWithNum.items.find(i=>i.pid===x.id);return it?{...x,stock:Math.max(0,x.stock-it.qty)}:x;});
-      setProducts(updatedProds);
-      for(const p of updatedProds.filter(p=>orderWithNum.items.find(i=>i.pid===p.id))) await db.upsertProduct(p);
+      setOrders(o=>[{...orderWithNum, isSandbox: true},...o]);
+      if(!order.fromQuote) setTimeout(() => printDoc(orderWithNum, "reserva"), 400);
+      return; // ← no Supabase, no notifs, no push
     }
-    setOrders(o=>[{...orderWithNum, isSandbox: isSandbox},...o]);
-    await db.upsertOrder({...orderWithNum, isSandbox: isSandbox});
+
+    // REAL: descontar stock, guardar en Supabase, notificar
+    const updatedProds = products.map(x=>{const it=orderWithNum.items.find(i=>i.pid===x.id);return it?{...x,stock:Math.max(0,x.stock-it.qty)}:x;});
+    setProducts(updatedProds);
+    for(const p of updatedProds.filter(p=>orderWithNum.items.find(i=>i.pid===p.id))) await db.upsertProduct(p);
+    setOrders(o=>[{...orderWithNum, isSandbox: false},...o]);
+    await db.upsertOrder({...orderWithNum, isSandbox: false});
     const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"NUEVO_PEDIDO",para:"admin",icono:"🛒",titulo:"Nuevo pedido registrado",cuerpo:`${orderWithNum.client} - ${fARS(orderWithNum.total)} - ${orderWithNum.docNum}`,ref:orderWithNum.id};
     await db.addNotif(notif); setNotifs(n=>[notif,...n]);
     await logActivity("Nuevo pedido", `${orderWithNum.docNum} - ${orderWithNum.client} - ${fARS(orderWithNum.total)} - Vendedor: ${orderWithNum.vendedor||"-"}`, orderWithNum.id, "pedido");
-    // Auto-print only if NOT converted from quote (quote has its own print flow)
     if(!order.fromQuote) setTimeout(() => printDoc(orderWithNum, "reserva"), 400);
   };
   const [compPopup, setCompPopup] = useState(null);
@@ -1070,8 +1071,10 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const n = test ? 0 : await db.nextCounter("presu");
     const quoteWithNum = {...quote, docNum: test ? "TEST-000000" : fmtDocNum("Presu", n), isTest: test};
     setQuotes(q=>[quoteWithNum,...q]);
-    await db.upsertQuote(quoteWithNum);
-    await logActivity("Nueva cotización", `${quoteWithNum.docNum} - ${quoteWithNum.client} - ${fARS(quoteWithNum.total)} - Vendedor: ${quoteWithNum.vendedor||"-"}`, quoteWithNum.id, "cotizacion");
+    if(!test) {
+      await db.upsertQuote(quoteWithNum);
+      await logActivity("Nueva cotización", `${quoteWithNum.docNum} - ${quoteWithNum.client} - ${fARS(quoteWithNum.total)} - Vendedor: ${quoteWithNum.vendedor||"-"}`, quoteWithNum.id, "cotizacion");
+    }
   };
   const delQuote = async (id) => { setQuotes(q=>q.filter(x=>x.id!==id)); await db.deleteQuote(id); };
   const extendQuote = async (id, reason) => {
