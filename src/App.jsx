@@ -923,8 +923,8 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"NUEVO_PEDIDO",para:"admin",icono:"🛒",titulo:"Nuevo pedido registrado",cuerpo:`${orderWithNum.client} - ${fARS(orderWithNum.total)} - ${orderWithNum.docNum}`,ref:orderWithNum.id};
     await db.addNotif(notif); setNotifs(n=>[notif,...n]);
     await logActivity("Nuevo pedido", `${orderWithNum.docNum} - ${orderWithNum.client} - ${fARS(orderWithNum.total)} - Vendedor: ${orderWithNum.vendedor||"-"}`, orderWithNum.id, "pedido");
-    // Auto-print Reserva document
-    setTimeout(() => printDoc(orderWithNum, "reserva"), 400);
+    // Auto-print only if NOT converted from quote (quote has its own print flow)
+    if(!order.fromQuote) setTimeout(() => printDoc(orderWithNum, "reserva"), 400);
   };
   const [compPopup, setCompPopup] = useState(null);
   const [showChangePass, setShowChangePass] = useState(false);
@@ -1086,6 +1086,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const order = {
       id: genId(),
       client: quote.client,
+      clientId: quote.clientId || "",
       vendedor: quote.vendedor,
       notes: quote.notes,
       items: quote.items,
@@ -1094,6 +1095,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       globalDisc: quote.globalDisc,
       stage: "reserva",
       date: today(),
+      fromQuote: true,
     };
     await addOrder(order);
     await logActivity("Cotización convertida a reserva", `${quote.docNum||""} - ${quote.client} - ${fARS(quote.total)}`, quote.id, "cotizacion");
