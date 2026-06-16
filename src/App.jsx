@@ -244,18 +244,32 @@ function quoteStatus(q) {
 
 // ─── ONESIGNAL PUSH NOTIFICATIONS ───────────────────────────────────────────
 const OS_APP_ID = "00dbe0c1-e7bf-4f80-885c-1680381ed121";
+
+// Espera hasta que OneSignal esté listo (máx 10 segundos)
+function getOneSignal() {
+  return new Promise((resolve) => {
+    if(window.OneSignal && window._oneSignalReady) {
+      resolve(window.OneSignal);
+      return;
+    }
+    const handler = () => resolve(window.OneSignal);
+    window.addEventListener("oneSignalReady", handler, { once: true });
+    // Timeout de seguridad
+    setTimeout(() => {
+      window.removeEventListener("oneSignalReady", handler);
+      resolve(window.OneSignal || null);
+    }, 10000);
+  });
+}
 const OS_API_KEY = "os_v2_app_adn6bqphx5hybcc4c2adqhwreg4ekar7am5ej5fv4uwxgtau3pqgjfzynkjg226awxtc4737kumrypjz7ju777gjpna26pw6epg2syi";
 
 // Registrar el dispositivo en OneSignal con el username como external_id
-async function registerOneSignal(username) {
+async function registerOneSignal(username, role) {
   try {
-    const OS = window.OneSignal;
+    const OS = await getOneSignal();
     if(!OS) return;
     await OS.login(username);
-    const permission = await OS.Notifications.permission;
-    if(!permission) {
-      await OS.Notifications.requestPermission();
-    }
+    await OS.User.addTags({ username, role: role||"vendedor" });
   } catch(e) {
     console.warn("OneSignal register error:", e);
   }
@@ -800,21 +814,12 @@ export default function App() {
   if(!currentUser) return <Login users={users} onLogin={u=>{
     localStorage.setItem("lm_session", JSON.stringify(u));
     setCurrentUser(u);
-    // Registrar en OneSignal con username y rol
-    setTimeout(async () => {
-      try {
-        const OS = window.OneSignal;
-        if(OS) {
-          await OS.login(u.username);
-          await OS.User.addTags({ username: u.username, role: u.role });
-          await OS.Notifications.requestPermission();
-        }
-      } catch(e) { console.warn("OneSignal:", e); }
-    }, 1500);
+    // Registrar en OneSignal (espera a que esté listo)
+    registerOneSignal(u.username, u.role);
   }}/>;
   return <MainApp
     currentUser={currentUser} onLogout={async()=>{
-      try { const OS=window.OneSignal; if(OS) await OS.logout(); } catch(e) {}
+      try { const OS=await getOneSignal(); if(OS) await OS.logout(); } catch(e) {}
       localStorage.removeItem("lm_session");
       setCurrentUser(null);
     }}
@@ -1239,10 +1244,12 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   useEffect(() => {
     const check = async () => {
       try {
-        const OS = window.OneSignal;
+        // Intentar con OneSignal primero (espera hasta 5s)
+        const OS = await Promise.race([
+          getOneSignal(),
+          new Promise(r => setTimeout(()=>r(null), 5000))
+        ]);
         if(OS) {
-          // Esperar a que OneSignal esté listo
-          await new Promise(r => setTimeout(r, 2000));
           const granted = OS.Notifications.permission;
           setNotifPermission(granted ? "granted" : "default");
         } else if("Notification" in window) {
@@ -1383,16 +1390,22 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
               {/* Botón de notificaciones OneSignal */}
               <div onClick={async()=>{
                 try {
-                  const OS = window.OneSignal;
-                  if(!OS) { alert("El sistema de notificaciones no está disponible todavía. Intentá recargar la app."); return; }
+                  const OS = await getOneSignal();
+                  if(!OS) {
+                    alert("El sistema de notificaciones no está disponible. Verificá tu conexión y recargá la app.");
+                    setMobileMenu(false);
+                    return;
+                  }
                   const granted = await OS.Notifications.requestPermission();
                   setNotifPermission(granted ? "granted" : "denied");
                   if(granted) {
-                    // Re-registrar usuario con sus tags
                     await OS.login(currentUser.username);
                     await OS.User.addTags({ username: currentUser.username, role: currentUser.role });
                   }
-                } catch(e) { console.warn("OneSignal:", e); }
+                } catch(e) {
+                  console.warn("OneSignal:", e);
+                  alert("Hubo un problema al activar las notificaciones. Intentá de nuevo.");
+                }
                 setMobileMenu(false);
               }} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,
                 color:notifPermission==="granted"?"#1e8449":notifPermission==="denied"?"#aaa":"#e67e22",
