@@ -1235,14 +1235,22 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     return () => { supabase.removeChannel(channel); };
   }, [currentUser.id]);
 
-  // Pedir permiso de notificaciones al iniciar (solo una vez)
+  // Chequear estado de notificaciones al iniciar (sin pedir permiso automáticamente)
   useEffect(() => {
-    if ("Notification" in window && Notification.permission === "default") {
-      setTimeout(async () => {
-        const result = await requestNotifPermission();
-        setNotifPermission(result);
-      }, 3000); // espera 3s para no abrumar al usuario
-    }
+    const check = async () => {
+      try {
+        const OS = window.OneSignal;
+        if(OS) {
+          // Esperar a que OneSignal esté listo
+          await new Promise(r => setTimeout(r, 2000));
+          const granted = OS.Notifications.permission;
+          setNotifPermission(granted ? "granted" : "default");
+        } else if("Notification" in window) {
+          setNotifPermission(Notification.permission);
+        }
+      } catch(e) {}
+    };
+    check();
   }, []);
 
   // Confirmación al cerrar/retroceder (funciona en desktop y mobile)
@@ -1372,6 +1380,34 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
               </div>
             ))}
             <div style={{borderTop:"2px solid #e5e5e5",marginTop:216,paddingTop:8}}>
+              {/* Botón de notificaciones OneSignal */}
+              <div onClick={async()=>{
+                try {
+                  const OS = window.OneSignal;
+                  if(!OS) { alert("El sistema de notificaciones no está disponible todavía. Intentá recargar la app."); return; }
+                  const granted = await OS.Notifications.requestPermission();
+                  setNotifPermission(granted ? "granted" : "denied");
+                  if(granted) {
+                    // Re-registrar usuario con sus tags
+                    await OS.login(currentUser.username);
+                    await OS.User.addTags({ username: currentUser.username, role: currentUser.role });
+                  }
+                } catch(e) { console.warn("OneSignal:", e); }
+                setMobileMenu(false);
+              }} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,
+                color:notifPermission==="granted"?"#1e8449":notifPermission==="denied"?"#aaa":"#e67e22",
+                cursor:"pointer",
+                background:notifPermission==="granted"?"#eafaf1":"transparent"}}>
+                <span style={{fontSize:20,width:28,textAlign:"center"}}>
+                  {notifPermission==="granted"?"🔔":"🔕"}
+                </span>
+                {notifPermission==="granted"
+                  ? "Notificaciones activas ✓"
+                  : notifPermission==="denied"
+                    ? "Notificaciones bloqueadas"
+                    : "Activar notificaciones push"
+                }
+              </div>
               <div onClick={()=>{if(window.confirm("¿Seguro que querés salir de la app?")) onLogout();}} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:RED,cursor:"pointer",background:"#fdecea"}}>
                 <span style={{fontSize:20,width:28,textAlign:"center"}}>🚪</span>Salir
               </div>
