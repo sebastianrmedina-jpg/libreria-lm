@@ -204,6 +204,64 @@ const applyGlobalDiscount = (subtotal, disc) => {
   return Math.max(0, subtotal - v);
 };
 // Format discount label for display
+// ─── WHATSAPP MESSAGE BUILDER ────────────────────────────────────────────────
+function buildWAOrder(o) {
+  const num   = o.compNum || o.docNum || "";
+  const tipo  = o.compNum ? "Comprobante" : "Reserva";
+  const stage = {"reserva":"Reserva","confirmado":"Confirmado","armado":"En Armado","entregado":"Entregado"}[o.stage] || o.stage;
+  const sep   = "─────────────────────";
+  const items = o.items.map(it => {
+    const sub  = it.price * it.qty;
+    const disc = it.disc?.value ? ` (-${it.disc.value}${it.disc.type==="%"?"%":"$"})` : "";
+    return `\u25b8 ${it.name}\n  ${it.qty} u. \u00d7 ${fARS(it.price)}${disc} = *${fARS(sub)}*`;
+  }).join("\n");
+  const discLine = o.subtotal && o.subtotal !== o.total
+    ? `\n_Descuento: -${fARS(o.subtotal - o.total)}_` : "";
+  const notes = o.notes ? `\n\uD83D\uDCAC _${o.notes}_` : "";
+  return [
+    `\uD83C\uDFEA *LIBRERIA MADRID*`,
+    `\uD83D\uDCC4 *${tipo}: ${num}*`,
+    sep,
+    `\uD83D\uDC64 *Cliente:* ${o.client}`,
+    `\uD83D\uDCC5 *Fecha:* ${o.date}`,
+    `\uD83D\uDCE6 *Estado:* ${stage}`,
+    sep,
+    items,
+    sep,
+    `${discLine ? `Subtotal: ${fARS(o.subtotal)}${discLine}\n` : ""}*TOTAL: ${fARS(o.total)}*`,
+    notes,
+    sep,
+    `_Libreria Madrid \u2014 ${o.vendedor || ""}_`,
+  ].filter(Boolean).join("\n");
+}
+
+function buildWAQuote(q) {
+  const sep   = "─────────────────────";
+  const items = q.items.map(it => {
+    const sub  = it.price * it.qty;
+    const disc = it.disc?.value ? ` (-${it.disc.value}${it.disc.type==="%"?"%":"$"})` : "";
+    return `\u25b8 ${it.name}\n  ${it.qty} u. \u00d7 ${fARS(it.price)}${disc} = *${fARS(sub)}*`;
+  }).join("\n");
+  const discLine = q.subtotal && q.subtotal !== q.total
+    ? `\n_Descuento: -${fARS(q.subtotal - q.total)}_` : "";
+  const notes = q.notes ? `\n\uD83D\uDCAC _${q.notes}_` : "";
+  return [
+    `\uD83C\uDFEA *LIBRERIA MADRID*`,
+    `\uD83D\uDCCB *Cotizacion: ${q.docNum || ""}*`,
+    sep,
+    `\uD83D\uDC64 *Cliente:* ${q.client}`,
+    `\uD83D\uDCC5 *Fecha:* ${q.date}`,
+    `\u23F3 *Valida:* ${q.validity || "48 horas"}`,
+    sep,
+    items,
+    sep,
+    `${discLine ? `Subtotal: ${fARS(q.subtotal)}${discLine}\n` : ""}*TOTAL: ${fARS(q.total)}*`,
+    notes,
+    sep,
+    `_Libreria Madrid \u2014 ${q.vendedor || ""}_`,
+  ].filter(Boolean).join("\n");
+}
+
 const fmtDisc = (disc) => {
   if(!disc || !disc.value) return null;
   const v = parseFloat(disc.value) || 0;
@@ -1967,13 +2025,9 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
             <button onClick={()=>printDoc(o, o.stage==="reserva"?"reserva":"confirmado")} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #d6eaf8",cursor:"pointer",background:"#fff",color:"#1a5276",fontWeight:600,fontSize:13}}>
               🖨️ {o.stage==="reserva"?(o.docNum||"Imprimir"):(o.compNum||"Imprimir")}
             </button>
-            <button onClick={()=>{
-              const num = o.stage==="reserva"?(o.docNum||""):(o.compNum||"");
-              const items = o.items.map(it=>`- ${it.name} x${it.qty} - ${fARS(it.price*it.qty)}`).join("\n");
-              const txt = `*Libreria Madrid*\n*${num}*\nCliente: ${o.client}\nFecha: ${o.date}\n\n${items}\n\n*Total: ${fARS(o.total)}*`;
-              window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`, "_blank");
-            }} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #d5f5e3",cursor:"pointer",background:"#fff",color:"#1e8449",fontWeight:600,fontSize:13}}>
-              💬 WhatsApp
+            <button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(buildWAOrder(o))}`, "_blank")}
+              style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #d5f5e3",cursor:"pointer",background:"#25D366",color:"#fff",fontWeight:700,fontSize:13,display:"flex",alignItems:"center",gap:5}}>
+              <span style={{fontSize:15}}>💬</span> Enviar por WhatsApp
             </button>
             {/* Solicitar edición — solo vendedor, solo si no hay edición en curso */}
             {!isAdmin && !es && o.stage!=="entregado" && (
@@ -2723,13 +2777,9 @@ function QuoteCard({q,exp,toggle,getP,onDel,onConvert,onExtend}) {
           {q.notes&&<div style={{background:"#f9f9f9",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#555",marginBottom:12}}>💬 {q.notes}</div>}
           <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
             <button onClick={()=>printDoc(q,"cotizacion")} style={{padding:"8px 12px",borderRadius:8,border:`1.5px solid ${PURPLEBG}`,cursor:"pointer",background:"#fff",color:PURPLE,fontWeight:600,fontSize:13}}>🖨️ Imprimir</button>
-            <button onClick={()=>{
-              const items = q.items.map(it=>`- ${it.name} x${it.qty} - ${fARS(it.price*it.qty)}`).join("\n");
-              const disc = q.globalDisc?.value ? `\nDescuento: ${fmtDisc(q.globalDisc)}` : "";
-              const txt = `*Libreria Madrid - Cotizacion*\n*${q.docNum||""}*\nCliente: ${q.client}\nFecha: ${q.date} - Valida: ${q.validity||"48 horas"}\n\n${items}${disc}\n\n*Total: ${fARS(q.total)}*`;
-              window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`, "_blank");
-            }} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #d5f5e3",cursor:"pointer",background:"#fff",color:"#1e8449",fontWeight:600,fontSize:13}}>
-              💬 WhatsApp
+            <button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(buildWAQuote(q))}`, "_blank")}
+              style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #25D366",cursor:"pointer",background:"#25D366",color:"#fff",fontWeight:700,fontSize:13,display:"flex",alignItems:"center",gap:5}}>
+              <span style={{fontSize:15}}>💬</span> Enviar por WhatsApp
             </button>
             {!q.convertida
               ? <button onClick={()=>onConvert(q)} disabled={isVencida}
