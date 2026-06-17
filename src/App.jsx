@@ -134,12 +134,23 @@ const db = {
 };
 
 const RED = "#c0392b", REDD = "#922b21";
+const VINO = "#7b1a1a";          // header, máxima jerarquía
+const GOLD = "#c9a96a";          // detalles, líneas separadoras
+const IVORY = "#fdfbf7";         // fondos cálidos
+const IVORY_BORDER = "#e5ddd0";
+const SERIF = "Georgia,'Times New Roman',serif";
+const STAGE_COLORS = {
+  reserva:     "#b7770d",
+  confirmado:  "#1e8449",
+  "en armado": "#1a5276",
+  entregado:   "#6c3483",
+};
 const STAGES = ["reserva","confirmado","en armado","entregado"];
 const SCFG = {
-  reserva:     {label:"Reserva",    color:"#c0392b", bg:"#fdecea", icon:"🕐"},
-  confirmado:  {label:"Confirmado", color:"#1a5276", bg:"#d6eaf8", icon:"✅"},
-  "en armado": {label:"En Armado",  color:"#6c3483", bg:"#e8daef", icon:"📦"},
-  entregado:   {label:"Entregado",  color:"#1e8449", bg:"#d5f5e3", icon:"🎉"},
+  reserva:     {label:"Reserva",    color:"#b7770d", bg:"#fef9e7", icon:"🕐"},
+  confirmado:  {label:"Confirmado", color:"#1e8449", bg:"#eafaf1", icon:"✅"},
+  "en armado": {label:"En Armado",  color:"#1a5276", bg:"#eaf4fc", icon:"📦"},
+  entregado:   {label:"Entregado",  color:"#6c3483", bg:"#f5eef8", icon:"🎉"},
 };
 
 const LOGO = "/logo.png";
@@ -475,68 +486,68 @@ function printDoc(doc, tipo) {
 <title>${docLabel} ${docNumDisplay}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;}
-  html,body{background:#fff;color:#1a1a1a;width:210mm;}
+  html,body{background:#fdfbf7;color:#1a1a1a;width:210mm;}
   @media screen{body{max-width:210mm;margin:0 auto;box-shadow:0 0 20px #0002;}}
   @media print{.no-print{display:none!important;}@page{margin:3mm;size:A4 portrait;}body{width:100%;}}
-  .print-btn{display:block;margin:12px auto;padding:9px 28px;background:${badgeColor};color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;}
+  .print-btn{display:block;margin:12px auto;padding:9px 28px;background:linear-gradient(135deg,#7b1a1a,${badgeColor});color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;}
   .pdf-wrap{padding:0 0 16px;}
 
-  /* HEADER — imagen completa sin recorte */
+  /* HEADER — imagen completa + línea dorada de acento */
   .header-img{
     width:100%;
     height:auto;
     display:block;
-    border-bottom:3px solid #c0392b;
   }
+  .gold-line{height:3px;background:linear-gradient(90deg,#c9a96a,#e8d4a8,#c9a96a);}
 
-  .content{padding:12px 16px 0;}
+  .content{padding:14px 18px 0;}
 
   /* DOC META row */
-  .doc-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:10px;border-bottom:2px solid #f0f0f0;}
+  .doc-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:12px;border-bottom:2px solid #f0ece2;}
   .doc-left{}
-  .doc-type-label{font-size:10px;color:#999;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;}
+  .doc-type-label{font-size:10px;color:#999;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:5px;font-weight:700;}
   .doc-badge{display:inline-block;padding:5px 16px;border-radius:6px;font-size:13px;font-weight:800;letter-spacing:1px;background:${badgeColor};color:#fff;}
   .doc-right{text-align:right;}
-  .doc-num{font-size:22px;font-weight:900;color:#1a1a1a;letter-spacing:-0.5px;}
+  .doc-num{font-size:23px;font-weight:700;color:#1a1a1a;letter-spacing:0.3px;font-family:Georgia,'Times New Roman',serif;}
   .doc-date{font-size:11px;color:#888;margin-top:3px;}
 
   /* INFO GRID */
-  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px 16px;margin-bottom:12px;}
-  .info-box{background:#f9f9f9;border-radius:6px;padding:7px 12px;border-left:3px solid #e5e5e5;}
+  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px 16px;margin-bottom:14px;}
+  .info-box{background:#fdfbf7;border-radius:6px;padding:8px 12px;border-left:3px solid #e5ddd0;}
   .info-box.hl{border-left-color:${badgeColor};}
   .info-label{font-size:8px;color:#999;text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px;font-weight:700;}
   .info-value{font-size:13px;font-weight:700;color:#1a1a1a;}
 
   /* VALIDITY */
-  .validity-bar{background:#fef9e7;border-left:3px solid #f1c40f;padding:6px 12px;border-radius:0 6px 6px 0;font-size:12px;color:#7d6608;margin-bottom:10px;}
+  .validity-bar{background:#fef9e7;border-left:3px solid #c9a96a;padding:6px 12px;border-radius:0 6px 6px 0;font-size:12px;color:#7d6608;margin-bottom:10px;}
 
   /* TABLE */
   table{width:100%;border-collapse:collapse;margin-bottom:14px;}
-  thead tr{background:#f5f5f5;}
-  th{padding:8px 10px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.5px;font-weight:700;}
+  thead tr{background:#fdfbf7;}
+  th{padding:9px 10px;text-align:left;font-size:10px;color:#999;text-transform:uppercase;letter-spacing:.6px;font-weight:700;border-bottom:2px solid #f0ece2;}
   th.r{text-align:right;}th.c{text-align:center;}
-  td{padding:8px 10px;border-bottom:1px solid #f0f0f0;font-size:15px;color:#1a1a1a;vertical-align:middle;}
+  td{padding:9px 10px;border-bottom:1px solid #f5f1ea;font-size:15px;color:#1a1a1a;vertical-align:middle;}
   td.r{text-align:right;}td.c{text-align:center;}
-  tbody tr:nth-child(even){background:#fafafa;}
+  tbody tr:nth-child(even){background:#fdfbf7;}
   tbody tr:last-child td{border-bottom:none;}
 
   /* TOTAL */
   .total-wrap{display:flex;justify-content:flex-end;margin-bottom:14px;}
-  .total-box{background:${tipo==="cotizacion"?"#e8daef":"#fdecea"};border-radius:8px;padding:12px 20px;min-width:280px;}
+  .total-box{background:${tipo==="cotizacion"?"#f5eef8":"#fdf3f1"};border-radius:10px;padding:14px 22px;min-width:280px;border:1px solid ${badgeColor}22;}
   .disc-row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;}
   .disc-row.green{color:#1e8449;}
   .disc-row.grey{color:#888;}
-  .disc-divider{border:none;border-top:1px solid #ddd;margin:6px 0;}
+  .disc-divider{border:none;border-top:1px solid #e5ddd0;margin:6px 0;}
   .total-final{display:flex;justify-content:space-between;align-items:center;margin-top:4px;}
   .total-label{font-size:14px;color:#555;font-weight:600;}
-  .total-amount{font-size:28px;font-weight:900;color:${badgeColor};}
+  .total-amount{font-size:28px;font-weight:700;color:${badgeColor};font-family:Georgia,'Times New Roman',serif;}
 
   /* NOTES */
-  .notes{background:#f9f9f9;border-left:3px solid ${badgeColor};padding:8px 12px;border-radius:0 6px 6px 0;font-size:13px;color:#555;margin-bottom:14px;}
+  .notes{background:#fdfbf7;border-left:3px solid ${badgeColor};padding:9px 12px;border-radius:0 6px 6px 0;font-size:13px;color:#555;margin-bottom:14px;}
 
   /* FOOTER */
-  .footer{border-top:1px solid #f0f0f0;padding-top:8px;margin:0 0;font-size:10px;color:#bbb;display:flex;justify-content:space-between;align-items:center;}
-  .footer-brand{color:#c0392b;font-weight:700;}
+  .footer{border-top:1px solid #f0ece2;padding-top:9px;margin:0 0;font-size:10px;color:#bbb;display:flex;justify-content:space-between;align-items:center;}
+  .footer-brand{color:#7b1a1a;font-weight:700;font-family:Georgia,serif;}
   /* TEST WATERMARK */
   .test-banner{background:#f1c40f;color:#1a1a1a;text-align:center;padding:8px;font-weight:900;font-size:13px;letter-spacing:2px;border-bottom:2px solid #d4ac0d;}
   .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:80px;font-weight:900;color:rgba(241,196,15,0.15);pointer-events:none;white-space:nowrap;z-index:0;}
@@ -547,6 +558,7 @@ ${doc.isTest ? `<div class="test-banner">⚠️ DOCUMENTO DE PRUEBA — NO VÁLI
 ${doc.isTest ? `<div class="watermark">PRUEBA</div>` : ""}
 <div class="pdf-wrap">
   <img class="header-img" src="${logoSrc}" alt="Libreria Madrid" onerror="this.style.display='none'"/>
+  <div class="gold-line"></div>
   <div class="content">
     <div class="doc-meta">
       <div class="doc-left">
@@ -1372,10 +1384,10 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   }, []);
 
   return (
-    <div style={{minHeight:"100vh",background:"#f5f5f5",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
+    <div style={{minHeight:"100vh",background:IVORY,fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
 
       {/* ── HEADER ── */}
-      <div style={{background:`linear-gradient(135deg,${REDD},${RED})`,boxShadow:"0 4px 16px #0004",position:"sticky",top:0,zIndex:100}}>
+      <div style={{background:`linear-gradient(135deg,${VINO},#9c2a1f)`,boxShadow:"0 4px 16px #0004",position:"sticky",top:0,zIndex:100,borderBottom:`3px solid ${GOLD}`}}>
         {isMobile ? (
           <div>
             <div style={{display:"flex",alignItems:"center",padding:"12px 14px 8px",gap:10}}>
@@ -1786,15 +1798,15 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
   const editTotal = editItems.reduce((s,it)=>s+it.price*it.qty,0);
 
   return (
-    <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 6px #0001",overflow:"hidden",marginBottom:8}}>
+    <div style={{background:"#fff",borderRadius:12,boxShadow:"0 2px 8px #0000000a",overflow:"hidden",marginBottom:8,borderLeft:`4px solid ${STAGE_COLORS[o.stage]||"#ccc"}`}}>
       <div onClick={toggle} style={{padding:"13px 18px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",cursor:"pointer"}}>
         <div style={{flex:1,minWidth:100}}>
           <div style={{fontWeight:700,fontSize:14,color:"#1a1a1a"}}>{o.client}</div>
           <div style={{fontSize:11,color:"#aaa",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
             {o.isTest&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:800}}>TEST</span>}
             {o.isSandbox&&<span style={{background:"#9b59b6",color:"#fff",borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:800}}>🧪 SANDBOX</span>}
-            {o.docNum&&!o.isTest&&<span style={{fontWeight:700,color:"#c0392b"}}>{o.docNum}</span>}
-            {o.compNum&&!o.isTest&&<span style={{fontWeight:700,color:"#1a5276"}}>{o.compNum}</span>}
+            {o.docNum&&!o.isTest&&<span style={{fontWeight:700,color:RED,fontFamily:SERIF}}>{o.docNum}</span>}
+            {o.compNum&&!o.isTest&&<span style={{fontWeight:700,color:"#1a5276",fontFamily:SERIF}}>{o.compNum}</span>}
             <span>{o.date}</span>
             {o.vendedor&&<span>· 👤 {o.vendedor}</span>}
             {o.internalNote&&<span style={{color:"#e67e22"}}>· 📝 Nota</span>}
@@ -2701,14 +2713,17 @@ function QuoteCard({q,exp,toggle,getP,onDel,onConvert,onExtend}) {
     return <span style={{background:"#d5f5e3",color:"#1e8449",border:"1px solid #a9dfbf",borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>✅ Vigente</span>;
   };
 
+  // Color del borde lateral según estado
+  const borderColor = q.convertida ? "#1e8449" : isVencida ? "#c0392b" : status==="extendida" ? "#b7770d" : "#1e8449";
+
   return (
-    <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 6px #0001",overflow:"hidden",marginBottom:8}}>
+    <div style={{background:"#fff",borderRadius:12,boxShadow:"0 2px 8px #0000000a",overflow:"hidden",marginBottom:8,borderLeft:`4px solid ${borderColor}`}}>
       <div onClick={toggle} style={{padding:"13px 18px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",cursor:"pointer"}}>
         <div style={{flex:1,minWidth:100}}>
           <div style={{fontWeight:700,fontSize:14,color:"#1a1a1a"}}>{q.client}</div>
           <div style={{fontSize:11,color:"#aaa",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
             {q.isTest&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:800}}>TEST</span>}
-            {q.docNum&&!q.isTest&&<span style={{fontWeight:700,color:"#6c3483"}}>{q.docNum}</span>}
+            {q.docNum&&!q.isTest&&<span style={{fontWeight:700,color:PURPLE,fontFamily:SERIF}}>{q.docNum}</span>}
             <span>{q.date}</span>
             {q.vendedor&&<span>· 👤 {q.vendedor}</span>}
             <StatusBdg/>
@@ -2722,7 +2737,6 @@ function QuoteCard({q,exp,toggle,getP,onDel,onConvert,onExtend}) {
       </div>
       {exp && (
         <div style={{borderTop:"1px solid #f5f5f5",padding:18}}>
-
           {/* VENCIDA sin extensión */}
           {isVencida && !showExtForm && !q.extendida && (
             <div style={{background:"#fdecea",border:"1.5px solid #f1948a",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
@@ -3592,29 +3606,31 @@ function printSolicitudPDF(po, logoSrc) {
 <title>Solicitud de Compra</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;}
-  body{background:#fff;}
+  body{background:#fdfbf7;}
   @media print{.no-print{display:none!important;}@page{margin:3mm;size:A4;}}
-  .btn{display:block;margin:12px auto;padding:9px 28px;background:#1a5276;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;}
-  .header-img{width:100%;height:auto;display:block;border-bottom:3px solid #c0392b;}
+  .btn{display:block;margin:12px auto;padding:9px 28px;background:linear-gradient(135deg,#7b1a1a,#1a5276);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;}
+  .header-img{width:100%;height:auto;display:block;}
+  .gold-line{height:3px;background:linear-gradient(90deg,#c9a96a,#e8d4a8,#c9a96a);}
   .content{padding:16px 20px 0;}
-  .doc-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid #f0f0f0;}
+  .doc-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid #f0ece2;}
   .badge{display:inline-block;padding:6px 18px;border-radius:8px;font-size:14px;font-weight:800;background:#1a5276;color:#fff;}
   .info-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px 16px;margin-bottom:16px;}
-  .info-box{background:#f9f9f9;border-radius:8px;padding:9px 12px;border-left:3px solid #e5e5e5;}
+  .info-box{background:#fdfbf7;border-radius:8px;padding:9px 12px;border-left:3px solid #e5ddd0;}
   .info-lbl{font-size:8px;color:#999;text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px;font-weight:700;}
-  .info-val{font-size:13px;font-weight:700;}
+  .info-val{font-size:13px;font-weight:700;font-family:Georgia,serif;}
   table{width:100%;border-collapse:collapse;margin-bottom:16px;}
-  thead tr{background:#f5f5f5;}
-  th{padding:9px 12px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;font-weight:700;}
+  thead tr{background:#fdfbf7;}
+  th{padding:9px 12px;text-align:left;font-size:10px;color:#999;text-transform:uppercase;font-weight:700;border-bottom:2px solid #f0ece2;}
   th.c{text-align:center;}
-  tbody tr:nth-child(even){background:#fafafa;}
-  .footer{border-top:1px solid #f0f0f0;padding-top:10px;margin:0;font-size:10px;color:#bbb;display:flex;justify-content:space-between;}
-  .footer-brand{color:#c0392b;font-weight:700;}
-  .notes{background:#f9f9f9;border-left:3px solid #1a5276;padding:8px 12px;border-radius:0 6px 6px 0;font-size:12px;color:#555;margin-bottom:14px;}
+  tbody tr:nth-child(even){background:#fdfbf7;}
+  .footer{border-top:1px solid #f0ece2;padding-top:10px;margin:0;font-size:10px;color:#bbb;display:flex;justify-content:space-between;}
+  .footer-brand{color:#7b1a1a;font-weight:700;font-family:Georgia,serif;}
+  .notes{background:#fdfbf7;border-left:3px solid #1a5276;padding:8px 12px;border-radius:0 6px 6px 0;font-size:12px;color:#555;margin-bottom:14px;}
 </style></head><body>
 <button class="no-print btn" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
 <div>
   <img class="header-img" src="${logoSrc}" alt="Libreria Madrid" onerror="this.style.display='none'"/>
+  <div class="gold-line"></div>
   <div class="content">
     <div class="doc-meta">
       <div><div style="font-size:11px;color:#999;margin-bottom:5px">Documento de</div><div class="badge">SOLICITUD DE COMPRA</div></div>
