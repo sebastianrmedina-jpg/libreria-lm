@@ -909,19 +909,12 @@ export default function App() {
     notifs={notifs} setNotifs={setNotifs}
     sandboxStock={sandboxStock} setSandboxStock={setSandboxStock}
     clients={clients} setClients={setClients}
-    onLogout={async()=>{
-      try {
-        const OS = window.OneSignal;
-        if(OS) await OS.logout();
-      } catch(e) {}
-      localStorage.removeItem("lm_session");
-      setCurrentUser(null);
-    }}
+    promos={promos} setPromos={setPromos}
   />;
 }
 
 // ─── MAIN APP (authenticated) ─────────────────────────────────────────────────
-function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,products,setProducts,orders,setOrders,quotes,setQuotes,stockLog,setStockLog,activity,setActivity,priceLists,setPriceLists,purchaseOrders,setPurchaseOrders,notifs,setNotifs,sandboxStock,setSandboxStock,clients,setClients}) {
+function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,products,setProducts,orders,setOrders,quotes,setQuotes,stockLog,setStockLog,activity,setActivity,priceLists,setPriceLists,purchaseOrders,setPurchaseOrders,notifs,setNotifs,sandboxStock,setSandboxStock,clients,setClients,promos,setPromos}) {
   // updateSandboxStock persists to localStorage on every change
   const updateSandboxStock = (updater) => {
     setSandboxStock(prev => {
@@ -4891,6 +4884,15 @@ function TypeBadge({tipo}) {
   return <span style={{fontSize:10,fontWeight:800,borderRadius:6,padding:"3px 8px",whiteSpace:"nowrap",background:c.bg,color:c.color,border:c.border,display:"inline-block"}}>{c.label}</span>;
 }
 
+function nextPromoSku(promos) {
+  let max = -1;
+  (promos||[]).forEach(p => {
+    const m = /^999-(\d{3})$/.exec(p.id||"");
+    if(m) { const n = parseInt(m[1],10); if(n>max) max = n; }
+  });
+  return `999-${String(max+1).padStart(3,"0")}`;
+}
+
 function promoDisplay(promo, products) {
   const d = promo.data || {};
   let titulo = promo.nombre, sub = "";
@@ -4949,9 +4951,9 @@ function OfertasPanel({promos, setPromos, products, isMobile}) {
   const editPromo = (promo) => { setEditing(promo); setView(promo.tipo); };
   const cancelForm = () => { setEditing(null); setView("vigentes"); };
 
-  if(view==="combo")     return <ComboForm products={products} editing={editing} onSave={savePromo} onCancel={cancelForm}/>;
-  if(view==="3x2")       return <TresPorDosForm products={products} editing={editing} onSave={savePromo} onCancel={cancelForm}/>;
-  if(view==="descuento") return <DescuentoForm products={products} editing={editing} onSave={savePromo} onCancel={cancelForm}/>;
+  if(view==="combo")     return <ComboForm products={products} editing={editing} nextSku={nextPromoSku(promos)} onSave={savePromo} onCancel={cancelForm}/>;
+  if(view==="3x2")       return <TresPorDosForm products={products} editing={editing} nextSku={nextPromoSku(promos)} onSave={savePromo} onCancel={cancelForm}/>;
+  if(view==="descuento") return <DescuentoForm products={products} editing={editing} nextSku={nextPromoSku(promos)} onSave={savePromo} onCancel={cancelForm}/>;
 
   if(view==="elegir") {
     const TIPOS = [
@@ -5059,9 +5061,9 @@ function OfertasPanel({promos, setPromos, products, isMobile}) {
   );
 }
 
-function ComboForm({products, editing, onSave, onCancel}) {
+function ComboForm({products, editing, nextSku, onSave, onCancel}) {
   const isEdit = !!editing;
-  const [sku, setSku] = useState(editing?.id || "");
+  const [sku] = useState(editing?.id || nextSku);
   const [nombre, setNombre] = useState(editing?.nombre || "");
   const [search, setSearch] = useState("");
   const [componentes, setComponentes] = useState(editing?.data?.componentes || []);
@@ -5104,7 +5106,7 @@ function ComboForm({products, editing, onSave, onCancel}) {
     <div style={{maxWidth:680}}>
       <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>🎁 {isEdit?"Editar":"Nuevo"} Combo</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-        <Field label="SKU del combo *"><input value={sku} onChange={e=>setSku(e.target.value.toUpperCase())} disabled={isEdit} style={{...inputStyle,background:isEdit?"#f5f5f5":"#fff"}}/></Field>
+        <Field label="SKU del combo (automático)"><input value={sku} disabled style={{...inputStyle,background:"#f5f5f5",color:"#888",fontWeight:700}}/></Field>
         <Field label="Nombre del combo *"><input value={nombre} onChange={e=>setNombre(e.target.value)} style={inputStyle}/></Field>
       </div>
 
@@ -5152,9 +5154,9 @@ function ComboForm({products, editing, onSave, onCancel}) {
   );
 }
 
-function TresPorDosForm({products, editing, onSave, onCancel}) {
+function TresPorDosForm({products, editing, nextSku, onSave, onCancel}) {
   const isEdit = !!editing;
-  const [sku, setSku] = useState(editing?.id || "");
+  const [sku] = useState(editing?.id || nextSku);
   const [search, setSearch] = useState("");
   const [producto, setProducto] = useState(()=> editing?.data?.productoId ? (products.find(p=>p.id===editing.data.productoId)||null) : null);
   const [tipoSel, setTipoSel] = useState(()=>{
@@ -5194,7 +5196,7 @@ function TresPorDosForm({products, editing, onSave, onCancel}) {
   return (
     <div style={{maxWidth:680}}>
       <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>🏷️ {isEdit?"Editar":"Nueva"} Oferta</div>
-      <Field label="SKU de la oferta *"><input value={sku} onChange={e=>setSku(e.target.value.toUpperCase())} disabled={isEdit} style={{...inputStyle,maxWidth:300,background:isEdit?"#f5f5f5":"#fff"}}/></Field>
+      <Field label="SKU de la oferta (automático)"><input value={sku} disabled style={{...inputStyle,maxWidth:300,background:"#f5f5f5",color:"#888",fontWeight:700}}/></Field>
 
       <Field label="Producto al que aplica *">
         {producto
@@ -5247,9 +5249,9 @@ function TresPorDosForm({products, editing, onSave, onCancel}) {
   );
 }
 
-function DescuentoForm({products, editing, onSave, onCancel}) {
+function DescuentoForm({products, editing, nextSku, onSave, onCancel}) {
   const isEdit = !!editing;
-  const [sku, setSku] = useState(editing?.id || "");
+  const [sku] = useState(editing?.id || nextSku);
   const [search, setSearch] = useState("");
   const [producto, setProducto] = useState(()=> editing?.data?.productoId ? (products.find(p=>p.id===editing.data.productoId)||null) : null);
   const [tipoValor, setTipoValor] = useState(editing?.data?.tipoValor || "%");
@@ -5284,7 +5286,7 @@ function DescuentoForm({products, editing, onSave, onCancel}) {
   return (
     <div style={{maxWidth:680}}>
       <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>🔻 {isEdit?"Editar":"Nuevo"} Descuento</div>
-      <Field label="SKU del descuento *"><input value={sku} onChange={e=>setSku(e.target.value.toUpperCase())} disabled={isEdit} style={{...inputStyle,maxWidth:300,background:isEdit?"#f5f5f5":"#fff"}}/></Field>
+      <Field label="SKU del descuento (automático)"><input value={sku} disabled style={{...inputStyle,maxWidth:300,background:"#f5f5f5",color:"#888",fontWeight:700}}/></Field>
 
       <Field label="Producto al que aplica *">
         {producto
