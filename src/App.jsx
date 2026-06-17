@@ -131,6 +131,11 @@ const db = {
   getActivity:  async () => { const {data,error} = await supabase.from("lm_activity").select("*").order("fecha",{ascending:false}).limit(500); if(error) throw error; return data||[]; },
   addActivity:  async (a) => { try { await supaAdmin.from("lm_activity").insert(a); } catch(e) {} }, // silent fail - non critical
   clearActivity: async () => { const {error} = await supaAdmin.from("lm_activity").delete().neq("id","none"); if(error) throw error; },
+  // Ofertas y combos (promos)
+  // SQL: CREATE TABLE lm_promos (id TEXT PRIMARY KEY, tipo TEXT NOT NULL, nombre TEXT NOT NULL, activa BOOLEAN DEFAULT true, vigencia_desde TEXT DEFAULT '', vigencia_hasta TEXT DEFAULT '', data JSONB DEFAULT '{}', created_at TEXT DEFAULT '');
+  getPromos:    async () => { try { const {data,error} = await supabase.from("lm_promos").select("*").order("created_at",{ascending:false}); if(error) throw error; return (data||[]).map(r=>({id:r.id,tipo:r.tipo,nombre:r.nombre,activa:r.activa!==false,vigenciaDesde:r.vigencia_desde||"",vigenciaHasta:r.vigencia_hasta||"",data:r.data||{},createdAt:r.created_at||""})); } catch(e) { console.warn("getPromos:", e); return []; } },
+  savePromo:    async (p) => { const {error} = await supaAdmin.from("lm_promos").upsert({id:p.id,tipo:p.tipo,nombre:p.nombre,activa:p.activa!==false,vigencia_desde:p.vigenciaDesde||"",vigencia_hasta:p.vigenciaHasta||"",data:p.data||{},created_at:p.createdAt||new Date().toISOString()}); if(error) throw error; },
+  deletePromo:  async (id) => { const {error} = await supaAdmin.from("lm_promos").delete().eq("id",id); if(error) throw error; },
 };
 
 const RED = "#c0392b", REDD = "#922b21";
@@ -810,18 +815,19 @@ export default function App() {
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [notifs, setNotifs]     = useState([]);
   const [clients, setClients]   = useState([]);
+  const [promos, setPromos]     = useState([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(null);
 
   useEffect(() => {
     async function loadAll() {
       try {
-        const [u,v,p,o,q,sl,act,pl,po,n,cl] = await Promise.all([
+        const [u,v,p,o,q,sl,act,pl,po,n,cl,pr] = await Promise.all([
           db.getUsers(), db.getVendors(), db.getProducts(),
-          db.getOrders(), db.getQuotes(), db.getStockLog(), db.getActivity(), db.getPriceLists(), db.getPurchaseOrders(), db.getNotifs(), db.getClients(),
+          db.getOrders(), db.getQuotes(), db.getStockLog(), db.getActivity(), db.getPriceLists(), db.getPurchaseOrders(), db.getNotifs(), db.getClients(), db.getPromos(),
         ]);
         setUsers(u); setVendors(v); setProducts(p);
-        setOrders(o); setQuotes(q); setStockLog(sl); setActivity(act); setPriceLists(pl); setPurchaseOrders(po); setNotifs(n); setClients(cl);
+        setOrders(o); setQuotes(q); setStockLog(sl); setActivity(act); setPriceLists(pl); setPurchaseOrders(po); setNotifs(n); setClients(cl); setPromos(pr);
         // Inicializar sandbox — recuperar de localStorage si existe, sino copiar stock real
         try {
           const saved = localStorage.getItem("lm_sandbox_stock");
@@ -1583,7 +1589,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
             });
           }}
         />}
-        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile} sandboxStock={sandboxStock} setSandboxStock={setSandboxStock}/>}
+        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile} sandboxStock={sandboxStock} setSandboxStock={setSandboxStock} promos={promos} setPromos={setPromos}/>}
       </div>
     </div>
   );
@@ -4586,12 +4592,13 @@ function SandboxStockManager({products, sandboxStock, setSandboxStock}) {
 }
 
 // ─── ADMIN PANEL ──────────────────────────────────────────────────────────────
-function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,priceLists,setPriceLists,isMobile,sandboxStock,setSandboxStock}) {
+function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,priceLists,setPriceLists,isMobile,sandboxStock,setSandboxStock,promos,setPromos}) {
   const [section, setSection] = useState("home");
 
   const SECTIONS = [
     {k:"home",        label:"Administración",   icon:"🏠"},
     {k:"ventas",      label:"Ventas",           icon:"📈"},
+    {k:"ofertas",     label:"Ofertas y Combos", icon:"🎁"},
     {k:"sandbox",     label:"Demo Sandbox",     icon:"🧪"},
     {k:"sandboxstock",label:"Stock Sandbox",     icon:"📦"},
     {k:"activity",    label:"Actividad",        icon:"📝"},
@@ -4654,6 +4661,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
         </div>
       )}
       {section==="ventas"      && <VentasPanel    orders={realOrders}/>}
+      {section==="ofertas"     && <OfertasPanel   promos={promos} setPromos={setPromos} products={products} isMobile={isMobile}/>}
       {section==="sandboxstock" && (
         <div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10,marginBottom:16}}>
@@ -4867,6 +4875,460 @@ function VentasPanel({orders}) {
             </>
           }
         </>}
+      </div>
+    </div>
+  );
+}
+
+// ── Panel de Ofertas y Combos ──────────────────────────────────────────────
+function TypeBadge({tipo}) {
+  const CFG = {
+    combo:     {label:"🎁 COMBO",  bg:"#7b1a1a", color:"#fff",    border:"none"},
+    "3x2":     {label:"🏷️ OFERTA", bg:"#fef9e7", color:"#b7770d", border:"1px solid #f3d98a"},
+    descuento: {label:"🔻 DESC.",  bg:"#fdecea", color:"#c0392b", border:"1px solid #f5b7b1"},
+  };
+  const c = CFG[tipo] || CFG.descuento;
+  return <span style={{fontSize:10,fontWeight:800,borderRadius:6,padding:"3px 8px",whiteSpace:"nowrap",background:c.bg,color:c.color,border:c.border,display:"inline-block"}}>{c.label}</span>;
+}
+
+function promoDisplay(promo, products) {
+  const d = promo.data || {};
+  let titulo = promo.nombre, sub = "";
+  if(promo.tipo==="combo") {
+    sub = `${promo.id} · ${(d.componentes||[]).length} productos · ${fARS(d.precioFijo||0)}`;
+  } else if(promo.tipo==="3x2") {
+    const prod = products.find(p=>p.id===d.productoId);
+    titulo = prod?.name || promo.nombre;
+    sub = `${promo.id} · Comprá ${d.comprar||3}, pagá ${d.pagar||2}`;
+  } else if(promo.tipo==="descuento") {
+    const prod = products.find(p=>p.id===d.productoId);
+    titulo = prod?.name || promo.nombre;
+    const finalP = prod ? (d.tipoValor==="%" ? prod.salePrice*(1-(d.valor||0)/100) : Math.max(0,prod.salePrice-(d.valor||0))) : null;
+    sub = `${promo.id}${prod?` · ${fARS(prod.salePrice)} → ${fARS(finalP)}`:""}`;
+  }
+  return {titulo, sub};
+}
+
+function PromoEstado({promo, vigente, dias}) {
+  let bg="#d5f5e3", color="#1e8449", label="● Vigente";
+  if(!promo.activa) { bg="#f0f0f0"; color="#888"; label="⏸ Pausada"; }
+  else if(!vigente && dias!==null && dias<0) { bg="#fdecea"; color="#c0392b"; label="Vencida"; }
+  else if(!vigente) { bg="#fef9e7"; color="#b7770d"; label="Aún no empieza"; }
+  else if(dias!==null && dias<=5) { bg="#fef9e7"; color="#b7770d"; label=`⏳ Vence en ${dias} día${dias===1?"":"s"}`; }
+  return <span style={{fontSize:11,fontWeight:700,borderRadius:10,padding:"3px 9px",background:bg,color,whiteSpace:"nowrap"}}>{label}</span>;
+}
+
+function OfertasPanel({promos, setPromos, products, isMobile}) {
+  const [view, setView] = useState("vigentes"); // vigentes | historial | elegir | combo | 3x2 | descuento
+  const [editing, setEditing] = useState(null);
+
+  const today = () => new Date().toISOString().slice(0,10);
+  const fDate = (iso) => { if(!iso) return ""; const [y,m,d]=iso.split("-"); return `${d}/${m}/${y}`; };
+  const diasRestantes = (iso) => { if(!iso) return null; return Math.ceil((new Date(iso)-new Date(today()))/86400000); };
+  const isVigente = (p) => {
+    if(!p.activa) return false;
+    const t = today();
+    if(p.vigenciaDesde && t < p.vigenciaDesde) return false;
+    if(p.vigenciaHasta && t > p.vigenciaHasta) return false;
+    return true;
+  };
+
+  const vigentes  = promos.filter(isVigente);
+  const historial = promos.filter(p=>!isVigente(p));
+
+  const savePromo = async (promo) => {
+    await db.savePromo(promo);
+    setPromos(prev => prev.find(p=>p.id===promo.id) ? prev.map(p=>p.id===promo.id?promo:p) : [promo,...prev]);
+    setEditing(null); setView("vigentes");
+  };
+  const togglePausa = async (promo) => {
+    const updated = {...promo, activa:!promo.activa};
+    await db.savePromo(updated);
+    setPromos(prev=>prev.map(p=>p.id===promo.id?updated:p));
+  };
+  const editPromo = (promo) => { setEditing(promo); setView(promo.tipo); };
+  const cancelForm = () => { setEditing(null); setView("vigentes"); };
+
+  if(view==="combo")     return <ComboForm products={products} editing={editing} onSave={savePromo} onCancel={cancelForm}/>;
+  if(view==="3x2")       return <TresPorDosForm products={products} editing={editing} onSave={savePromo} onCancel={cancelForm}/>;
+  if(view==="descuento") return <DescuentoForm products={products} editing={editing} onSave={savePromo} onCancel={cancelForm}/>;
+
+  if(view==="elegir") {
+    const TIPOS = [
+      {k:"combo",     icon:"🎁", title:"Combo",            desc:"Varios productos distintos agrupados a un precio fijo"},
+      {k:"3x2",       icon:"🏷️", title:"Oferta 3×N",        desc:"Comprando X unidades de un producto, paga menos"},
+      {k:"descuento", icon:"🔻", title:"Descuento simple", desc:"Un producto puntual con % o $ de descuento"},
+    ];
+    return (
+      <div>
+        <div style={{textAlign:"center",marginBottom:20}}>
+          <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>¿Qué querés crear?</div>
+          <div style={{fontSize:13,color:"#888"}}>Elegí el tipo de promoción</div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:14,maxWidth:760,margin:"0 auto"}}>
+          {TIPOS.map(t=>(
+            <div key={t.k} onClick={()=>setView(t.k)}
+              style={{background:"#fff",borderRadius:14,padding:"24px 18px",textAlign:"center",boxShadow:"0 1px 6px #0001",cursor:"pointer",border:"2px solid transparent",transition:"border .15s"}}
+              onMouseEnter={e=>e.currentTarget.style.border=`2px solid ${RED}`}
+              onMouseLeave={e=>e.currentTarget.style.border="2px solid transparent"}>
+              <div style={{fontSize:36,marginBottom:10}}>{t.icon}</div>
+              <div style={{fontWeight:800,fontSize:14,marginBottom:6}}>{t.title}</div>
+              <div style={{fontSize:12,color:"#888",lineHeight:1.4}}>{t.desc}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{textAlign:"center",marginTop:18}}>
+          <button onClick={()=>setView("vigentes")} style={{padding:"8px 16px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontWeight:600,fontSize:12,color:"#666"}}>← Cancelar</button>
+        </div>
+      </div>
+    );
+  }
+
+  // vigentes | historial
+  const list = view==="vigentes" ? vigentes : historial;
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10,marginBottom:16}}>
+        <div style={{display:"flex",gap:6}}>
+          <button onClick={()=>setView("vigentes")} style={{padding:"8px 16px",borderRadius:8,border:"1.5px solid",cursor:"pointer",fontWeight:700,fontSize:12,borderColor:view==="vigentes"?RED:"#e5e5e5",background:view==="vigentes"?"#fdecea":"#fff",color:view==="vigentes"?RED:"#666"}}>Vigentes ({vigentes.length})</button>
+          <button onClick={()=>setView("historial")} style={{padding:"8px 16px",borderRadius:8,border:"1.5px solid",cursor:"pointer",fontWeight:700,fontSize:12,borderColor:view==="historial"?RED:"#e5e5e5",background:view==="historial"?"#fdecea":"#fff",color:view==="historial"?RED:"#666"}}>Historial ({historial.length})</button>
+        </div>
+        <button onClick={()=>{setEditing(null);setView("elegir");}} style={{padding:"9px 16px",borderRadius:8,border:"none",cursor:"pointer",fontWeight:800,fontSize:12,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff"}}>+ Nueva</button>
+      </div>
+
+      {list.length===0
+        ? <div style={{textAlign:"center",color:"#aaa",padding:"40px 0"}}>{view==="vigentes"?"No hay ofertas ni combos vigentes":"Todavía no hay historial"}</div>
+        : isMobile
+          ? <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {list.map(p=>{
+                const {titulo,sub} = promoDisplay(p,products);
+                const vig = !p.vigenciaDesde && !p.vigenciaHasta ? "Sin vencimiento" : `${p.vigenciaDesde?fDate(p.vigenciaDesde):"…"} al ${p.vigenciaHasta?fDate(p.vigenciaHasta):"…"}`;
+                return (
+                  <div key={p.id} style={{background:"#fff",borderRadius:10,padding:14,boxShadow:"0 1px 4px #0001"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                      <TypeBadge tipo={p.tipo}/>
+                      <div>
+                        <button onClick={()=>editPromo(p)} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"2px 6px"}}>✏️</button>
+                        <button onClick={()=>togglePausa(p)} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"2px 6px"}}>{p.activa?"⏸️":"▶️"}</button>
+                      </div>
+                    </div>
+                    <div style={{fontWeight:700,fontSize:13}}>{titulo}</div>
+                    <div style={{fontSize:11,color:"#888",marginTop:2}}>{sub}</div>
+                    <div style={{marginTop:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span style={{fontSize:11,color:"#aaa"}}>{vig}</span>
+                      <PromoEstado promo={p} vigente={isVigente(p)} dias={p.vigenciaHasta?diasRestantes(p.vigenciaHasta):null}/>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          : <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 6px #0001",overflow:"hidden"}}>
+              <table style={{width:"100%",borderCollapse:"collapse"}}>
+                <thead><tr style={{background:"#f9f9f9"}}>
+                  <th style={{textAlign:"left",padding:"10px 14px",fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:.5}}>Tipo</th>
+                  <th style={{textAlign:"left",padding:"10px 14px",fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:.5}}>Nombre / SKU</th>
+                  <th style={{textAlign:"left",padding:"10px 14px",fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:.5}}>Vigencia</th>
+                  <th style={{textAlign:"left",padding:"10px 14px",fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:.5}}>Estado</th>
+                  <th></th>
+                </tr></thead>
+                <tbody>
+                  {list.map(p=>{
+                    const {titulo,sub} = promoDisplay(p,products);
+                    const vig = !p.vigenciaDesde && !p.vigenciaHasta ? "Sin vencimiento" : `${p.vigenciaDesde?fDate(p.vigenciaDesde):"…"} al ${p.vigenciaHasta?fDate(p.vigenciaHasta):"…"}`;
+                    return (
+                      <tr key={p.id} style={{borderBottom:"1px solid #f5f5f5"}}>
+                        <td style={{padding:"11px 14px"}}><TypeBadge tipo={p.tipo}/></td>
+                        <td style={{padding:"11px 14px"}}>
+                          <div style={{fontWeight:700,color:"#1a1a1a",fontSize:13}}>{titulo}</div>
+                          <div style={{fontSize:11,color:"#888",marginTop:2}}>{sub}</div>
+                        </td>
+                        <td style={{padding:"11px 14px",fontSize:12,color:"#555"}}>{vig}</td>
+                        <td style={{padding:"11px 14px"}}><PromoEstado promo={p} vigente={isVigente(p)} dias={p.vigenciaHasta?diasRestantes(p.vigenciaHasta):null}/></td>
+                        <td style={{padding:"11px 14px",textAlign:"right",whiteSpace:"nowrap"}}>
+                          <button onClick={()=>editPromo(p)} title="Editar" style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"4px 6px",color:"#888"}}>✏️</button>
+                          <button onClick={()=>togglePausa(p)} title={p.activa?"Pausar":"Reactivar"} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"4px 6px",color:"#888"}}>{p.activa?"⏸️":"▶️"}</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+      }
+    </div>
+  );
+}
+
+function ComboForm({products, editing, onSave, onCancel}) {
+  const isEdit = !!editing;
+  const [sku, setSku] = useState(editing?.id || "");
+  const [nombre, setNombre] = useState(editing?.nombre || "");
+  const [search, setSearch] = useState("");
+  const [componentes, setComponentes] = useState(editing?.data?.componentes || []);
+  const [precioFijo, setPrecioFijo] = useState(editing?.data?.precioFijo!=null ? String(editing.data.precioFijo) : "");
+  const [vigDesde, setVigDesde] = useState(editing?.vigenciaDesde || "");
+  const [vigHasta, setVigHasta] = useState(editing?.vigenciaHasta || "");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const found = useMemo(()=>{
+    if(!search.trim()) return [];
+    const q = norm(search);
+    return products.filter(p=>!componentes.find(c=>c.pid===p.id) && (norm(p.name).includes(q)||normSKU(p.id).includes(normSKU(search)))).slice(0,8);
+  },[search,products,componentes]);
+
+  const addComp  = (p) => { setComponentes(c=>[...c,{pid:p.id,qty:1}]); setSearch(""); };
+  const setQty   = (pid,qty) => setComponentes(c=>c.map(i=>i.pid===pid?{...i,qty:Math.max(1,qty)}:i));
+  const delComp  = (pid) => setComponentes(c=>c.filter(i=>i.pid!==pid));
+
+  const precioNormal = componentes.reduce((s,c)=>{ const p=products.find(pr=>pr.id===c.pid); return s+(p?p.salePrice*c.qty:0); },0);
+  const ahorro = precioNormal - (parseFloat(precioFijo)||0);
+  const ahorroPct = precioNormal>0 ? (ahorro/precioNormal*100) : 0;
+
+  const submit = async () => {
+    if(!sku.trim())               { setError("El SKU es obligatorio"); return; }
+    if(!nombre.trim())            { setError("El nombre es obligatorio"); return; }
+    if(componentes.length===0)    { setError("Agregá al menos un producto"); return; }
+    if(!precioFijo || +precioFijo<=0) { setError("Ingresá el precio fijo del combo"); return; }
+    setError(""); setSaving(true);
+    try {
+      await onSave({
+        id:sku.trim(), tipo:"combo", nombre:nombre.trim(), activa:editing?.activa!==false,
+        vigenciaDesde:vigDesde, vigenciaHasta:vigHasta,
+        data:{precioFijo:+precioFijo, componentes}, createdAt:editing?.createdAt,
+      });
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{maxWidth:680}}>
+      <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>🎁 {isEdit?"Editar":"Nuevo"} Combo</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        <Field label="SKU del combo *"><input value={sku} onChange={e=>setSku(e.target.value.toUpperCase())} disabled={isEdit} style={{...inputStyle,background:isEdit?"#f5f5f5":"#fff"}}/></Field>
+        <Field label="Nombre del combo *"><input value={nombre} onChange={e=>setNombre(e.target.value)} style={inputStyle}/></Field>
+      </div>
+
+      <Field label="Productos incluidos">
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar producto para agregar al combo..." style={{...inputStyle,marginBottom:8}}/>
+        {found.length>0 && <div style={{border:"1.5px solid #f0f0f0",borderRadius:8,marginBottom:8,overflow:"hidden"}}>
+          {found.map(p=><div key={p.id} onClick={()=>addComp(p)} style={{padding:"8px 12px",cursor:"pointer",fontSize:12,borderBottom:"1px solid #f5f5f5"}}>{p.name} <span style={{color:"#aaa"}}>· {fARS(p.salePrice)}</span></div>)}
+        </div>}
+        {componentes.map(c=>{
+          const p = products.find(pr=>pr.id===c.pid);
+          return (
+            <div key={c.pid} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:"#f9f9f9",borderRadius:8,marginBottom:6,border:"1.5px solid #f0f0f0"}}>
+              <input type="number" min="1" value={c.qty} onChange={e=>setQty(c.pid,+e.target.value||1)} style={{width:46,padding:"4px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontWeight:800,fontSize:12,textAlign:"center"}}/>
+              <span style={{flex:1,fontSize:13,fontWeight:600}}>{p?.name||c.pid}</span>
+              <span style={{fontSize:12,color:"#888"}}>{fARS(p?.salePrice||0)} c/u</span>
+              <span onClick={()=>delComp(c.pid)} style={{color:RED,cursor:"pointer",padding:"0 4px"}}>✕</span>
+            </div>
+          );
+        })}
+      </Field>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,alignItems:"end"}}>
+        <Field label="Precio normal (suma)"><div style={{padding:"8px 12px",fontSize:14,color:"#888",textDecoration:"line-through"}}>{fARS(precioNormal)}</div></Field>
+        <Field label="Precio fijo del combo *"><input type="number" value={precioFijo} onChange={e=>setPrecioFijo(e.target.value)} style={{...inputStyle,fontWeight:800,color:RED,fontSize:15}}/></Field>
+      </div>
+
+      {precioFijo && precioNormal>0 && (
+        <div style={{background:"#eafaf1",border:"1.5px solid #a9dfbf",borderRadius:8,padding:"12px 14px",margin:"14px 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontSize:13,fontWeight:700,color:"#1e8449"}}>💰 Ahorro para el cliente</span>
+          <span style={{fontSize:15,fontWeight:800,color:ahorro>=0?"#1e8449":RED}}>{fARS(ahorro)} ({ahorroPct.toFixed(1)}%)</span>
+        </div>
+      )}
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginTop:precioFijo&&precioNormal>0?0:14}}>
+        <Field label="Vigencia desde (opcional)"><input type="date" value={vigDesde} onChange={e=>setVigDesde(e.target.value)} style={inputStyle}/></Field>
+        <Field label="Vigencia hasta (opcional)"><input type="date" value={vigHasta} onChange={e=>setVigHasta(e.target.value)} style={inputStyle}/></Field>
+      </div>
+
+      {error && <div style={{color:RED,fontSize:12,fontWeight:600,marginBottom:10}}>{error}</div>}
+      <div style={{display:"flex",gap:10,marginTop:6}}>
+        <button onClick={onCancel} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancelar</button>
+        <button onClick={submit} disabled={saving} style={{flex:2,padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",opacity:saving?.7:1}}>{saving?"Guardando...":"✅ Guardar Combo"}</button>
+      </div>
+    </div>
+  );
+}
+
+function TresPorDosForm({products, editing, onSave, onCancel}) {
+  const isEdit = !!editing;
+  const [sku, setSku] = useState(editing?.id || "");
+  const [search, setSearch] = useState("");
+  const [producto, setProducto] = useState(()=> editing?.data?.productoId ? (products.find(p=>p.id===editing.data.productoId)||null) : null);
+  const [tipoSel, setTipoSel] = useState(()=>{
+    const c=editing?.data?.comprar, p=editing?.data?.pagar;
+    if(c===3&&p===2) return "3x2"; if(c===2&&p===1) return "2x1"; return "3x2";
+  });
+  const [comprar, setComprar] = useState(editing?.data?.comprar ?? 3);
+  const [pagar, setPagar]     = useState(editing?.data?.pagar ?? 2);
+  const [vigDesde, setVigDesde] = useState(editing?.vigenciaDesde || "");
+  const [vigHasta, setVigHasta] = useState(editing?.vigenciaHasta || "");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const found = useMemo(()=>{
+    if(!search.trim()) return [];
+    const q = norm(search);
+    return products.filter(p=>norm(p.name).includes(q)||normSKU(p.id).includes(normSKU(search))).slice(0,8);
+  },[search,products]);
+
+  const selectTipo = (k) => { setTipoSel(k); if(k==="3x2"){setComprar(3);setPagar(2);} else if(k==="2x1"){setComprar(2);setPagar(1);} };
+  const pct = comprar>0 ? (1 - pagar/comprar)*100 : 0;
+
+  const submit = async () => {
+    if(!sku.trim())  { setError("El SKU es obligatorio"); return; }
+    if(!producto)    { setError("Elegí el producto al que aplica"); return; }
+    if(!comprar || !pagar || +pagar>=+comprar) { setError("Revisá los números: tiene que pagar menos unidades de las que compra"); return; }
+    setError(""); setSaving(true);
+    try {
+      await onSave({
+        id:sku.trim(), tipo:"3x2", nombre:producto.name, activa:editing?.activa!==false,
+        vigenciaDesde:vigDesde, vigenciaHasta:vigHasta,
+        data:{productoId:producto.id, comprar:+comprar, pagar:+pagar}, createdAt:editing?.createdAt,
+      });
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{maxWidth:680}}>
+      <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>🏷️ {isEdit?"Editar":"Nueva"} Oferta</div>
+      <Field label="SKU de la oferta *"><input value={sku} onChange={e=>setSku(e.target.value.toUpperCase())} disabled={isEdit} style={{...inputStyle,maxWidth:300,background:isEdit?"#f5f5f5":"#fff"}}/></Field>
+
+      <Field label="Producto al que aplica *">
+        {producto
+          ? <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:"#f9f9f9",borderRadius:8,border:"1.5px solid #f0f0f0"}}>
+              <span style={{flex:1,fontWeight:700,fontSize:13}}>{producto.name}</span>
+              <span style={{fontSize:12,color:"#888"}}>{fARS(producto.salePrice)} c/u</span>
+              <span onClick={()=>setProducto(null)} style={{color:RED,cursor:"pointer"}}>✕</span>
+            </div>
+          : <>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar producto..." style={inputStyle}/>
+              {found.length>0 && <div style={{border:"1.5px solid #f0f0f0",borderRadius:8,marginTop:6,overflow:"hidden"}}>
+                {found.map(p=><div key={p.id} onClick={()=>{setProducto(p);setSearch("");}} style={{padding:"8px 12px",cursor:"pointer",fontSize:12,borderBottom:"1px solid #f5f5f5"}}>{p.name} <span style={{color:"#aaa"}}>· {fARS(p.salePrice)}</span></div>)}
+              </div>}
+            </>
+        }
+      </Field>
+
+      <Field label="Tipo de oferta">
+        <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+          {[["3x2","3 × 2"],["2x1","2 × 1"],["custom","Personalizado"]].map(([k,label])=>(
+            <div key={k} onClick={()=>selectTipo(k)} style={{padding:"8px 16px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:13,fontWeight:700,borderColor:tipoSel===k?"#b7770d":"#e5e5e5",background:tipoSel===k?"#fef9e7":"#fff",color:tipoSel===k?"#b7770d":"#666"}}>{label}</div>
+          ))}
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:10,background:"#f9f9f9",borderRadius:10,padding:14,flexWrap:"wrap"}}>
+          <span style={{fontSize:13,fontWeight:600,color:"#555"}}>Comprando</span>
+          <input type="number" min="2" value={comprar} onChange={e=>{setComprar(+e.target.value||0);setTipoSel("custom");}} style={{width:60,padding:8,textAlign:"center",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:15,fontWeight:800}}/>
+          <span style={{fontSize:13,fontWeight:600,color:"#555"}}>unidades, el cliente paga</span>
+          <input type="number" min="1" value={pagar} onChange={e=>{setPagar(+e.target.value||0);setTipoSel("custom");}} style={{width:60,padding:8,textAlign:"center",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:15,fontWeight:800}}/>
+          <span style={{fontSize:13,fontWeight:600,color:"#555"}}>unidades</span>
+        </div>
+      </Field>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        <Field label="Vigencia desde (opcional)"><input type="date" value={vigDesde} onChange={e=>setVigDesde(e.target.value)} style={inputStyle}/></Field>
+        <Field label="Vigencia hasta (opcional)"><input type="date" value={vigHasta} onChange={e=>setVigHasta(e.target.value)} style={inputStyle}/></Field>
+      </div>
+
+      {comprar>0 && pagar>0 && pagar<comprar && (
+        <div style={{background:"#fef9e7",border:"1.5px solid #f8e9b0",borderRadius:8,padding:"12px 14px",margin:"14px 0",fontSize:13,color:"#7d6608",fontWeight:600}}>
+          💡 Equivale a un <b>{pct.toFixed(1)}% de descuento</b> sobre la compra de este producto, aplicado automáticamente a partir de {comprar} unidades ({comprar*2}, {comprar*3}...). No afecta compras de menos de {comprar} unidades.
+        </div>
+      )}
+
+      {error && <div style={{color:RED,fontSize:12,fontWeight:600,marginBottom:10}}>{error}</div>}
+      <div style={{display:"flex",gap:10,marginTop:6}}>
+        <button onClick={onCancel} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancelar</button>
+        <button onClick={submit} disabled={saving} style={{flex:2,padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",opacity:saving?.7:1}}>{saving?"Guardando...":"✅ Guardar Oferta"}</button>
+      </div>
+    </div>
+  );
+}
+
+function DescuentoForm({products, editing, onSave, onCancel}) {
+  const isEdit = !!editing;
+  const [sku, setSku] = useState(editing?.id || "");
+  const [search, setSearch] = useState("");
+  const [producto, setProducto] = useState(()=> editing?.data?.productoId ? (products.find(p=>p.id===editing.data.productoId)||null) : null);
+  const [tipoValor, setTipoValor] = useState(editing?.data?.tipoValor || "%");
+  const [valor, setValor] = useState(editing?.data?.valor!=null ? String(editing.data.valor) : "");
+  const [vigDesde, setVigDesde] = useState(editing?.vigenciaDesde || "");
+  const [vigHasta, setVigHasta] = useState(editing?.vigenciaHasta || "");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const found = useMemo(()=>{
+    if(!search.trim()) return [];
+    const q = norm(search);
+    return products.filter(p=>norm(p.name).includes(q)||normSKU(p.id).includes(normSKU(search))).slice(0,8);
+  },[search,products]);
+
+  const precioFinal = producto ? Math.max(0, tipoValor==="%" ? producto.salePrice*(1-(parseFloat(valor)||0)/100) : producto.salePrice-(parseFloat(valor)||0)) : null;
+
+  const submit = async () => {
+    if(!sku.trim())     { setError("El SKU es obligatorio"); return; }
+    if(!producto)       { setError("Elegí el producto al que aplica"); return; }
+    if(!valor || +valor<=0) { setError("Ingresá el valor del descuento"); return; }
+    setError(""); setSaving(true);
+    try {
+      await onSave({
+        id:sku.trim(), tipo:"descuento", nombre:producto.name, activa:editing?.activa!==false,
+        vigenciaDesde:vigDesde, vigenciaHasta:vigHasta,
+        data:{productoId:producto.id, tipoValor, valor:+valor}, createdAt:editing?.createdAt,
+      });
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{maxWidth:680}}>
+      <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>🔻 {isEdit?"Editar":"Nuevo"} Descuento</div>
+      <Field label="SKU del descuento *"><input value={sku} onChange={e=>setSku(e.target.value.toUpperCase())} disabled={isEdit} style={{...inputStyle,maxWidth:300,background:isEdit?"#f5f5f5":"#fff"}}/></Field>
+
+      <Field label="Producto al que aplica *">
+        {producto
+          ? <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:"#f9f9f9",borderRadius:8,border:"1.5px solid #f0f0f0"}}>
+              <span style={{flex:1,fontWeight:700,fontSize:13}}>{producto.name}</span>
+              <span style={{fontSize:12,color:"#888"}}>{fARS(producto.salePrice)} c/u</span>
+              <span onClick={()=>setProducto(null)} style={{color:RED,cursor:"pointer"}}>✕</span>
+            </div>
+          : <>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar producto..." style={inputStyle}/>
+              {found.length>0 && <div style={{border:"1.5px solid #f0f0f0",borderRadius:8,marginTop:6,overflow:"hidden"}}>
+                {found.map(p=><div key={p.id} onClick={()=>{setProducto(p);setSearch("");}} style={{padding:"8px 12px",cursor:"pointer",fontSize:12,borderBottom:"1px solid #f5f5f5"}}>{p.name} <span style={{color:"#aaa"}}>· {fARS(p.salePrice)}</span></div>)}
+              </div>}
+            </>
+        }
+      </Field>
+
+      <Field label="Tipo de descuento">
+        <div style={{display:"flex",gap:8,marginBottom:14}}>
+          <div onClick={()=>setTipoValor("%")} style={{padding:"8px 16px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:13,fontWeight:700,borderColor:tipoValor==="%"?RED:"#e5e5e5",background:tipoValor==="%"?"#fdecea":"#fff",color:tipoValor==="%"?RED:"#666"}}>% Porcentaje</div>
+          <div onClick={()=>setTipoValor("$")} style={{padding:"8px 16px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:13,fontWeight:700,borderColor:tipoValor==="$"?RED:"#e5e5e5",background:tipoValor==="$"?"#fdecea":"#fff",color:tipoValor==="$"?RED:"#666"}}>$ Monto fijo</div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <input type="number" value={valor} onChange={e=>setValor(e.target.value)} style={{width:100,padding:"10px 12px",borderRadius:8,border:`1.5px solid ${RED}`,fontSize:18,fontWeight:800,color:RED,textAlign:"center",outline:"none"}}/>
+          <span style={{fontSize:14,color:"#555",fontWeight:600}}>{tipoValor==="%" ? "% de descuento sobre el precio de venta" : "$ de descuento sobre el precio de venta"}</span>
+        </div>
+      </Field>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        <Field label="Vigencia desde"><input type="date" value={vigDesde} onChange={e=>setVigDesde(e.target.value)} style={inputStyle}/></Field>
+        <Field label="Vigencia hasta"><input type="date" value={vigHasta} onChange={e=>setVigHasta(e.target.value)} style={inputStyle}/></Field>
+      </div>
+
+      {producto && valor && (
+        <div style={{background:"#eafaf1",border:"1.5px solid #a9dfbf",borderRadius:8,padding:"12px 14px",margin:"14px 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontSize:13,fontWeight:700,color:"#1e8449"}}>Precio con descuento</span>
+          <span style={{fontSize:15,fontWeight:800}}><span style={{color:"#aaa",textDecoration:"line-through",fontSize:13,marginRight:8}}>{fARS(producto.salePrice)}</span><span style={{color:"#1e8449"}}>{fARS(precioFinal)}</span></span>
+        </div>
+      )}
+
+      {error && <div style={{color:RED,fontSize:12,fontWeight:600,marginBottom:10}}>{error}</div>}
+      <div style={{display:"flex",gap:10,marginTop:6}}>
+        <button onClick={onCancel} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancelar</button>
+        <button onClick={submit} disabled={saving} style={{flex:2,padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",opacity:saving?.7:1}}>{saving?"Guardando...":"✅ Guardar Descuento"}</button>
       </div>
     </div>
   );
