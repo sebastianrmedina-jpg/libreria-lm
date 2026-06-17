@@ -1439,18 +1439,18 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
               <div style={{display:"flex",alignItems:"center",gap:10,padding:"0 8px",borderLeft:"1px solid #ffffff33",marginLeft:4,marginTop:14}}>
                 {isAdmin && priceLists.length>1 && (
                   <select value={previewListId||"default"} onChange={e=>setPreviewListId(e.target.value==="default"?null:e.target.value)}
-                    style={{background:"#ffffff22",border:"1px solid #ffffff44",color:"#fff",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:11,fontWeight:600}}>
+                    style={{background:"#ffffff18",border:"1px solid #ffffff40",color:"#fff",borderRadius:6,padding:"6px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>
                     {priceLists.map(pl=><option key={pl.id} value={pl.id} style={{color:"#1a1a1a"}}>{pl.name}{pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
                   </select>
                 )}
                 <button onClick={()=>setShowChangePass(true)}
-                  style={{background:"#ffffff15",border:"1px solid #ffffff33",color:"#ffeeee",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:5}}>
+                  style={{background:"#ffffff18",border:"1px solid #ffffff40",color:"#fff",borderRadius:6,padding:"6px 10px",cursor:"pointer",fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:5}}>
                   👤 {currentUser.name}
                   {activeList.discount>0&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:4,padding:"1px 5px",fontSize:10,fontWeight:800,marginLeft:3}}>{activeList.name}</span>}
                   <span style={{fontSize:10,opacity:.7}}>🔑</span>
                 </button>
                 <div style={{position:"relative"}}>
-                  <button onClick={()=>setShowNotifs(s=>!s)} style={{background:"#ffffff22",border:"none",color:"#fff",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:16,lineHeight:1,position:"relative"}}>
+                  <button onClick={()=>setShowNotifs(s=>!s)} style={{background:"#ffffff18",border:"1px solid #ffffff40",color:"#fff",borderRadius:6,padding:"6px 9px",cursor:"pointer",fontSize:16,lineHeight:1,position:"relative"}}>
                     🔔
                     {unreadCount>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#f1c40f",color:"#1a1a1a",borderRadius:10,fontSize:9,padding:"1px 4px",fontWeight:800,minWidth:14,textAlign:"center"}}>{unreadCount}</span>}
                   </button>
