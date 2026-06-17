@@ -1218,9 +1218,9 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     {k:"cotizacion",label:"Cotizaciones",       icon:"📄", roles:["admin","vendedor"]},
     {k:"precios",   label:"Precios",            icon:"💲", roles:["admin","vendedor"]},
     {k:"stock",     label:"Stock",              icon:"📦", roles:["admin","vendedor"]},
-    {k:"compras",   label:"Alta de Mercancía",icon:"🏪", roles:["admin","vendedor"]},
-    {k:"solicitud",  label:"Solicitud Compra", icon:"📋", roles:["admin","vendedor"]},
-    {k:"admin",     label:"Administracion",     icon:"★",   roles:["admin"]},
+    {k:"compras",   label:"Alta Mercancía",icon:"🏪", roles:["admin","vendedor"]},
+    {k:"solicitud",  label:"Solicitudes", icon:"📋", roles:["admin","vendedor"]},
+    {k:"admin",     label:"Admin",     icon:"★",   roles:["admin"]},
   ].filter(t=>t.roles.includes(currentUser.role));
 
   // ── CLIENT FUNCTIONS ──────────────────────────────────────────────────────
@@ -1430,13 +1430,13 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
             <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
               <nav style={{display:"flex",gap:2,flexWrap:"wrap"}}>
                 {TABS.map(t=>(
-                  <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"11px 14px",border:"none",cursor:"pointer",fontSize:13,background:tab===t.k?"#fff":"transparent",color:tab===t.k?RED:"#ffcccc",fontWeight:tab===t.k?700:500,borderRadius:"8px 8px 0 0",position:"relative"}}>
+                  <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"11px 10px",border:"none",cursor:"pointer",fontSize:14,background:tab===t.k?"#fff":"transparent",color:tab===t.k?RED:"#ffcccc",fontWeight:tab===t.k?800:600,borderRadius:"8px 8px 0 0",position:"relative"}}>
                     {t.icon} {t.label}
                     {t.k==="central"&&pending>0&&<span style={{position:"absolute",top:5,right:3,background:"#fff",color:RED,borderRadius:10,fontSize:10,padding:"1px 5px",fontWeight:800,border:`1.5px solid ${RED}`}}>{pending}</span>}
                   </button>
                 ))}
               </nav>
-              <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 8px",borderLeft:"1px solid #ffffff33",marginLeft:4}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,padding:"0 8px",borderLeft:"1px solid #ffffff33",marginLeft:4,marginTop:14}}>
                 {isAdmin && priceLists.length>1 && (
                   <select value={previewListId||"default"} onChange={e=>setPreviewListId(e.target.value==="default"?null:e.target.value)}
                     style={{background:"#ffffff22",border:"1px solid #ffffff44",color:"#fff",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:11,fontWeight:600}}>
@@ -1455,7 +1455,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                     {unreadCount>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#f1c40f",color:"#1a1a1a",borderRadius:10,fontSize:9,padding:"1px 4px",fontWeight:800,minWidth:14,textAlign:"center"}}>{unreadCount}</span>}
                   </button>
                 </div>
-                <button onClick={onLogout} style={{background:"#ffffff22",border:"none",color:"#fff",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:11,fontWeight:600}}>Salir</button>
+                <button onClick={onLogout} style={{background:"transparent",border:"1.5px solid #ffffff55",color:"#ffe5e5",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:13,fontWeight:700}}>🚪 Salir</button>
               </div>
               {showNotifs&&<NotifPanel notifs={notifs} setNotifs={setNotifs} currentUser={currentUser} users={users} onClose={()=>setShowNotifs(false)} onMarkAllRead={markAllRead} pushNotif={pushNotif} orders={orders}/>}
             </div>
