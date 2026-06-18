@@ -3697,7 +3697,6 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
     if(!last) return null;
     return Math.floor((Date.now() - last.getTime()) / 86400000);
   };
-  const q=search.toLowerCase();
 
   // Reset page when filters change
   useEffect(()=>setPage(0),[search,cat,soloConStock,soloSinRotacion]);
