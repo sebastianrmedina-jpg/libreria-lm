@@ -163,6 +163,40 @@ const PDF_LOGO_BANNER = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBD
 const fARS = n => "$" + Number(n).toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2});
 const genId = () => Date.now().toString(36)+Math.random().toString(36).slice(2);
 const today = () => new Date().toLocaleDateString("es-AR");
+const todayISO = () => new Date().toISOString().slice(0,10);
+function isPromoVigente(p) {
+  if(!p || !p.activa) return false;
+  const t = todayISO();
+  if(p.vigenciaDesde && t < p.vigenciaDesde) return false;
+  if(p.vigenciaHasta && t > p.vigenciaHasta) return false;
+  return true;
+}
+// Promo vigente (3x2 o descuento simple) que aplica a un producto puntual. Prioridad: 3x2 > descuento.
+function getProductPromo(promos, pid) {
+  const list = (promos||[]).filter(p=>isPromoVigente(p) && (p.tipo==="3x2"||p.tipo==="descuento") && p.data?.productoId===pid);
+  return list.find(p=>p.tipo==="3x2") || list.find(p=>p.tipo==="descuento") || null;
+}
+function getVigentCombos(promos) {
+  return (promos||[]).filter(p=>isPromoVigente(p) && p.tipo==="combo");
+}
+// Calcula el descuento equivalente {type,value} según la promo y la cantidad actual del item
+function computeAutoDisc(promo, qty) {
+  if(!promo) return {disc:null, label:null};
+  if(promo.tipo==="3x2") {
+    const comprar = promo.data?.comprar||3, pagar = promo.data?.pagar||2;
+    if(!comprar || qty<comprar) return {disc:null, label:null};
+    const groups = Math.floor(qty/comprar);
+    const remainder = qty - groups*comprar;
+    const payableUnits = groups*pagar + remainder;
+    const pct = qty>0 ? (1 - payableUnits/qty)*100 : 0;
+    return {disc:{type:"%",value:Math.round(pct*10)/10}, label:`🏷️ ${comprar}×${pagar} aplicado`};
+  }
+  if(promo.tipo==="descuento") {
+    const tipoValor = promo.data?.tipoValor||"%", valor = promo.data?.valor||0;
+    return {disc:{type:tipoValor,value:valor}, label:`🔻 -${valor}${tipoValor==="%"?"%":""} aplicado`};
+  }
+  return {disc:null,label:null};
+}
 
 const DEFAULT_USERS = [{id:"u1",username:"admin",password:"admin123",role:"admin",name:"Administrador"}];
 
@@ -892,8 +926,12 @@ export default function App() {
     registerOneSignal(u.username, u.role);
   }}/>;
   return <MainApp
-    currentUser={currentUser} onLogout={async()=>{
-      try { const OS=await getOneSignal(); if(OS) await OS.logout(); } catch(e) {}
+    currentUser={currentUser} onLogout={()=>{
+      // Logout de OneSignal en segundo plano, con timeout propio — nunca debe bloquear el logout real de la app
+      Promise.race([
+        (async()=>{ const OS=await getOneSignal(); if(OS) await OS.logout(); })(),
+        new Promise(r=>setTimeout(r,3000)),
+      ]).catch(()=>{});
       localStorage.removeItem("lm_session");
       setCurrentUser(null);
     }}
@@ -992,7 +1030,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     }
 
     // REAL: descontar stock, guardar en Supabase, notificar
-    const updatedProds = products.map(x=>{const it=orderWithNum.items.find(i=>i.pid===x.id);return it?{...x,stock:Math.max(0,x.stock-it.qty)}:x;});
+    const updatedProds = products.map(x=>{const qty=orderWithNum.items.filter(i=>i.pid===x.id).reduce((s,i)=>s+i.qty,0);return qty>0?{...x,stock:Math.max(0,x.stock-qty)}:x;});
     setProducts(updatedProds);
     for(const p of updatedProds.filter(p=>orderWithNum.items.find(i=>i.pid===p.id))) await db.upsertProduct(p);
     setOrders(o=>[{...orderWithNum, isSandbox: false},...o]);
@@ -1049,7 +1087,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
           return next;
         });
       } else {
-        const updatedProds=products.map(x=>{const it=ord.items.find(i=>i.pid===x.id);return it?{...x,stock:x.stock+it.qty}:x;});
+        const updatedProds=products.map(x=>{const qty=ord.items.filter(i=>i.pid===x.id).reduce((s,i)=>s+i.qty,0);return qty>0?{...x,stock:x.stock+qty}:x;});
         setProducts(updatedProds);
         for(const p of updatedProds.filter(p=>ord.items.find(i=>i.pid===p.id))) await db.upsertProduct(p);
       }
@@ -1551,7 +1589,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
           onRequestEdit={requestEdit} onApproveEditRequest={approveEditRequest} onRejectEditRequest={rejectEditRequest}
           onSubmitEdit={submitEdit} onApproveEdit={approveEdit} onRejectEdit={rejectEdit}
           currentUser={currentUser} isMobile={isMobile}/>}
-        {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient}/>}
+        {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} promos={promos}/>}
         {tab==="clientes"   && <ClientesPanel clients={clients} onSave={saveClient} onDelete={deleteClient} onRequestDelete={requestDeleteClient} currentUser={currentUser} isMobile={isMobile} orders={orders}/>}
         {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient}/>}
         {tab==="precios"    && <Precios products={pricedProducts}/>}
@@ -2433,7 +2471,7 @@ function Precios({products}) {
 }
 
 // ─── NUEVO PEDIDO ─────────────────────────────────────────────────────────────
-function ProductSelector({products,cart,setCart,isMobile}) {
+function ProductSelector({products,cart,setCart,isMobile,promos=[]}) {
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("todos");
   const [catOpen,setCatOpen]=useState(false);
@@ -2448,8 +2486,56 @@ function ProductSelector({products,cart,setCart,isMobile}) {
       return true;
     }).slice(0,80);
   },[products,search,cat,soloStock]);
-  const addC=p=>setCart(c=>{const ex=c.find(i=>i.pid===p.id);return ex?c.map(i=>i.pid===p.id?{...i,qty:i.qty+1}:i):[...c,{pid:p.id,qty:1,price:p.salePrice,name:p.name}];});
-  const setQ=(pid,qty)=>{if(qty<=0)setCart(c=>c.filter(i=>i.pid!==pid));else setCart(c=>c.map(i=>i.pid===pid?{...i,qty}:i));};
+
+  const combos = useMemo(()=>getVigentCombos(promos),[promos]);
+  const shownCombos = search.trim() ? combos.filter(c=>norm(c.nombre).includes(norm(search))) : combos;
+
+  // ── Productos regulares (no-combo) ──
+  const addC=p=>setCart(c=>{
+    const promo = getProductPromo(promos,p.id);
+    const ex = c.find(i=>i.cartKey===p.id);
+    if(ex) {
+      const newQty = ex.qty+1;
+      const {disc,label} = computeAutoDisc(promo,newQty);
+      return c.map(i=>i.cartKey===p.id?{...i,qty:newQty,disc,promoLabel:label}:i);
+    }
+    const {disc,label} = computeAutoDisc(promo,1);
+    return [...c,{pid:p.id,cartKey:p.id,qty:1,price:p.salePrice,name:p.name,disc,promoLabel:label}];
+  });
+  const setQ=(cartKey,qty)=>{
+    if(qty<=0){setCart(c=>c.filter(i=>i.cartKey!==cartKey));return;}
+    setCart(c=>c.map(i=>{
+      if(i.cartKey!==cartKey) return i;
+      if(i.comboId) return {...i,qty}; // los combos ajustan su cantidad como set completo, ver setComboQty
+      const promo = getProductPromo(promos,i.pid);
+      const {disc,label} = computeAutoDisc(promo,qty);
+      return {...i,qty,disc,promoLabel:label};
+    }));
+  };
+
+  // ── Combos ──
+  const comboQtyOf = (promo) => {
+    const comp0 = promo.data?.componentes?.[0];
+    if(!comp0) return 0;
+    const item = cart.find(i=>i.comboId===promo.id && i.pid===comp0.pid);
+    return item ? Math.round(item.qty/comp0.qty) : 0;
+  };
+  const setComboQty = (promo, newQty) => {
+    setCart(c=>{
+      const without = c.filter(i=>i.comboId!==promo.id);
+      if(newQty<=0) return without;
+      const componentes = promo.data?.componentes||[];
+      const precioNormal = componentes.reduce((s,comp)=>{const pr=products.find(x=>x.id===comp.pid);return s+(pr?pr.salePrice*comp.qty:0);},0);
+      const pct = precioNormal>0 ? Math.max(0,(1-(promo.data?.precioFijo||0)/precioNormal)*100) : 0;
+      const nuevos = componentes.map(comp=>{
+        const pr = products.find(x=>x.id===comp.pid);
+        return {pid:comp.pid,cartKey:promo.id+":"+comp.pid,qty:comp.qty*newQty,price:pr?pr.salePrice:0,name:pr?pr.name:comp.pid,
+          disc:{type:"%",value:Math.round(pct*10)/10},promoLabel:`🎁 ${promo.nombre}`,comboId:promo.id,comboNombre:promo.nombre};
+      });
+      return [...without,...nuevos];
+    });
+  };
+
   return (
     <div>
       <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px #0001"}}>
@@ -2475,13 +2561,38 @@ function ProductSelector({products,cart,setCart,isMobile}) {
       </div>
       {isMobile
         ? <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {shown.map(p=>{const ic=cart.find(i=>i.pid===p.id);return (
-              <div key={p.id} style={{background:"#fff",borderRadius:10,padding:"12px 14px",display:"flex",alignItems:"center",gap:10,boxShadow:"0 1px 4px #0001",border:ic?`2px solid ${RED}`:"2px solid transparent"}}>
+            {shownCombos.map(promo=>{const cq=comboQtyOf(promo); return (
+              <div key={promo.id} style={{background:"#fffdf8",borderRadius:10,padding:"12px 14px",display:"flex",alignItems:"center",gap:10,boxShadow:"0 1px 4px #0001",border:cq>0?`2px solid ${RED}`:"2px solid #c9a96a"}}>
                 <div style={{flex:1,minWidth:0}}>
+                  <span style={{background:"#7b1a1a",color:"#fff",fontSize:10,fontWeight:800,borderRadius:6,padding:"2px 7px"}}>🎁 COMBO</span>
+                  <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",lineHeight:1.3,margin:"4px 0 2px"}}>{promo.nombre}</div>
+                  <div style={{fontSize:11,color:"#666"}}>{(promo.data?.componentes||[]).map(c=>products.find(x=>x.id===c.pid)?.name).filter(Boolean).join(" + ")}</div>
+                  <span style={{fontSize:15,fontWeight:800,color:RED,marginTop:4,display:"block"}}>{fARS(promo.data?.precioFijo||0)}</span>
+                </div>
+                {cq>0
+                  ? <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                      <button onClick={()=>setComboQty(promo,cq-1)} style={{width:30,height:30,borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:16,fontWeight:700}}>−</button>
+                      <span style={{minWidth:24,textAlign:"center",fontWeight:800,fontSize:14}}>{cq}</span>
+                      <button onClick={()=>setComboQty(promo,cq+1)} style={{width:30,height:30,borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:16,fontWeight:700}}>+</button>
+                    </div>
+                  : <button onClick={()=>setComboQty(promo,1)} style={{padding:"7px 12px",borderRadius:7,border:"none",cursor:"pointer",background:"#7b1a1a",color:"#fff",fontWeight:700,fontSize:12,flexShrink:0}}>+ Agregar</button>
+                }
+              </div>
+            );})}
+            {shown.map(p=>{
+              const ic=cart.find(i=>i.cartKey===p.id);
+              const promo=getProductPromo(promos,p.id);
+              const isDesc=promo?.tipo==="descuento";
+              const finalPrice=isDesc?Math.max(0,promo.data?.tipoValor==="%"?p.salePrice*(1-(promo.data?.valor||0)/100):p.salePrice-(promo.data?.valor||0)):p.salePrice;
+              return (
+              <div key={p.id} style={{background:"#fff",borderRadius:10,padding:"12px 14px",display:"flex",alignItems:"center",gap:10,boxShadow:"0 1px 4px #0001",border:ic?`2px solid ${RED}`:promo?"2px solid #f3d98a":"2px solid transparent"}}>
+                <div style={{flex:1,minWidth:0}}>
+                  {promo && <span style={{fontSize:10,fontWeight:800,borderRadius:6,padding:"1px 6px",marginBottom:3,display:"inline-block",background:promo.tipo==="3x2"?"#fef9e7":"#fdecea",color:promo.tipo==="3x2"?"#b7770d":"#c0392b",border:promo.tipo==="3x2"?"1px solid #f3d98a":"1px solid #f5b7b1"}}>{promo.tipo==="3x2"?`🏷️ ${promo.data.comprar}×${promo.data.pagar}`:`🔻 -${promo.data.valor}${promo.data.tipoValor==="%"?"%":""}`}</span>}
                   <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",lineHeight:1.3,marginBottom:2}}>{p.name}</div>
                   <div style={{fontSize:11,color:"#666"}}>{p.id} · {p.category}</div>
                   <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4}}>
-                    <span style={{fontSize:15,fontWeight:800,color:RED}}>{fARS(p.salePrice)}</span>
+                    {isDesc&&<span style={{fontSize:11,color:"#aaa",textDecoration:"line-through"}}>{fARS(p.salePrice)}</span>}
+                    <span style={{fontSize:15,fontWeight:800,color:RED}}>{fARS(finalPrice)}</span>
                     <SPill n={p.stock}/>
                   </div>
                 </div>
@@ -2497,11 +2608,31 @@ function ProductSelector({products,cart,setCart,isMobile}) {
             );})}
           </div>
         : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(195px,1fr))",gap:10}}>
-            {shown.map(p=>{const ic=cart.find(i=>i.pid===p.id);return <div key={p.id} style={{background:"#fff",borderRadius:10,padding:14,border:ic?`2px solid ${RED}`:"2px solid transparent",boxShadow:"0 1px 4px #0001"}}>
+            {shownCombos.map(promo=>{const cq=comboQtyOf(promo); return (
+              <div key={promo.id} style={{background:"#fffdf8",borderRadius:10,padding:14,border:cq>0?`2px solid ${RED}`:"2px solid #c9a96a",boxShadow:"0 1px 4px #0001"}}>
+                <div style={{marginBottom:6}}><span style={{background:"#7b1a1a",color:"#fff",fontSize:10,fontWeight:800,borderRadius:6,padding:"2px 7px"}}>🎁 COMBO</span></div>
+                <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",marginBottom:3,lineHeight:1.3}}>{promo.nombre}</div>
+                <div style={{fontSize:11,color:"#666",marginBottom:7}}>{(promo.data?.componentes||[]).map(c=>products.find(x=>x.id===c.pid)?.name).filter(Boolean).join(" + ")}</div>
+                <div style={{marginBottom:10}}><span style={{fontSize:17,fontWeight:800,color:RED}}>{fARS(promo.data?.precioFijo||0)}</span></div>
+                {cq>0?<div style={{display:"flex",alignItems:"center",gap:5}}>
+                  <button onClick={()=>setComboQty(promo,cq-1)} style={{width:27,height:27,borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:15,fontWeight:700}}>−</button>
+                  <span style={{flex:1,textAlign:"center",fontWeight:800,fontSize:13}}>{cq}</span>
+                  <button onClick={()=>setComboQty(promo,cq+1)} style={{width:27,height:27,borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:15,fontWeight:700}}>+</button>
+                  <span style={{color:"#1e8449",fontSize:12,fontWeight:700}}>✓</span>
+                </div>:<button onClick={()=>setComboQty(promo,1)} style={{width:"100%",padding:"7px",borderRadius:7,border:"none",cursor:"pointer",background:"#7b1a1a",color:"#fff",fontWeight:700,fontSize:12}}>+ Agregar combo</button>}
+              </div>
+            );})}
+            {shown.map(p=>{
+              const ic=cart.find(i=>i.cartKey===p.id);
+              const promo=getProductPromo(promos,p.id);
+              const isDesc=promo?.tipo==="descuento";
+              const finalPrice=isDesc?Math.max(0,promo.data?.tipoValor==="%"?p.salePrice*(1-(promo.data?.valor||0)/100):p.salePrice-(promo.data?.valor||0)):p.salePrice;
+              return <div key={p.id} style={{background:"#fff",borderRadius:10,padding:14,border:ic?`2px solid ${RED}`:promo?"2px solid #f3d98a":"2px solid transparent",boxShadow:"0 1px 4px #0001"}}>
+              {promo && <div style={{marginBottom:5}}><span style={{fontSize:10,fontWeight:800,borderRadius:6,padding:"2px 7px",display:"inline-block",background:promo.tipo==="3x2"?"#fef9e7":"#fdecea",color:promo.tipo==="3x2"?"#b7770d":"#c0392b",border:promo.tipo==="3x2"?"1px solid #f3d98a":"1px solid #f5b7b1"}}>{promo.tipo==="3x2"?`🏷️ ${promo.data.comprar}×${promo.data.pagar}`:`🔻 -${promo.data.valor}${promo.data.tipoValor==="%"?"%":""}`}</span></div>}
               <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",marginBottom:3,lineHeight:1.3}}>{p.name}</div>
               <div style={{fontSize:12,color:"#666",marginBottom:7,fontWeight:500}}>{p.id} · {p.category}</div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                <span style={{fontSize:17,fontWeight:800,color:RED}}>{fARS(p.salePrice)}</span><SPill n={p.stock}/>
+                <span>{isDesc&&<span style={{fontSize:11,color:"#aaa",textDecoration:"line-through",marginRight:5}}>{fARS(p.salePrice)}</span>}<span style={{fontSize:17,fontWeight:800,color:RED}}>{fARS(finalPrice)}</span></span><SPill n={p.stock}/>
               </div>
               {ic?<div style={{display:"flex",alignItems:"center",gap:5}}>
                 <button onClick={()=>setQ(p.id,ic.qty-1)} style={{width:27,height:27,borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:15,fontWeight:700}}>−</button>
@@ -2516,7 +2647,41 @@ function ProductSelector({products,cart,setCart,isMobile}) {
   );
 }
 
-function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSaveClient}) {
+
+// Muestra las líneas del carrito agrupando los componentes de combos bajo su propio encabezado
+function CartSummaryLines({cart}) {
+  const comboIds = [...new Set(cart.filter(i=>i.comboId).map(i=>i.comboId))];
+  const regulares = cart.filter(i=>!i.comboId);
+  return (
+    <>
+      {comboIds.map(cid=>{
+        const items = cart.filter(i=>i.comboId===cid);
+        const tot = items.reduce((s,i)=>s+applyItemDiscount(i.price,i.qty,i.disc),0);
+        return (
+          <div key={cid} style={{background:"#fff8ec",border:"1px dashed #c9a96a",borderRadius:8,padding:"8px 10px",margin:"6px 0"}}>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:12,fontWeight:800,color:"#7b1a1a",marginBottom:3}}>
+              <span>🎁 {items[0].comboNombre}</span><span>{fARS(tot)}</span>
+            </div>
+            {items.map(i=><div key={i.cartKey} style={{fontSize:11,color:"#888",padding:"1px 0 1px 10px"}}>↳ {i.name} × {i.qty}</div>)}
+          </div>
+        );
+      })}
+      {regulares.map(i=>{
+        const lineTotal=applyItemDiscount(i.price,i.qty,i.disc);
+        const hasD=parseFloat(i.disc?.value)>0;
+        return <div key={i.cartKey} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:"1px solid #f9f9f9",color:"#555",gap:6}}>
+          <span style={{flex:1,lineHeight:1.3}}>{i.name} × {i.qty}{i.promoLabel&&<div style={{fontSize:10,color:"#b7770d",fontWeight:700,marginTop:1}}>{i.promoLabel}</div>}</span>
+          <div style={{textAlign:"right",whiteSpace:"nowrap"}}>
+            {hasD&&<div style={{fontSize:10,color:"#aaa",textDecoration:"line-through"}}>{fARS(i.price*i.qty)}</div>}
+            <span style={{fontWeight:600,color:hasD?"#1e8449":undefined}}>{fARS(lineTotal)}</span>
+          </div>
+        </div>;
+      })}
+    </>
+  );
+}
+
+function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSaveClient,promos}) {
   const [selectedClient, setSelectedClient] = useState(null);
   const [notes,setNotes]=useState("");
   const [vendedor,setVendedor]=useState(currentUser.role==="vendedor"?(currentUser.vendedor||currentUser.name):"");
@@ -2582,13 +2747,13 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
 
         {mStep===2 && (
           <div style={{flex:1,overflow:"auto",paddingBottom:cart.length>0?72:0}}>
-            <ProductSelector products={products} cart={cart} setCart={setCart} isMobile={true}/>
+            <ProductSelector products={products} cart={cart} setCart={setCart} isMobile={true} promos={promos}/>
           </div>
         )}
         {mStep===2 && cart.length>0&&(
           <div style={{position:"fixed",bottom:0,left:0,right:0,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",padding:"13px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",zIndex:200,boxShadow:"0 -3px 16px #0003"}}>
             <div>
-              <div style={{fontWeight:800,fontSize:15}}>{fARS(cart.reduce((s,i)=>s+i.price*i.qty,0))}</div>
+              <div style={{fontWeight:800,fontSize:15}}>{fARS(subtotal)}</div>
               <div style={{fontSize:11,opacity:.85}}>{cart.length} producto{cart.length!==1?"s":""} seleccionado{cart.length!==1?"s":""}</div>
             </div>
             <button onClick={()=>setMStep(3)} style={{padding:"10px 20px",borderRadius:10,border:"none",background:"#fff",color:RED,fontWeight:800,fontSize:14,cursor:"pointer",boxShadow:"0 2px 8px #0002"}}>
@@ -2602,7 +2767,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
             <div style={{fontWeight:800,fontSize:15,marginBottom:14,color:"#1a1a1a"}}>📋 Confirmar pedido</div>
             <div style={{fontSize:13,color:"#555",marginBottom:4}}>👤 <strong>{selectedClient?.name}</strong> · {vendedor}</div>
             <div style={{borderTop:"1px solid #f5f5f5",margin:"8px 0",paddingTop:8}}>
-              {cart.map(i=><div key={i.pid} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"3px 0",color:"#555"}}><span style={{flex:1,marginRight:6}}>{i.name} × {i.qty}</span><span style={{fontWeight:600}}>{fARS(i.price*i.qty)}</span></div>)}
+              <CartSummaryLines cart={cart}/>
             </div>
             <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:17,color:RED,padding:"8px 0",borderTop:"2px solid #f5f5f5",marginBottom:14}}><span>Total</span><span>{fARS(total)}</span></div>
             <button onClick={submit} style={{width:"100%",padding:"12px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff"}}>
@@ -2619,7 +2784,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
     <div style={{display:"grid",gridTemplateColumns:"1fr 330px",gap:18,alignItems:"start"}}>
       <div>
         <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>🛒 Nuevo Pedido — Seleccioná productos</div>
-        <ProductSelector products={products} cart={cart} setCart={setCart}/>
+        <ProductSelector products={products} cart={cart} setCart={setCart} promos={promos}/>
       </div>
       <div style={{position:"sticky",top:16}}>
         <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 2px 12px #0002"}}>
@@ -2643,7 +2808,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
           <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
           <div style={{borderTop:"1px solid #f5f5f5",margin:"4px 0 8px",paddingTop:10}}>
             {cart.length===0?<div style={{textAlign:"center",color:"#aaa",fontSize:12,padding:"10px 0"}}>Agregá productos al pedido</div>
-            :cart.map(i=><div key={i.pid} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"3px 0",color:"#555"}}><span style={{flex:1,marginRight:6,lineHeight:1.3}}>{i.name} × {i.qty}</span><span style={{fontWeight:600,whiteSpace:"nowrap"}}>{fARS(i.price*i.qty)}</span></div>)}
+            :<CartSummaryLines cart={cart}/>}
           </div>
           <div style={{background:"#f9fdf9",border:"1.5px solid #e5e5e5",borderRadius:8,padding:"10px 12px",marginBottom:8}}>
             <div style={{fontSize:11,color:"#555",fontWeight:700,marginBottom:6}}>DESCUENTO GLOBAL</div>
@@ -4924,19 +5089,11 @@ function OfertasPanel({promos, setPromos, products, isMobile}) {
   const [view, setView] = useState("vigentes"); // vigentes | historial | elegir | combo | 3x2 | descuento
   const [editing, setEditing] = useState(null);
 
-  const today = () => new Date().toISOString().slice(0,10);
   const fDate = (iso) => { if(!iso) return ""; const [y,m,d]=iso.split("-"); return `${d}/${m}/${y}`; };
-  const diasRestantes = (iso) => { if(!iso) return null; return Math.ceil((new Date(iso)-new Date(today()))/86400000); };
-  const isVigente = (p) => {
-    if(!p.activa) return false;
-    const t = today();
-    if(p.vigenciaDesde && t < p.vigenciaDesde) return false;
-    if(p.vigenciaHasta && t > p.vigenciaHasta) return false;
-    return true;
-  };
+  const diasRestantes = (iso) => { if(!iso) return null; return Math.ceil((new Date(iso)-new Date(todayISO()))/86400000); };
 
-  const vigentes  = promos.filter(isVigente);
-  const historial = promos.filter(p=>!isVigente(p));
+  const vigentes  = promos.filter(isPromoVigente);
+  const historial = promos.filter(p=>!isPromoVigente(p));
 
   const savePromo = async (promo) => {
     await db.savePromo(promo);
@@ -5018,7 +5175,7 @@ function OfertasPanel({promos, setPromos, products, isMobile}) {
                     <div style={{fontSize:11,color:"#888",marginTop:2}}>{sub}</div>
                     <div style={{marginTop:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                       <span style={{fontSize:11,color:"#aaa"}}>{vig}</span>
-                      <PromoEstado promo={p} vigente={isVigente(p)} dias={p.vigenciaHasta?diasRestantes(p.vigenciaHasta):null}/>
+                      <PromoEstado promo={p} vigente={isPromoVigente(p)} dias={p.vigenciaHasta?diasRestantes(p.vigenciaHasta):null}/>
                     </div>
                   </div>
                 );
@@ -5045,7 +5202,7 @@ function OfertasPanel({promos, setPromos, products, isMobile}) {
                           <div style={{fontSize:11,color:"#888",marginTop:2}}>{sub}</div>
                         </td>
                         <td style={{padding:"11px 14px",fontSize:12,color:"#555"}}>{vig}</td>
-                        <td style={{padding:"11px 14px"}}><PromoEstado promo={p} vigente={isVigente(p)} dias={p.vigenciaHasta?diasRestantes(p.vigenciaHasta):null}/></td>
+                        <td style={{padding:"11px 14px"}}><PromoEstado promo={p} vigente={isPromoVigente(p)} dias={p.vigenciaHasta?diasRestantes(p.vigenciaHasta):null}/></td>
                         <td style={{padding:"11px 14px",textAlign:"right",whiteSpace:"nowrap"}}>
                           <button onClick={()=>editPromo(p)} title="Editar" style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"4px 6px",color:"#888"}}>✏️</button>
                           <button onClick={()=>togglePausa(p)} title={p.activa?"Pausar":"Reactivar"} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"4px 6px",color:"#888"}}>{p.activa?"⏸️":"▶️"}</button>
