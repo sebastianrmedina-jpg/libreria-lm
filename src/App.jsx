@@ -404,15 +404,22 @@ async function sendPushNotif({title, body, targetUsername}) {
       contents: { en: body, es: body },
       filters,
     };
-    // Llamada a la API de OneSignal
-    await fetch("https://onesignal.com/api/v1/notifications", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Key ${OS_API_KEY}`,
-      },
-      body: JSON.stringify(payload),
-    });
+    // Llamada a la API de OneSignal — con timeout propio, nunca debe colgar indefinidamente
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    try {
+      await fetch("https://onesignal.com/api/v1/notifications", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Key ${OS_API_KEY}`,
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
   } catch(e) {
     console.warn("OneSignal push error:", e);
   }
@@ -428,11 +435,11 @@ async function sendCrossNotif(db, setNotifs, {title, body, tag, para, de}) {
     para, de,
     leida: false,
   };
-  // Guardar en lm_notifs para Realtime (cuando la app está abierta)
+  // Guardar en lm_notifs para Realtime (cuando la app está abierta) — esto sí se espera, es lo que ve el admin en la app
   await db.addNotif(notif);
   setNotifs(n=>[notif,...n]);
-  // Enviar push via OneSignal (cuando la app está cerrada)
-  await sendPushNotif({ title, body, targetUsername: para });
+  // Enviar push via OneSignal (cuando la app está cerrada) — best-effort, nunca debe bloquear ni trabar a quien envía
+  sendPushNotif({ title, body, targetUsername: para }).catch(()=>{});
 }
 
 // ─── PUSH NOTIFICATIONS ──────────────────────────────────────────────────────
@@ -1108,8 +1115,10 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   const requestEdit = async (id, reason) => {
     const updated = orders.map(o=>o.id===id ? {...o, editStatus:"solicitada", editReason:reason} : o);
     setOrders(updated);
-    await db.upsertOrder(updated.find(o=>o.id===id));
-    const ord0 = orders.find(o=>o.id===id);
+    const ord0 = updated.find(o=>o.id===id);
+    const isSandboxOrder = ord0 && (ord0.isSandbox || isTestOrder(ord0.vendedor));
+    if(isSandboxOrder) { sendLocalNotif("✏️ Solicitud enviada", `Esperá la aprobación del admin`, `edit-req-${id}`); return; }
+    await db.upsertOrder(ord0);
     await sendCrossNotif(db, setNotifs, {title:"✏️ Solicitud de edición", body:`${ord0?.vendedor} quiere editar un pedido (${ord0?.client})`, tag:`edit-req-${id}`, para:"admin", de:ord0?.vendedor||""});
     sendLocalNotif("✏️ Solicitud enviada", `Esperá la aprobación del admin`, `edit-req-${id}`);
   };
@@ -1118,8 +1127,10 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   const approveEditRequest = async (id) => {
     const updated = orders.map(o=>o.id===id ? {...o, editStatus:"aprobada", editRejectReason:""} : o);
     setOrders(updated);
-    await db.upsertOrder(updated.find(o=>o.id===id));
-    const ordApr = orders.find(o=>o.id===id);
+    const ordApr = updated.find(o=>o.id===id);
+    const isSandboxOrder = ordApr && (ordApr.isSandbox || isTestOrder(ordApr.vendedor));
+    if(isSandboxOrder) return;
+    await db.upsertOrder(ordApr);
     await sendCrossNotif(db, setNotifs, {title:"✅ Edición aprobada", body:`Tu solicitud para editar el pedido de ${ordApr?.client} fue aprobada`, tag:`edit-apr-${id}`, para:ordApr?.vendedor||"", de:"admin"});
   };
 
@@ -1127,8 +1138,10 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   const rejectEditRequest = async (id, reason) => {
     const updated = orders.map(o=>o.id===id ? {...o, editStatus:"rechazada", editRejectReason:reason} : o);
     setOrders(updated);
-    await db.upsertOrder(updated.find(o=>o.id===id));
-    const ordRej = orders.find(o=>o.id===id);
+    const ordRej = updated.find(o=>o.id===id);
+    const isSandboxOrder = ordRej && (ordRej.isSandbox || isTestOrder(ordRej.vendedor));
+    if(isSandboxOrder) return;
+    await db.upsertOrder(ordRej);
     await sendCrossNotif(db, setNotifs, {title:"❌ Edición rechazada", body:`Tu solicitud para editar el pedido de ${ordRej?.client} fue rechazada. Motivo: "${reason}"`, tag:`edit-rej-${id}`, para:ordRej?.vendedor||"", de:"admin"});
   };
 
@@ -1136,8 +1149,10 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   const submitEdit = async (id, newItems, newTotal) => {
     const updated = orders.map(o=>o.id===id ? {...o, editStatus:"en revisión", editItems:newItems, editTotal:newTotal} : o);
     setOrders(updated);
-    await db.upsertOrder(updated.find(o=>o.id===id));
-    const ordSub = orders.find(o=>o.id===id);
+    const ordSub = updated.find(o=>o.id===id);
+    const isSandboxOrder = ordSub && (ordSub.isSandbox || isTestOrder(ordSub.vendedor));
+    if(isSandboxOrder) { sendLocalNotif("📤 Cambios enviados", `El admin revisará tu edición`, `edit-sub-${id}`); return; }
+    await db.upsertOrder(ordSub);
     await sendCrossNotif(db, setNotifs, {title:"👀 Cambios para revisar", body:`${ordSub?.vendedor} editó el pedido de ${ordSub?.client} — revisá los cambios`, tag:`edit-sub-${id}`, para:"admin", de:ordSub?.vendedor||""});
     sendLocalNotif("📤 Cambios enviados", `El admin revisará tu edición`, `edit-sub-${id}`);
   };
@@ -1146,8 +1161,17 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   const approveEdit = async (id) => {
     const ord = orders.find(o=>o.id===id);
     if(!ord) return;
+    const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
     // Aplicar cambios: restaurar stock viejo, descontar nuevo
-    if(!ord.isSandbox) {
+    if(isSandboxOrder) {
+      // SANDBOX: ajustar el stock paralelo en memoria, nunca tocar Supabase
+      updateSandboxStock(prev => {
+        const next = {...prev};
+        ord.items.forEach(it => { next[it.pid] = (next[it.pid] ?? 0) + it.qty; });
+        ord.editItems.forEach(it => { next[it.pid] = Math.max(0, (next[it.pid] ?? 0) - it.qty); });
+        return next;
+      });
+    } else {
       // Devolver stock de items originales
       let prods = [...products];
       ord.items.forEach(it => {
@@ -1165,8 +1189,9 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const newTotal = ord.editItems.reduce((s,it)=>s+it.price*it.qty,0);
     const updated = orders.map(o=>o.id===id ? {...o, items:ord.editItems, total:newTotal, editStatus:"", editItems:null, editReason:"", editRejectReason:""} : o);
     setOrders(updated);
-    await db.upsertOrder(updated.find(o=>o.id===id));
+    if(isSandboxOrder) return;
     const ordOk = updated.find(o=>o.id===id);
+    await db.upsertOrder(ordOk);
     await sendCrossNotif(db, setNotifs, {title:"✅ Cambios aprobados", body:`Tu edición del pedido de ${ordOk?.client} fue aprobada`, tag:`edit-ok-${id}`, para:ordOk?.vendedor||"", de:"admin"});
     await logActivity("Edición aprobada", `Pedido ${ord.docNum||ord.compNum||""} editado`, id, "pedido");
   };
@@ -1175,8 +1200,10 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   const rejectEdit = async (id, reason) => {
     const updated = orders.map(o=>o.id===id ? {...o, editStatus:"cambios rechazados", editRejectReason:reason, editItems:null} : o);
     setOrders(updated);
-    await db.upsertOrder(updated.find(o=>o.id===id));
-    const ordNo = orders.find(o=>o.id===id);
+    const ordNo = updated.find(o=>o.id===id);
+    const isSandboxOrder = ordNo && (ordNo.isSandbox || isTestOrder(ordNo.vendedor));
+    if(isSandboxOrder) return;
+    await db.upsertOrder(ordNo);
     await sendCrossNotif(db, setNotifs, {title:"❌ Cambios rechazados", body:`El admin rechazó tu edición del pedido de ${ordNo?.client}. Motivo: "${reason}"`, tag:`edit-no-${id}`, para:ordNo?.vendedor||"", de:"admin"});
   };
   const addQuote = async (quote) => {
@@ -1807,6 +1834,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
   const [rejectReason, setRejectReason]   = useState("");
   const [showEditMode, setShowEditMode]   = useState(false);
   const [editItems,   setEditItems]       = useState([]);
+  const [editSearch,  setEditSearch]      = useState("");
   const [showFinalReject, setShowFinalReject] = useState(false);
   const [finalRejectReason, setFinalRejectReason] = useState("");
   const [saving, setSaving]               = useState(false);
@@ -1829,10 +1857,19 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
 
   const startEditMode = () => {
     setEditItems(o.items.map(it=>({...it})));
+    setEditSearch("");
     setShowEditMode(true);
   };
   const updEditItem = (pid,qty) => setEditItems(prev=>prev.map(it=>it.pid===pid?{...it,qty:Math.max(1,qty)}:it));
   const remEditItem = pid => setEditItems(prev=>prev.filter(it=>it.pid!==pid));
+  const addEditItem = (p) => setEditItems(prev=>{
+    const ex = prev.find(it=>it.pid===p.id);
+    if(ex) return prev.map(it=>it.pid===p.id?{...it,qty:it.qty+1}:it);
+    return [...prev, {pid:p.id, name:p.name, price:p.salePrice, qty:1}];
+  });
+  const editSearchResults = editSearch.trim()
+    ? (products||[]).filter(p=>norm(p.name).includes(norm(editSearch))||normSKU(p.id).includes(normSKU(editSearch))).slice(0,6)
+    : [];
   const editTotal = editItems.reduce((s,it)=>s+it.price*it.qty,0);
 
   return (
@@ -1874,7 +1911,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
               <div style={{fontWeight:800,fontSize:13,color:"#b7770d",marginBottom:4}}>✏️ Solicitud de edición</div>
               <div style={{fontSize:12,color:"#7d6608",marginBottom:10}}>Motivo: "{o.editReason}"</div>
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                <button onClick={async()=>{setSaving(true);await onApproveEditRequest(o.id);setSaving(false);}}
+                <button onClick={async()=>{setSaving(true);try{await onApproveEditRequest(o.id);}catch(e){console.warn(e);alert("No se pudo aprobar. Probá de nuevo.");}finally{setSaving(false);}}}
                   style={{padding:"7px 14px",borderRadius:8,border:"none",background:"#1e8449",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer"}}>
                   ✅ Aprobar solicitud
                 </button>
@@ -1889,7 +1926,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                     placeholder="Motivo del rechazo..."
                     style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #f1948a",fontSize:13,resize:"vertical",minHeight:60,outline:"none",boxSizing:"border-box"}}/>
                   <div style={{display:"flex",gap:8,marginTop:6}}>
-                    <button onClick={async()=>{if(!rejectReason.trim())return;setSaving(true);await onRejectEditRequest(o.id,rejectReason);setShowRejectForm(false);setRejectReason("");setSaving(false);}}
+                    <button onClick={async()=>{if(!rejectReason.trim())return;setSaving(true);try{await onRejectEditRequest(o.id,rejectReason);setShowRejectForm(false);setRejectReason("");}catch(e){console.warn(e);alert("No se pudo rechazar. Probá de nuevo.");}finally{setSaving(false);}}}
                       disabled={!rejectReason.trim()}
                       style={{padding:"6px 14px",borderRadius:7,border:"none",background:rejectReason.trim()?"#c0392b":"#e5e5e5",color:rejectReason.trim()?"#fff":"#aaa",fontWeight:700,fontSize:12,cursor:rejectReason.trim()?"pointer":"not-allowed"}}>
                       Confirmar rechazo
@@ -1914,9 +1951,9 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
             <div style={{background:"#fdecea",border:"1.5px solid #f1948a",borderRadius:10,padding:"10px 14px",marginBottom:14}}>
               <div style={{fontWeight:800,fontSize:13,color:"#c0392b",marginBottom:3}}>❌ Solicitud rechazada</div>
               <div style={{fontSize:12,color:"#922b21"}}>Motivo: "{o.editRejectReason}"</div>
-              <button onClick={()=>{const u=orders||[];}}
+              <button
                 style={{marginTop:8,padding:"5px 12px",borderRadius:7,border:"1px solid #f1948a",background:"#fff",color:"#c0392b",fontSize:11,fontWeight:600,cursor:"pointer"}}
-                onClick={async()=>{setSaving(true);await onRequestEdit(o.id,"");setSaving(false);}}>
+                onClick={async()=>{setSaving(true);try{await onRequestEdit(o.id,"");}catch(e){console.warn(e);alert("No se pudo enviar la solicitud. Probá de nuevo.");}finally{setSaving(false);}}}>
                 Volver a solicitar
               </button>
             </div>
@@ -1959,10 +1996,35 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                   </div>
                 );
               })}
+              {/* Agregar producto nuevo */}
+              <div style={{position:"relative",marginBottom:10}}>
+                <input value={editSearch} onChange={e=>setEditSearch(e.target.value)}
+                  placeholder="🔍 Buscar producto para agregar..."
+                  style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #aed6f1",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+                {editSearch.trim() && (
+                  <div style={{background:"#fff",borderRadius:8,border:"1.5px solid #d6eaf8",marginTop:4,maxHeight:220,overflowY:"auto"}}>
+                    {editSearchResults.length===0
+                      ? <div style={{padding:"10px 12px",fontSize:12,color:"#aaa"}}>Sin resultados</div>
+                      : editSearchResults.map(p=>(
+                        <div key={p.id} onClick={()=>{addEditItem(p);setEditSearch("");}}
+                          style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",borderBottom:"1px solid #f5f5f5",cursor:"pointer"}}
+                          onMouseEnter={e=>e.currentTarget.style.background="#eaf4fc"}
+                          onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:13,fontWeight:600,color:"#1a1a1a"}}>{p.name}</div>
+                            <div style={{fontSize:11,color:"#888"}}>{p.id} · {fARS(p.salePrice)}</div>
+                          </div>
+                          <span style={{color:"#1a5276",fontWeight:800,fontSize:16,flexShrink:0,marginLeft:8}}>+</span>
+                        </div>
+                      ))
+                    }
+                  </div>
+                )}
+              </div>
               <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:15,color:RED,padding:"10px 0",borderTop:"2px solid #d6eaf8",margin:"4px 0 10px"}}>
                 <span>Nuevo total</span><span>{fARS(editTotal)}</span>
               </div>
-              <button onClick={async()=>{if(!editItems.length)return;setSaving(true);await onSubmitEdit(o.id,editItems,editTotal);setShowEditMode(false);setSaving(false);}}
+              <button onClick={async()=>{if(!editItems.length)return;setSaving(true);try{await onSubmitEdit(o.id,editItems,editTotal);setShowEditMode(false);}catch(e){console.warn(e);alert("No se pudo enviar la edición. Probá de nuevo.");}finally{setSaving(false);}}}
                 disabled={!editItems.length||saving}
                 style={{width:"100%",padding:"10px",borderRadius:9,border:"none",background:editItems.length?"linear-gradient(135deg,#1a5276,#2980b9)":"#e5e5e5",color:editItems.length?"#fff":"#aaa",fontWeight:800,fontSize:14,cursor:editItems.length?"pointer":"not-allowed",marginBottom:8}}>
                 {saving?"Enviando...":"📤 Enviar para revisión"}
@@ -1994,7 +2056,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                 <div style={{fontWeight:800,fontSize:13,color:RED,marginTop:6,textAlign:"right"}}>{fARS((o.editItems||[]).reduce((s,it)=>s+it.price*it.qty,0))}</div>
               </div>
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                <button onClick={async()=>{setSaving(true);await onApproveEdit(o.id);setSaving(false);}}
+                <button onClick={async()=>{setSaving(true);try{await onApproveEdit(o.id);}catch(e){console.warn(e);alert("No se pudo aprobar. Probá de nuevo.");}finally{setSaving(false);}}}
                   style={{padding:"8px 16px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#1a5e20,#1e8449)",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>
                   ✅ Aprobar cambios
                 </button>
@@ -2009,7 +2071,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                     placeholder="Motivo del rechazo..."
                     style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #f1948a",fontSize:13,resize:"vertical",minHeight:60,outline:"none",boxSizing:"border-box"}}/>
                   <div style={{display:"flex",gap:8,marginTop:6}}>
-                    <button onClick={async()=>{if(!finalRejectReason.trim())return;setSaving(true);await onRejectEdit(o.id,finalRejectReason);setShowFinalReject(false);setFinalRejectReason("");setSaving(false);}}
+                    <button onClick={async()=>{if(!finalRejectReason.trim())return;setSaving(true);try{await onRejectEdit(o.id,finalRejectReason);setShowFinalReject(false);setFinalRejectReason("");}catch(e){console.warn(e);alert("No se pudo rechazar. Probá de nuevo.");}finally{setSaving(false);}}}
                       disabled={!finalRejectReason.trim()}
                       style={{padding:"6px 14px",borderRadius:7,border:"none",background:finalRejectReason.trim()?"#c0392b":"#e5e5e5",color:finalRejectReason.trim()?"#fff":"#aaa",fontWeight:700,fontSize:12,cursor:finalRejectReason.trim()?"pointer":"not-allowed"}}>
                       Confirmar rechazo
@@ -2091,7 +2153,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                       placeholder="Motivo de la edición..."
                       style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #aed6f1",fontSize:13,resize:"vertical",minHeight:60,outline:"none",boxSizing:"border-box"}}/>
                     <div style={{display:"flex",gap:8,marginTop:6}}>
-                      <button onClick={async()=>{if(!reqReason.trim())return;setSaving(true);await onRequestEdit(o.id,reqReason);setShowReqForm(false);setReqReason("");setSaving(false);}}
+                      <button onClick={async()=>{if(!reqReason.trim())return;setSaving(true);try{await onRequestEdit(o.id,reqReason);setShowReqForm(false);setReqReason("");}catch(e){console.warn(e);alert("No se pudo enviar la solicitud. Probá de nuevo.");}finally{setSaving(false);}}}
                         disabled={!reqReason.trim()||saving}
                         style={{padding:"6px 14px",borderRadius:7,border:"none",background:reqReason.trim()?"#1a5276":"#e5e5e5",color:reqReason.trim()?"#fff":"#aaa",fontWeight:700,fontSize:12,cursor:reqReason.trim()?"pointer":"not-allowed"}}>
                         {saving?"Enviando...":"📤 Enviar solicitud"}
