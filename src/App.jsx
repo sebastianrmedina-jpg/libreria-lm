@@ -1702,7 +1702,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
             });
           }}
         />}
-        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile} sandboxStock={sandboxStock} setSandboxStock={setSandboxStock} promos={promos} setPromos={setPromos}/>}
+        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile} sandboxStock={sandboxStock} setSandboxStock={setSandboxStock} updateSandboxStock={updateSandboxStock} promos={promos} setPromos={setPromos}/>}
       </div>
     </div>
   );
@@ -4832,7 +4832,7 @@ function Compras({products,onStock,isMobile,canScan}) {
 }
 
 // ─── SANDBOX STOCK MANAGER ────────────────────────────────────────────────────
-function SandboxStockManager({products, sandboxStock, setSandboxStock}) {
+function SandboxStockManager({products, sandboxStock, updateSandboxStock}) {
   const [search, setSearch] = useState("");
   const [edited, setEdited] = useState({});
   const [page, setPage] = useState(1);
@@ -4851,7 +4851,7 @@ function SandboxStockManager({products, sandboxStock, setSandboxStock}) {
 
   const getSandbox = (pid) => edited[pid] !== undefined ? edited[pid] : (sandboxStock[pid] ?? products.find(p=>p.id===pid)?.stock ?? 0);
   const setVal = (pid, val) => setEdited(e=>({...e,[pid]:Math.max(0,+val||0)}));
-  const applyChanges = () => { setSandboxStock(prev=>({...prev,...edited})); setEdited({}); };
+  const applyChanges = () => { updateSandboxStock(prev=>({...prev,...edited})); setEdited({}); };
   const hasChanges = Object.keys(edited).length > 0;
 
   return (
@@ -4923,7 +4923,7 @@ function SandboxStockManager({products, sandboxStock, setSandboxStock}) {
 }
 
 // ─── ADMIN PANEL ──────────────────────────────────────────────────────────────
-function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,priceLists,setPriceLists,isMobile,sandboxStock,setSandboxStock,promos,setPromos}) {
+function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,priceLists,setPriceLists,isMobile,sandboxStock,setSandboxStock,updateSandboxStock,promos,setPromos}) {
   const [section, setSection] = useState("home");
 
   const SECTIONS = [
@@ -4942,6 +4942,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
 
   const sandboxOrders = orders.filter(o=>o.isSandbox);
   const realOrders    = orders.filter(o=>!o.isSandbox);
+  const [ventasView, setVentasView] = useState("real");
 
   // Mobile: show icon grid when no section selected, back button when inside
   if(isMobile && !section) return (
@@ -4991,7 +4992,25 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
           </div>
         </div>
       )}
-      {section==="ventas"      && <VentasPanel    orders={realOrders}/>}
+      {section==="ventas"      && (
+        <div>
+          {sandboxOrders.length>0 && (
+            <div style={{display:"flex",gap:8,marginBottom:14}}>
+              <button onClick={()=>setVentasView("real")}
+                style={{padding:"6px 14px",borderRadius:8,border:"1.5px solid #e5e5e5",cursor:"pointer",fontWeight:700,fontSize:12,
+                  background:ventasView==="real"?RED:"#fff",color:ventasView==="real"?"#fff":"#666"}}>
+                📊 Datos reales
+              </button>
+              <button onClick={()=>setVentasView("sandbox")}
+                style={{padding:"6px 14px",borderRadius:8,border:"1.5px solid #9b59b6",cursor:"pointer",fontWeight:700,fontSize:12,
+                  background:ventasView==="sandbox"?"#9b59b6":"#fff",color:ventasView==="sandbox"?"#fff":"#6c3483"}}>
+                🧪 Datos de prueba (sandbox)
+              </button>
+            </div>
+          )}
+          <VentasPanel orders={ventasView==="sandbox" ? sandboxOrders : realOrders}/>
+        </div>
+      )}
       {section==="ofertas"     && <OfertasPanel   promos={promos} setPromos={setPromos} products={products} isMobile={isMobile}/>}
       {section==="sandboxstock" && (
         <div>
@@ -5005,7 +5024,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
               🔄 Resetear al stock real
             </button>
           </div>
-          <SandboxStockManager products={products} sandboxStock={sandboxStock} setSandboxStock={setSandboxStock}/>
+          <SandboxStockManager products={products} sandboxStock={sandboxStock} updateSandboxStock={updateSandboxStock}/>
         </div>
       )}
       {section==="sandbox"     && (
@@ -5039,7 +5058,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
 
 // ── Panel de Ventas ───────────────────────────────────────────────────────────
 function VentasPanel({orders}) {
-  const vendidas = orders.filter(o=>o.stage==="entregado" && !o.isSandbox);
+  const vendidas = orders.filter(o=>o.stage==="entregado");
   const [periodo, setPeriodo] = useState("mes"); // "dia"|"mes"|"vendedor"
 
   // ── helpers ──
@@ -5268,9 +5287,14 @@ function OfertasPanel({promos, setPromos, products, isMobile}) {
   const vigentes  = promos.filter(isPromoVigente);
   const historial = promos.filter(p=>!isPromoVigente(p));
 
-  const savePromo = async (promo) => {
+  const savePromo = async (promoIn) => {
+    const { _replacesId, ...promo } = promoIn;
     await db.savePromo(promo);
-    setPromos(prev => prev.find(p=>p.id===promo.id) ? prev.map(p=>p.id===promo.id?promo:p) : [promo,...prev]);
+    if(_replacesId) { try { await db.deletePromo(_replacesId); } catch(e) { console.warn(e); } }
+    setPromos(prev => {
+      const base = _replacesId ? prev.filter(p=>p.id!==_replacesId) : prev;
+      return base.find(p=>p.id===promo.id) ? base.map(p=>p.id===promo.id?promo:p) : [promo,...base];
+    });
     setEditing(null); setView("vigentes");
   };
   const togglePausa = async (promo) => {
@@ -5283,7 +5307,7 @@ function OfertasPanel({promos, setPromos, products, isMobile}) {
 
   if(view==="combo")     return <ComboForm products={products} editing={editing} nextSku={nextPromoSku(promos)} onSave={savePromo} onCancel={cancelForm}/>;
   if(view==="3x2")       return <TresPorDosForm products={products} editing={editing} nextSku={nextPromoSku(promos)} onSave={savePromo} onCancel={cancelForm}/>;
-  if(view==="descuento") return <DescuentoForm products={products} editing={editing} nextSku={nextPromoSku(promos)} onSave={savePromo} onCancel={cancelForm}/>;
+  if(view==="descuento") return <DescuentoForm products={products} editing={editing} onSave={savePromo} onCancel={cancelForm}/>;
 
   if(view==="elegir") {
     const TIPOS = [
@@ -5579,9 +5603,8 @@ function TresPorDosForm({products, editing, nextSku, onSave, onCancel}) {
   );
 }
 
-function DescuentoForm({products, editing, nextSku, onSave, onCancel}) {
+function DescuentoForm({products, editing, onSave, onCancel}) {
   const isEdit = !!editing;
-  const [sku] = useState(editing?.id || nextSku);
   const [search, setSearch] = useState("");
   const [producto, setProducto] = useState(()=> editing?.data?.productoId ? (products.find(p=>p.id===editing.data.productoId)||null) : null);
   const [tipoValor, setTipoValor] = useState(editing?.data?.tipoValor || "%");
@@ -5600,15 +5623,16 @@ function DescuentoForm({products, editing, nextSku, onSave, onCancel}) {
   const precioFinal = producto ? Math.max(0, tipoValor==="%" ? producto.salePrice*(1-(parseFloat(valor)||0)/100) : producto.salePrice-(parseFloat(valor)||0)) : null;
 
   const submit = async () => {
-    if(!sku.trim())     { setError("El SKU es obligatorio"); return; }
     if(!producto)       { setError("Elegí el producto al que aplica"); return; }
     if(!valor || +valor<=0) { setError("Ingresá el valor del descuento"); return; }
     setError(""); setSaving(true);
     try {
       await onSave({
-        id:sku.trim(), tipo:"descuento", nombre:producto.name, activa:editing?.activa!==false,
+        id:producto.id, tipo:"descuento", nombre:producto.name, activa:editing?.activa!==false,
         vigenciaDesde:vigDesde, vigenciaHasta:vigHasta,
         data:{productoId:producto.id, tipoValor, valor:+valor}, createdAt:editing?.createdAt,
+        // Si veníamos de un promo editado con un id viejo (ej. autogenerado de una versión anterior), lo limpiamos
+        _replacesId: (editing && editing.id!==producto.id) ? editing.id : undefined,
       });
     } finally { setSaving(false); }
   };
@@ -5616,7 +5640,6 @@ function DescuentoForm({products, editing, nextSku, onSave, onCancel}) {
   return (
     <div style={{maxWidth:680}}>
       <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>🔻 {isEdit?"Editar":"Nuevo"} Descuento</div>
-      <Field label="SKU del descuento (automático)"><input value={sku} disabled style={{...inputStyle,maxWidth:300,background:"#f5f5f5",color:"#888",fontWeight:700}}/></Field>
 
       <Field label="Producto al que aplica *">
         {producto
