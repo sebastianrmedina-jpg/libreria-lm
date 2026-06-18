@@ -22,7 +22,7 @@ const supabase = createClient(SUPA_URL, SUPA_ANON);
 const supaAdmin = supabase;
 
 const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock});
-const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||"",isTest:r.is_test||false,isSandbox:r.is_sandbox||false,internalNote:r.internal_note||"",editStatus:r.edit_status||"",editReason:r.edit_reason||"",editItems:r.edit_items||null,editRejectReason:r.edit_reject_reason||""});
+const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||"",isTest:r.is_test||false,isSandbox:r.is_sandbox||false,internalNote:r.internal_note||"",editStatus:r.edit_status||"",editReason:r.edit_reason||"",editItems:r.edit_items||null,editRejectReason:r.edit_reject_reason||"",comprobanteUrl:r.comprobante_url||"",comprobanteNombre:r.comprobante_nombre||"",comprobanteFecha:r.comprobante_fecha||""});
 const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,date:r.date,items:r.items||[],validity:r.validity||"",docNum:r.doc_num||"",convertida:r.convertida||false,ordenId:r.orden_id||"",extendida:r.extendida||false,extendReason:r.extend_reason||"",extendDate:r.extend_date||"",globalDisc:r.global_disc||null,subtotal:r.subtotal||0});
 
 
@@ -38,6 +38,48 @@ const fmtDocNum = (prefix, n) => `${prefix}-${padNum(n)}`;
 // y agrega marca de agua en el PDF
 const TEST_VENDOR = "Prueba";
 const isTestOrder = (vendedor) => vendedor === TEST_VENDOR;
+
+// ─── COMPROBANTES DE PAGO — Supabase Storage ──────────────────────────────────
+// Bucket: "comprobantes" (público). Las imágenes se comprimen en el cliente antes
+// de subir para no acumular fotos de cámara de varios MB cada una.
+function compressImage(file, maxWidth = 1600, quality = 0.8) {
+  return new Promise((resolve) => {
+    if(!file || !file.type || !file.type.startsWith("image/")) { resolve(file); return; }
+    try {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            let { width, height } = img;
+            if(width > maxWidth) { height = Math.round(height * maxWidth / width); width = maxWidth; }
+            const canvas = document.createElement("canvas");
+            canvas.width = width; canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, width, height);
+            canvas.toBlob((blob) => {
+              if(!blob) { resolve(file); return; }
+              resolve(new File([blob], file.name.replace(/\.\w+$/, ".jpg"), { type: "image/jpeg" }));
+            }, "image/jpeg", quality);
+          } catch { resolve(file); }
+        };
+        img.onerror = () => resolve(file);
+        img.src = e.target.result;
+      };
+      reader.onerror = () => resolve(file);
+      reader.readAsDataURL(file);
+    } catch { resolve(file); }
+  });
+}
+async function uploadComprobanteFile(orderId, file) {
+  const processed = await compressImage(file);
+  const ext = (processed.name.split(".").pop() || "jpg").toLowerCase();
+  const path = `${orderId}-${Date.now()}.${ext}`;
+  const { error } = await supabase.storage.from("comprobantes").upload(path, processed, { cacheControl: "3600", upsert: false });
+  if(error) throw error;
+  const { data } = supabase.storage.from("comprobantes").getPublicUrl(path);
+  return { url: data.publicUrl, nombre: file.name };
+}
 
 const db = {
   getUsers:     async () => { const {data,error} = await supabase.from("lm_users").select("*").order("name"); if(error) throw error; return (data||[]).map(u=>({...u,priceList:u.price_list||"default",vendedor:u.vendedor||"",canSeeAll:u.can_see_all!==false,phone:u.phone||"",cargo:u.cargo||"",avatar:u.avatar||"",barcodeEnabled:u.barcode_enabled||false})); },
@@ -86,7 +128,7 @@ const db = {
   deleteProduct: async (id) => { const {error} = await supaAdmin.from("lm_products").delete().eq("id",id); if(error) throw error; },
 
   getOrders:    async () => { const {data,error} = await supabase.from("lm_orders").select("*").order("date",{ascending:false}); if(error) throw error; return (data||[]).map(mapOrder); },
-  upsertOrder:  async (o) => { const {error} = await supaAdmin.from("lm_orders").upsert({id:o.id,client:o.client,vendedor:o.vendedor||"",notes:o.notes||"",total:o.total,stage:o.stage,date:o.date,items:o.items,doc_num:o.docNum||"",comp_num:o.compNum||"",is_test:o.isTest||false,is_sandbox:o.isSandbox||false,internal_note:o.internalNote||"",edit_status:o.editStatus||"",edit_reason:o.editReason||"",edit_items:o.editItems||null,edit_reject_reason:o.editRejectReason||""}); if(error) throw error; },
+  upsertOrder:  async (o) => { const {error} = await supaAdmin.from("lm_orders").upsert({id:o.id,client:o.client,vendedor:o.vendedor||"",notes:o.notes||"",total:o.total,stage:o.stage,date:o.date,items:o.items,doc_num:o.docNum||"",comp_num:o.compNum||"",is_test:o.isTest||false,is_sandbox:o.isSandbox||false,internal_note:o.internalNote||"",edit_status:o.editStatus||"",edit_reason:o.editReason||"",edit_items:o.editItems||null,edit_reject_reason:o.editRejectReason||"",comprobante_url:o.comprobanteUrl||"",comprobante_nombre:o.comprobanteNombre||"",comprobante_fecha:o.comprobanteFecha||""}); if(error) throw error; },
   deleteOrder:  async (id) => { const {error} = await supaAdmin.from("lm_orders").delete().eq("id",id); if(error) throw error; },
 
   getQuotes:    async () => { const {data,error} = await supabase.from("lm_quotes").select("*").order("date",{ascending:false}); if(error) throw error; return (data||[]).map(mapQuote); },
@@ -1110,6 +1152,18 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     await db.upsertOrder(ord);
   };
 
+  // Comprobante de pago — opcional, un solo archivo por pedido, lo puede subir admin o vendedor
+  const uploadComprobante = async (id, {url, nombre, fecha}) => {
+    const updated = orders.map(o=>o.id===id ? {...o, comprobanteUrl:url, comprobanteNombre:nombre, comprobanteFecha:fecha} : o);
+    setOrders(updated);
+    const ord = updated.find(o=>o.id===id);
+    await db.upsertOrder(ord);
+    // Avisar al admin (salvo en pedidos de prueba/sandbox, o si quien sube ya es el admin)
+    const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
+    if(isSandboxOrder || currentUser.role==="admin") return;
+    await sendCrossNotif(db, setNotifs, {title:"📎 Comprobante subido", body:`${currentUser.name} subió un comprobante de pago (${ord.client})`, tag:`comp-${id}`, para:"admin", de:currentUser.name});
+  };
+
   // ── EDIT REQUEST FLOW ─────────────────────────────────────────────────────
   // Fase 1: vendedor solicita edición
   const requestEdit = async (id, reason) => {
@@ -1615,6 +1669,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
           products={pricedProducts} onStage={setStage} onDel={delOrder} onSaveNote={saveNote}
           onRequestEdit={requestEdit} onApproveEditRequest={approveEditRequest} onRejectEditRequest={rejectEditRequest}
           onSubmitEdit={submitEdit} onApproveEdit={approveEdit} onRejectEdit={rejectEdit}
+          onUploadComprobante={uploadComprobante}
           currentUser={currentUser} isMobile={isMobile}/>}
         {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} promos={promos}/>}
         {tab==="clientes"   && <ClientesPanel clients={clients} onSave={saveClient} onDelete={deleteClient} onRequestDelete={requestDeleteClient} currentUser={currentUser} isMobile={isMobile} orders={orders}/>}
@@ -1765,7 +1820,7 @@ function CompPopup({order, onClose}) {
 
 
 // ─── CENTRAL ──────────────────────────────────────────────────────────────────
-function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,currentUser,isMobile}) {
+function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,currentUser,isMobile}) {
   const [fStage,setFStage]=useState("todos");
   const [fVendedor,setFVendedor]=useState("todos");
   const [search,setSearch]=useState("");
@@ -1803,7 +1858,7 @@ function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onAppro
       </div>
       {filtered.length===0
         ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{fontSize:48}}>📭</div><div style={{marginTop:8}}>No hay pedidos. !Creá uno desde "Nuevo Pedido"!</div></div>
-        : filtered.map(o=><OCard key={o.id} o={o} exp={expanded===o.id} toggle={()=>setExpanded(expanded===o.id?null:o.id)} getP={getP} onStage={onStage} onDel={onDel} onSaveNote={onSaveNote} onRequestEdit={onRequestEdit} onApproveEditRequest={onApproveEditRequest} onRejectEditRequest={onRejectEditRequest} onSubmitEdit={onSubmitEdit} onApproveEdit={onApproveEdit} onRejectEdit={onRejectEdit} currentUser={currentUser} products={products}/>)
+        : filtered.map(o=><OCard key={o.id} o={o} exp={expanded===o.id} toggle={()=>setExpanded(expanded===o.id?null:o.id)} getP={getP} onStage={onStage} onDel={onDel} onSaveNote={onSaveNote} onRequestEdit={onRequestEdit} onApproveEditRequest={onApproveEditRequest} onRejectEditRequest={onRejectEditRequest} onSubmitEdit={onSubmitEdit} onApproveEdit={onApproveEdit} onRejectEdit={onRejectEdit} onUploadComprobante={onUploadComprobante} currentUser={currentUser} products={products}/>)
       }
     </div>
   );
@@ -1821,11 +1876,13 @@ function DelBtn({onConfirm}) {
   return <button onClick={()=>setConfirm(true)} style={{marginLeft:"auto",padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>🗑 Eliminar</button>;
 }
 
-function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,currentUser,products}) {
+function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,currentUser,products}) {
   const isAdmin = currentUser?.role === "admin";
   const idx=STAGES.indexOf(o.stage), next=STAGES[idx+1];
   const [editNote,setEditNote]=useState(false);
   const [noteVal,setNoteVal]=useState(o.internalNote||"");
+  const [uploadingComp, setUploadingComp] = useState(false);
+  const compFileRef = useRef();
 
   // Edit request states
   const [showReqForm, setShowReqForm]     = useState(false);
@@ -1853,6 +1910,22 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
     };
     const c = cfg[es]; if(!c) return null;
     return <span style={{background:c.bg,color:c.color,border:`1px solid ${c.border}`,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>{c.label}</span>;
+  };
+
+  const handleCompFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ""; // permitir volver a elegir el mismo archivo después
+    if(!file) return;
+    setUploadingComp(true);
+    try {
+      const { url, nombre } = await uploadComprobanteFile(o.id, file);
+      await onUploadComprobante(o.id, { url, nombre, fecha: today() });
+    } catch(err) {
+      console.warn(err);
+      alert("No se pudo subir el comprobante. Probá de nuevo.");
+    } finally {
+      setUploadingComp(false);
+    }
   };
 
   const startEditMode = () => {
@@ -1885,6 +1958,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
             <span>{o.date}</span>
             {o.vendedor&&<span>· 👤 {o.vendedor}</span>}
             {o.internalNote&&<span style={{color:"#e67e22"}}>· 📝 Nota</span>}
+            {o.comprobanteUrl&&<span style={{color:"#1e8449"}}>· 📎 Comprobante</span>}
             <EditBdg/>
           </div>
         </div>
@@ -2127,6 +2201,43 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
               </div>
             ) : (
               <div style={{fontSize:13,color:o.internalNote?"#5d4037":"#aaa",fontStyle:o.internalNote?"normal":"italic"}}>{o.internalNote||"Sin nota interna"}</div>
+            )}
+          </div>
+
+          {/* COMPROBANTE DE PAGO */}
+          <div style={{background:"#eafaf1",border:"1.5px solid #a9dfbf",borderRadius:10,padding:"10px 14px",marginBottom:14}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:o.comprobanteUrl||uploadingComp?8:0,flexWrap:"wrap",gap:6}}>
+              <span style={{fontSize:12,fontWeight:700,color:"#1e8449"}}>📎 Comprobante de pago</span>
+              {!uploadingComp && (
+                <button onClick={()=>compFileRef.current.click()}
+                  style={{padding:"3px 10px",borderRadius:6,border:"1px solid #a9dfbf",background:"#fff",color:"#1e8449",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                  {o.comprobanteUrl?"🔄 Reemplazar":"+ Subir comprobante"}
+                </button>
+              )}
+              <input ref={compFileRef} type="file" accept="image/*,.pdf" onChange={handleCompFile} style={{display:"none"}}/>
+            </div>
+            {uploadingComp ? (
+              <div style={{fontSize:13,color:"#1e8449",display:"flex",alignItems:"center",gap:8}}>
+                <div style={{width:16,height:16,borderRadius:"50%",border:"2.5px solid #a9dfbf",borderTop:"2.5px solid #1e8449",animation:"lm-spin 0.8s linear infinite"}}/>
+                Subiendo...
+                <style>{`@keyframes lm-spin{to{transform:rotate(360deg)}}`}</style>
+              </div>
+            ) : o.comprobanteUrl ? (
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                {/\.(jpe?g|png|gif|webp)$/i.test(o.comprobanteUrl)
+                  ? <img src={o.comprobanteUrl} alt="comprobante" style={{width:48,height:48,borderRadius:8,objectFit:"cover",border:"1.5px solid #a9dfbf",flexShrink:0}}/>
+                  : <div style={{width:48,height:48,borderRadius:8,border:"1.5px solid #a9dfbf",background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📄</div>}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,color:"#1e8449",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.comprobanteNombre||"Comprobante"}</div>
+                  <div style={{fontSize:11,color:"#888"}}>{o.comprobanteFecha&&`Subido el ${o.comprobanteFecha}`}</div>
+                </div>
+                <a href={o.comprobanteUrl} target="_blank" rel="noopener noreferrer"
+                  style={{padding:"5px 10px",borderRadius:6,border:"1px solid #a9dfbf",background:"#fff",color:"#1e8449",fontSize:11,fontWeight:700,textDecoration:"none",flexShrink:0}}>
+                  👁️ Ver
+                </a>
+              </div>
+            ) : (
+              <div style={{fontSize:13,color:"#888",fontStyle:"italic"}}>Sin comprobante</div>
             )}
           </div>
 
