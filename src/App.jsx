@@ -5242,12 +5242,14 @@ function TypeBadge({tipo}) {
 }
 
 function nextPromoSku(promos) {
-  let max = -1;
+  const used = new Set();
   (promos||[]).forEach(p => {
     const m = /^999-(\d{3})$/.exec(p.id||"");
-    if(m) { const n = parseInt(m[1],10); if(n>max) max = n; }
+    if(m) used.add(parseInt(m[1],10));
   });
-  return `999-${String(max+1).padStart(3,"0")}`;
+  let n = 1;
+  while(used.has(n)) n++;
+  return `999-${String(n).padStart(3,"0")}`;
 }
 
 function promoDisplay(promo, products) {
@@ -5301,6 +5303,11 @@ function OfertasPanel({promos, setPromos, products, isMobile}) {
     const updated = {...promo, activa:!promo.activa};
     await db.savePromo(updated);
     setPromos(prev=>prev.map(p=>p.id===promo.id?updated:p));
+  };
+  const delPromo = async (promo) => {
+    if(!window.confirm(`¿Eliminar "${promo.nombre}"? Esta acción no se puede deshacer.`)) return;
+    await db.deletePromo(promo.id);
+    setPromos(prev => prev.filter(p=>p.id!==promo.id));
   };
   const editPromo = (promo) => { setEditing(promo); setView(promo.tipo); };
   const cancelForm = () => { setEditing(null); setView("vigentes"); };
@@ -5366,6 +5373,7 @@ function OfertasPanel({promos, setPromos, products, isMobile}) {
                       <div>
                         <button onClick={()=>editPromo(p)} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"2px 6px"}}>✏️</button>
                         <button onClick={()=>togglePausa(p)} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"2px 6px"}}>{p.activa?"⏸️":"▶️"}</button>
+                        <button onClick={()=>delPromo(p)} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"2px 6px"}}>🗑️</button>
                       </div>
                     </div>
                     <div style={{fontWeight:700,fontSize:13}}>{titulo}</div>
@@ -5403,6 +5411,7 @@ function OfertasPanel({promos, setPromos, products, isMobile}) {
                         <td style={{padding:"11px 14px",textAlign:"right",whiteSpace:"nowrap"}}>
                           <button onClick={()=>editPromo(p)} title="Editar" style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"4px 6px",color:"#888"}}>✏️</button>
                           <button onClick={()=>togglePausa(p)} title={p.activa?"Pausar":"Reactivar"} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"4px 6px",color:"#888"}}>{p.activa?"⏸️":"▶️"}</button>
+                          <button onClick={()=>delPromo(p)} title="Eliminar" style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"4px 6px",color:"#888"}}>🗑️</button>
                         </td>
                       </tr>
                     );
