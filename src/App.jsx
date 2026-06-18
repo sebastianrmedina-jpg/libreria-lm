@@ -22,7 +22,7 @@ const supabase = createClient(SUPA_URL, SUPA_ANON);
 const supaAdmin = supabase;
 
 const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock});
-const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||"",isTest:r.is_test||false,isSandbox:r.is_sandbox||false,internalNote:r.internal_note||"",editStatus:r.edit_status||"",editReason:r.edit_reason||"",editItems:r.edit_items||null,editRejectReason:r.edit_reject_reason||"",comprobanteUrl:r.comprobante_url||"",comprobanteNombre:r.comprobante_nombre||"",comprobanteFecha:r.comprobante_fecha||""});
+const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||"",isTest:r.is_test||false,isSandbox:r.is_sandbox||false,internalNote:r.internal_note||"",editStatus:r.edit_status||"",editReason:r.edit_reason||"",editItems:r.edit_items||null,editRejectReason:r.edit_reject_reason||"",comprobanteUrl:r.comprobante_url||"",comprobanteNombre:r.comprobante_nombre||"",comprobanteFecha:r.comprobante_fecha||"",pagoTipo:r.pago_tipo||"",pagoEfectivoFecha:r.pago_efectivo_fecha||""});
 const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,date:r.date,items:r.items||[],validity:r.validity||"",docNum:r.doc_num||"",convertida:r.convertida||false,ordenId:r.orden_id||"",extendida:r.extendida||false,extendReason:r.extend_reason||"",extendDate:r.extend_date||"",globalDisc:r.global_disc||null,subtotal:r.subtotal||0});
 
 
@@ -128,7 +128,7 @@ const db = {
   deleteProduct: async (id) => { const {error} = await supaAdmin.from("lm_products").delete().eq("id",id); if(error) throw error; },
 
   getOrders:    async () => { const {data,error} = await supabase.from("lm_orders").select("*").order("date",{ascending:false}); if(error) throw error; return (data||[]).map(mapOrder); },
-  upsertOrder:  async (o) => { const {error} = await supaAdmin.from("lm_orders").upsert({id:o.id,client:o.client,vendedor:o.vendedor||"",notes:o.notes||"",total:o.total,stage:o.stage,date:o.date,items:o.items,doc_num:o.docNum||"",comp_num:o.compNum||"",is_test:o.isTest||false,is_sandbox:o.isSandbox||false,internal_note:o.internalNote||"",edit_status:o.editStatus||"",edit_reason:o.editReason||"",edit_items:o.editItems||null,edit_reject_reason:o.editRejectReason||"",comprobante_url:o.comprobanteUrl||"",comprobante_nombre:o.comprobanteNombre||"",comprobante_fecha:o.comprobanteFecha||""}); if(error) throw error; },
+  upsertOrder:  async (o) => { const {error} = await supaAdmin.from("lm_orders").upsert({id:o.id,client:o.client,vendedor:o.vendedor||"",notes:o.notes||"",total:o.total,stage:o.stage,date:o.date,items:o.items,doc_num:o.docNum||"",comp_num:o.compNum||"",is_test:o.isTest||false,is_sandbox:o.isSandbox||false,internal_note:o.internalNote||"",edit_status:o.editStatus||"",edit_reason:o.editReason||"",edit_items:o.editItems||null,edit_reject_reason:o.editRejectReason||"",comprobante_url:o.comprobanteUrl||"",comprobante_nombre:o.comprobanteNombre||"",comprobante_fecha:o.comprobanteFecha||"",pago_tipo:o.pagoTipo||"",pago_efectivo_fecha:o.pagoEfectivoFecha||""}); if(error) throw error; },
   deleteOrder:  async (id) => { const {error} = await supaAdmin.from("lm_orders").delete().eq("id",id); if(error) throw error; },
 
   getQuotes:    async () => { const {data,error} = await supabase.from("lm_quotes").select("*").order("date",{ascending:false}); if(error) throw error; return (data||[]).map(mapQuote); },
@@ -1164,7 +1164,41 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     await sendCrossNotif(db, setNotifs, {title:"📎 Comprobante subido", body:`${currentUser.name} subió un comprobante de pago (${ord.client})`, tag:`comp-${id}`, para:"admin", de:currentUser.name});
   };
 
-  // ── EDIT REQUEST FLOW ─────────────────────────────────────────────────────
+  // ── PAGO EN EFECTIVO ─────────────────────────────────────────────────────────
+  // Fase 1 (vendedor): solicita registrar efectivo → queda en "efectivo_pendiente"
+  const marcarEfectivo = async (id) => {
+    const updated = orders.map(o=>o.id===id ? {...o, pagoTipo:"efectivo_pendiente", pagoEfectivoFecha:today()} : o);
+    setOrders(updated);
+    const ord = updated.find(o=>o.id===id);
+    const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
+    await db.upsertOrder(ord);
+    if(isSandboxOrder) { sendLocalNotif("💵 Efectivo registrado", "Esperando confirmación del admin", `ef-pend-${id}`); return; }
+    await sendCrossNotif(db, setNotifs, {title:"💵 Pago en efectivo", body:`${currentUser.name} registró pago en efectivo (${ord.client})`, tag:`ef-pend-${id}`, para:"admin", de:currentUser.name});
+  };
+
+  // Fase 2a (admin): confirma el efectivo
+  const confirmarEfectivo = async (id) => {
+    const updated = orders.map(o=>o.id===id ? {...o, pagoTipo:"efectivo"} : o);
+    setOrders(updated);
+    const ord = updated.find(o=>o.id===id);
+    const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
+    await db.upsertOrder(ord);
+    if(isSandboxOrder) return;
+    await sendCrossNotif(db, setNotifs, {title:"✅ Efectivo confirmado", body:`El admin confirmó el pago en efectivo del pedido de ${ord.client}`, tag:`ef-ok-${id}`, para:ord.vendedor||"", de:"admin"});
+  };
+
+  // Fase 2b (admin): rechaza el efectivo → vuelve a sin pago
+  const rechazarEfectivo = async (id) => {
+    const updated = orders.map(o=>o.id===id ? {...o, pagoTipo:"", pagoEfectivoFecha:""} : o);
+    setOrders(updated);
+    const ord = updated.find(o=>o.id===id);
+    const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
+    await db.upsertOrder(ord);
+    if(isSandboxOrder) return;
+    await sendCrossNotif(db, setNotifs, {title:"❌ Efectivo no confirmado", body:`El admin no pudo confirmar el pago en efectivo del pedido de ${ord.client}`, tag:`ef-no-${id}`, para:ord.vendedor||"", de:"admin"});
+  };
+
+
   // Fase 1: vendedor solicita edición
   const requestEdit = async (id, reason) => {
     const updated = orders.map(o=>o.id===id ? {...o, editStatus:"solicitada", editReason:reason} : o);
@@ -1670,6 +1704,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
           onRequestEdit={requestEdit} onApproveEditRequest={approveEditRequest} onRejectEditRequest={rejectEditRequest}
           onSubmitEdit={submitEdit} onApproveEdit={approveEdit} onRejectEdit={rejectEdit}
           onUploadComprobante={uploadComprobante}
+          onMarcarEfectivo={marcarEfectivo} onConfirmarEfectivo={confirmarEfectivo} onRechazarEfectivo={rechazarEfectivo}
           currentUser={currentUser} isMobile={isMobile}/>}
         {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} promos={promos}/>}
         {tab==="clientes"   && <ClientesPanel clients={clients} onSave={saveClient} onDelete={deleteClient} onRequestDelete={requestDeleteClient} currentUser={currentUser} isMobile={isMobile} orders={orders}/>}
@@ -1820,7 +1855,7 @@ function CompPopup({order, onClose}) {
 
 
 // ─── CENTRAL ──────────────────────────────────────────────────────────────────
-function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,currentUser,isMobile}) {
+function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,onMarcarEfectivo,onConfirmarEfectivo,onRechazarEfectivo,currentUser,isMobile}) {
   const [fStage,setFStage]=useState("todos");
   const [fVendedor,setFVendedor]=useState("todos");
   const [search,setSearch]=useState("");
@@ -1858,7 +1893,7 @@ function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onAppro
       </div>
       {filtered.length===0
         ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{fontSize:48}}>📭</div><div style={{marginTop:8}}>No hay pedidos. !Creá uno desde "Nuevo Pedido"!</div></div>
-        : filtered.map(o=><OCard key={o.id} o={o} exp={expanded===o.id} toggle={()=>setExpanded(expanded===o.id?null:o.id)} getP={getP} onStage={onStage} onDel={onDel} onSaveNote={onSaveNote} onRequestEdit={onRequestEdit} onApproveEditRequest={onApproveEditRequest} onRejectEditRequest={onRejectEditRequest} onSubmitEdit={onSubmitEdit} onApproveEdit={onApproveEdit} onRejectEdit={onRejectEdit} onUploadComprobante={onUploadComprobante} currentUser={currentUser} products={products}/>)
+        : filtered.map(o=><OCard key={o.id} o={o} exp={expanded===o.id} toggle={()=>setExpanded(expanded===o.id?null:o.id)} getP={getP} onStage={onStage} onDel={onDel} onSaveNote={onSaveNote} onRequestEdit={onRequestEdit} onApproveEditRequest={onApproveEditRequest} onRejectEditRequest={onRejectEditRequest} onSubmitEdit={onSubmitEdit} onApproveEdit={onApproveEdit} onRejectEdit={onRejectEdit} onUploadComprobante={onUploadComprobante} onMarcarEfectivo={onMarcarEfectivo} onConfirmarEfectivo={onConfirmarEfectivo} onRechazarEfectivo={onRechazarEfectivo} currentUser={currentUser} products={products}/>)
       }
     </div>
   );
@@ -1876,7 +1911,7 @@ function DelBtn({onConfirm}) {
   return <button onClick={()=>setConfirm(true)} style={{marginLeft:"auto",padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>🗑 Eliminar</button>;
 }
 
-function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,currentUser,products}) {
+function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,onMarcarEfectivo,onConfirmarEfectivo,onRechazarEfectivo,currentUser,products}) {
   const isAdmin = currentUser?.role === "admin";
   const idx=STAGES.indexOf(o.stage), next=STAGES[idx+1];
   const [editNote,setEditNote]=useState(false);
@@ -1895,6 +1930,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
   const [showFinalReject, setShowFinalReject] = useState(false);
   const [finalRejectReason, setFinalRejectReason] = useState("");
   const [saving, setSaving]               = useState(false);
+  const [savingEfectivo, setSavingEfectivo] = useState(false);
 
   const es = o.editStatus || "";
 
@@ -1958,7 +1994,12 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
             <span>{o.date}</span>
             {o.vendedor&&<span>· 👤 {o.vendedor}</span>}
             {o.internalNote&&<span style={{color:"#e67e22"}}>· 📝 Nota</span>}
-            {o.comprobanteUrl&&<span style={{color:"#1e8449"}}>· 📎 Comprobante</span>}
+            {/* Pago — badge inline (Opción A) */}
+            {o.pagoTipo==="comprobante"       && <span style={{background:"#eafaf1",color:"#1e8449",border:"1px solid #a9dfbf",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}>📎 Comprobante</span>}
+            {o.pagoTipo==="efectivo_pendiente" && <span style={{background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}>💵 Efectivo · pendiente</span>}
+            {o.pagoTipo==="efectivo"           && <span style={{background:"#eafaf1",color:"#1e8449",border:"1px solid #a9dfbf",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}>💵 Efectivo · confirmado</span>}
+            {/* Comprobante legacy (campo viejo) */}
+            {!o.pagoTipo && o.comprobanteUrl   && <span style={{background:"#eafaf1",color:"#1e8449",border:"1px solid #a9dfbf",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}>📎 Comprobante</span>}
             <EditBdg/>
           </div>
         </div>
@@ -2204,40 +2245,108 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
             )}
           </div>
 
-          {/* COMPROBANTE DE PAGO */}
-          <div style={{background:"#eafaf1",border:"1.5px solid #a9dfbf",borderRadius:10,padding:"10px 14px",marginBottom:14}} onClick={e=>e.stopPropagation()}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:o.comprobanteUrl||uploadingComp?8:0,flexWrap:"wrap",gap:6}}>
-              <span style={{fontSize:12,fontWeight:700,color:"#1e8449"}}>📎 Comprobante de pago</span>
-              {!uploadingComp && (
-                <button onClick={()=>compFileRef.current.click()}
-                  style={{padding:"3px 10px",borderRadius:6,border:"1px solid #a9dfbf",background:"#fff",color:"#1e8449",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                  {o.comprobanteUrl?"🔄 Reemplazar":"+ Subir comprobante"}
-                </button>
-              )}
-              <input ref={compFileRef} type="file" accept="image/*,.pdf" onChange={handleCompFile} style={{display:"none"}}/>
-            </div>
-            {uploadingComp ? (
-              <div style={{fontSize:13,color:"#1e8449",display:"flex",alignItems:"center",gap:8}}>
-                <div style={{width:16,height:16,borderRadius:"50%",border:"2.5px solid #a9dfbf",borderTop:"2.5px solid #1e8449",animation:"lm-spin 0.8s linear infinite"}}/>
-                Subiendo...
-                <style>{`@keyframes lm-spin{to{transform:rotate(360deg)}}`}</style>
+          {/* ── PAGO (Opción B — panel en el expandido) ── */}
+          <div style={{background:"#f8fffe",border:"1.5px solid #a9dfbf",borderRadius:10,padding:"10px 14px",marginBottom:14}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:12,fontWeight:700,color:"#1e8449",marginBottom:8}}>💳 Pago</div>
+
+            {/* ── Sin pago registrado: dos opciones ── */}
+            {!o.pagoTipo && !o.comprobanteUrl && (
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <label style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,border:"1px solid #a9dfbf",background:"#fff",color:"#1e8449",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                  <input ref={compFileRef} type="file" accept="image/*,.pdf" onChange={handleCompFile} style={{display:"none"}}/>
+                  {uploadingComp
+                    ? <><div style={{width:13,height:13,borderRadius:"50%",border:"2px solid #a9dfbf",borderTop:"2px solid #1e8449",animation:"lm-spin 0.8s linear infinite",flexShrink:0}}/><style>{`@keyframes lm-spin{to{transform:rotate(360deg)}}`}</style>Subiendo...</>
+                    : <>📎 Subir comprobante</>
+                  }
+                </label>
+                {!isAdmin && (
+                  <button disabled={savingEfectivo}
+                    onClick={async()=>{setSavingEfectivo(true);try{await onMarcarEfectivo(o.id);}catch(e){console.warn(e);alert("No se pudo registrar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
+                    style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,border:"1px solid #f0d080",background:"#fff",color:"#b7770d",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                    💵 Pago en efectivo
+                  </button>
+                )}
               </div>
-            ) : o.comprobanteUrl ? (
-              <div style={{display:"flex",alignItems:"center",gap:10}}>
-                {/\.(jpe?g|png|gif|webp)$/i.test(o.comprobanteUrl)
-                  ? <img src={o.comprobanteUrl} alt="comprobante" style={{width:48,height:48,borderRadius:8,objectFit:"cover",border:"1.5px solid #a9dfbf",flexShrink:0}}/>
-                  : <div style={{width:48,height:48,borderRadius:8,border:"1.5px solid #a9dfbf",background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📄</div>}
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:12,color:"#1e8449",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.comprobanteNombre||"Comprobante"}</div>
-                  <div style={{fontSize:11,color:"#888"}}>{o.comprobanteFecha&&`Subido el ${o.comprobanteFecha}`}</div>
+            )}
+
+            {/* ── Comprobante subido (flujo original + campo pagoTipo="comprobante") ── */}
+            {(o.pagoTipo==="comprobante" || (!o.pagoTipo && o.comprobanteUrl)) && (
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  {/\.(jpe?g|png|gif|webp)$/i.test(o.comprobanteUrl)
+                    ? <img src={o.comprobanteUrl} alt="comprobante" style={{width:48,height:48,borderRadius:8,objectFit:"cover",border:"1.5px solid #a9dfbf",flexShrink:0}}/>
+                    : <div style={{width:48,height:48,borderRadius:8,border:"1.5px solid #a9dfbf",background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📄</div>}
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,color:"#1e8449",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.comprobanteNombre||"Comprobante"}</div>
+                    <div style={{fontSize:11,color:"#888"}}>{o.comprobanteFecha&&`Subido el ${o.comprobanteFecha}`}</div>
+                  </div>
+                  <a href={o.comprobanteUrl} target="_blank" rel="noopener noreferrer"
+                    style={{padding:"5px 10px",borderRadius:6,border:"1px solid #a9dfbf",background:"#fff",color:"#1e8449",fontSize:11,fontWeight:700,textDecoration:"none",flexShrink:0}}>
+                    👁️ Ver
+                  </a>
                 </div>
-                <a href={o.comprobanteUrl} target="_blank" rel="noopener noreferrer"
-                  style={{padding:"5px 10px",borderRadius:6,border:"1px solid #a9dfbf",background:"#fff",color:"#1e8449",fontSize:11,fontWeight:700,textDecoration:"none",flexShrink:0}}>
-                  👁️ Ver
-                </a>
+                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                  <label style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:6,border:"1px solid #a9dfbf",background:"#fff",color:"#1e8449",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                    <input ref={compFileRef} type="file" accept="image/*,.pdf" onChange={handleCompFile} style={{display:"none"}}/>
+                    {uploadingComp
+                      ? <><div style={{width:11,height:11,borderRadius:"50%",border:"2px solid #a9dfbf",borderTop:"2px solid #1e8449",animation:"lm-spin 0.8s linear infinite"}}/> Subiendo...</>
+                      : <>🔄 Reemplazar</>}
+                  </label>
+                </div>
               </div>
-            ) : (
-              <div style={{fontSize:13,color:"#888",fontStyle:"italic"}}>Sin comprobante</div>
+            )}
+
+            {/* ── Efectivo pendiente: vendedor espera, admin decide ── */}
+            {o.pagoTipo==="efectivo_pendiente" && (
+              <div>
+                {isAdmin ? (
+                  // Admin: ve los botones de aprobar/rechazar
+                  <div>
+                    <div style={{fontSize:13,color:"#b7770d",marginBottom:10}}>
+                      💵 <strong>{o.vendedor}</strong> registró pago en efectivo{o.pagoEfectivoFecha&&` el ${o.pagoEfectivoFecha}`}. ¿Confirmás?
+                    </div>
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                      <button disabled={savingEfectivo}
+                        onClick={async()=>{setSavingEfectivo(true);try{await onConfirmarEfectivo(o.id);}catch(e){console.warn(e);alert("No se pudo confirmar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
+                        style={{padding:"7px 16px",borderRadius:7,border:"none",background:"#1e8449",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                        {savingEfectivo?"Guardando...":"✅ Confirmar efectivo"}
+                      </button>
+                      <button disabled={savingEfectivo}
+                        onClick={async()=>{setSavingEfectivo(true);try{await onRechazarEfectivo(o.id);}catch(e){console.warn(e);alert("No se pudo rechazar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
+                        style={{padding:"7px 16px",borderRadius:7,border:"1.5px solid #f1948a",background:"#fff",color:"#c0392b",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                        ❌ No confirmar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  // Vendedor: solo ve el estado pendiente
+                  <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#fef9e7",border:"1px solid #f0d080",borderRadius:8}}>
+                    <span style={{fontSize:18}}>💵</span>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:700,color:"#b7770d"}}>Pago en efectivo registrado</div>
+                      <div style={{fontSize:11,color:"#888"}}>Esperando confirmación del admin{o.pagoEfectivoFecha&&` · ${o.pagoEfectivoFecha}`}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Efectivo confirmado ── */}
+            {o.pagoTipo==="efectivo" && (
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#eafaf1",border:"1px solid #a9dfbf",borderRadius:8}}>
+                <span style={{fontSize:18}}>💵</span>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"#1e8449"}}>Pago en efectivo confirmado</div>
+                  <div style={{fontSize:11,color:"#888"}}>{o.pagoEfectivoFecha&&`Registrado el ${o.pagoEfectivoFecha}`}</div>
+                </div>
+                {isAdmin && (
+                  <button disabled={savingEfectivo}
+                    onClick={async()=>{setSavingEfectivo(true);try{await onRechazarEfectivo(o.id);}catch(e){console.warn(e);}finally{setSavingEfectivo(false);}}}
+                    style={{padding:"4px 8px",borderRadius:6,border:"1px solid #f1948a",background:"#fff",color:"#c0392b",fontSize:10,fontWeight:700,cursor:"pointer",flexShrink:0}}>
+                    Anular
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
