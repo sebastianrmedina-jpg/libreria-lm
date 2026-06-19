@@ -22,7 +22,7 @@ const supabase = createClient(SUPA_URL, SUPA_ANON);
 const supaAdmin = supabase;
 
 const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock});
-const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||"",isTest:r.is_test||false,isSandbox:r.is_sandbox||false,internalNote:r.internal_note||"",editStatus:r.edit_status||"",editReason:r.edit_reason||"",editItems:r.edit_items||null,editRejectReason:r.edit_reject_reason||"",comprobanteUrl:r.comprobante_url||"",comprobanteNombre:r.comprobante_nombre||"",comprobanteFecha:r.comprobante_fecha||""});
+const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||"",isTest:r.is_test||false,isSandbox:r.is_sandbox||false,internalNote:r.internal_note||"",editStatus:r.edit_status||"",editReason:r.edit_reason||"",editItems:r.edit_items||null,editRejectReason:r.edit_reject_reason||"",comprobanteUrl:r.comprobante_url||"",comprobanteNombre:r.comprobante_nombre||"",comprobanteFecha:r.comprobante_fecha||"",pagoTipo:r.pago_tipo||"",pagoEfectivoFecha:r.pago_efectivo_fecha||""});
 const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,date:r.date,items:r.items||[],validity:r.validity||"",docNum:r.doc_num||"",convertida:r.convertida||false,ordenId:r.orden_id||"",extendida:r.extendida||false,extendReason:r.extend_reason||"",extendDate:r.extend_date||"",globalDisc:r.global_disc||null,subtotal:r.subtotal||0});
 
 
@@ -128,7 +128,7 @@ const db = {
   deleteProduct: async (id) => { const {error} = await supaAdmin.from("lm_products").delete().eq("id",id); if(error) throw error; },
 
   getOrders:    async () => { const {data,error} = await supabase.from("lm_orders").select("*").order("date",{ascending:false}); if(error) throw error; return (data||[]).map(mapOrder); },
-  upsertOrder:  async (o) => { const {error} = await supaAdmin.from("lm_orders").upsert({id:o.id,client:o.client,vendedor:o.vendedor||"",notes:o.notes||"",total:o.total,stage:o.stage,date:o.date,items:o.items,doc_num:o.docNum||"",comp_num:o.compNum||"",is_test:o.isTest||false,is_sandbox:o.isSandbox||false,internal_note:o.internalNote||"",edit_status:o.editStatus||"",edit_reason:o.editReason||"",edit_items:o.editItems||null,edit_reject_reason:o.editRejectReason||"",comprobante_url:o.comprobanteUrl||"",comprobante_nombre:o.comprobanteNombre||"",comprobante_fecha:o.comprobanteFecha||""}); if(error) throw error; },
+  upsertOrder:  async (o) => { const {error} = await supaAdmin.from("lm_orders").upsert({id:o.id,client:o.client,vendedor:o.vendedor||"",notes:o.notes||"",total:o.total,stage:o.stage,date:o.date,items:o.items,doc_num:o.docNum||"",comp_num:o.compNum||"",is_test:o.isTest||false,is_sandbox:o.isSandbox||false,internal_note:o.internalNote||"",edit_status:o.editStatus||"",edit_reason:o.editReason||"",edit_items:o.editItems||null,edit_reject_reason:o.editRejectReason||"",comprobante_url:o.comprobanteUrl||"",comprobante_nombre:o.comprobanteNombre||"",comprobante_fecha:o.comprobanteFecha||"",pago_tipo:o.pagoTipo||"",pago_efectivo_fecha:o.pagoEfectivoFecha||""}); if(error) throw error; },
   deleteOrder:  async (id) => { const {error} = await supaAdmin.from("lm_orders").delete().eq("id",id); if(error) throw error; },
 
   getQuotes:    async () => { const {data,error} = await supabase.from("lm_quotes").select("*").order("date",{ascending:false}); if(error) throw error; return (data||[]).map(mapQuote); },
@@ -178,6 +178,16 @@ const db = {
   getPromos:    async () => { try { const {data,error} = await supabase.from("lm_promos").select("*").order("created_at",{ascending:false}); if(error) throw error; return (data||[]).map(r=>({id:r.id,tipo:r.tipo,nombre:r.nombre,activa:r.activa!==false,vigenciaDesde:r.vigencia_desde||"",vigenciaHasta:r.vigencia_hasta||"",data:r.data||{},createdAt:r.created_at||""})); } catch(e) { console.warn("getPromos:", e); return []; } },
   savePromo:    async (p) => { const {error} = await supaAdmin.from("lm_promos").upsert({id:p.id,tipo:p.tipo,nombre:p.nombre,activa:p.activa!==false,vigencia_desde:p.vigenciaDesde||"",vigencia_hasta:p.vigenciaHasta||"",data:p.data||{},created_at:p.createdAt||new Date().toISOString()}); if(error) throw error; },
   deletePromo:  async (id) => { const {error} = await supaAdmin.from("lm_promos").delete().eq("id",id); if(error) throw error; },
+  // Configuracion global de la app (un solo registro con id="global")
+  // SQL: CREATE TABLE lm_settings (id TEXT PRIMARY KEY DEFAULT 'global', exigir_pago_confirmado BOOLEAN DEFAULT false);
+  getSettings:  async () => {
+    try {
+      const {data,error} = await supabase.from("lm_settings").select("*").eq("id","global").maybeSingle();
+      if(error) throw error;
+      return {exigirPagoConfirmado: data?.exigir_pago_confirmado || false};
+    } catch(e) { console.warn("getSettings:", e); return {exigirPagoConfirmado:false}; }
+  },
+  saveSettings: async (s) => { const {error} = await supaAdmin.from("lm_settings").upsert({id:"global", exigir_pago_confirmado:s.exigirPagoConfirmado||false}); if(error) throw error; },
 };
 
 const RED = "#c0392b", REDD = "#922b21";
@@ -907,18 +917,19 @@ export default function App() {
   const [notifs, setNotifs]     = useState([]);
   const [clients, setClients]   = useState([]);
   const [promos, setPromos]     = useState([]);
+  const [settings, setSettings] = useState({exigirPagoConfirmado:false});
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(null);
 
   useEffect(() => {
     async function loadAll() {
       try {
-        const [u,v,p,o,q,sl,act,pl,po,n,cl,pr] = await Promise.all([
+        const [u,v,p,o,q,sl,act,pl,po,n,cl,pr,st] = await Promise.all([
           db.getUsers(), db.getVendors(), db.getProducts(),
-          db.getOrders(), db.getQuotes(), db.getStockLog(), db.getActivity(), db.getPriceLists(), db.getPurchaseOrders(), db.getNotifs(), db.getClients(), db.getPromos(),
+          db.getOrders(), db.getQuotes(), db.getStockLog(), db.getActivity(), db.getPriceLists(), db.getPurchaseOrders(), db.getNotifs(), db.getClients(), db.getPromos(), db.getSettings(),
         ]);
         setUsers(u); setVendors(v); setProducts(p);
-        setOrders(o); setQuotes(q); setStockLog(sl); setActivity(act); setPriceLists(pl); setPurchaseOrders(po); setNotifs(n); setClients(cl); setPromos(pr);
+        setOrders(o); setQuotes(q); setStockLog(sl); setActivity(act); setPriceLists(pl); setPurchaseOrders(po); setNotifs(n); setClients(cl); setPromos(pr); setSettings(st);
         // Inicializar sandbox — recuperar de localStorage si existe, sino copiar stock real
         try {
           const saved = localStorage.getItem("lm_sandbox_stock");
@@ -1069,11 +1080,16 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   const addOrder = async (order) => {
     const test = isTestOrder(order.vendedor);
     const n = test ? 0 : await db.nextCounter("reserva");
-    const orderWithNum = {...order, docNum: test ? "TEST-000000" : fmtDocNum("Reserva", n), isTest: test, isSandbox: test};
+    // Cada pedido de prueba necesita un numero UNICO (no "TEST-000000" fijo para todos),
+    // sino el upsert en Supabase de un 2do/3er pedido sandbox colisiona con el anterior
+    // y el dashboard de Admin nunca llega a verlo.
+    const orderWithNum = {...order, docNum: test ? `TEST-${genId().slice(-6).toUpperCase()}` : fmtDocNum("Reserva", n), isTest: test, isSandbox: test};
     const isSandbox = test;
 
     if(isSandbox) {
-      // SANDBOX: solo en memoria + localStorage, no tocar Supabase ni notificaciones
+      // SANDBOX: el stock usa el paralelo en memoria/localStorage (nunca toca lm_products).
+      // El PEDIDO si se guarda en Supabase para que el admin pueda verlo en el Dashboard Demo
+      // desde cualquier dispositivo, sin generar notificaciones ni tocar el stock real.
       updateSandboxStock(prev => {
         const next = {...prev};
         orderWithNum.items.forEach(it => {
@@ -1082,8 +1098,9 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
         return next;
       });
       setOrders(o=>[{...orderWithNum, isSandbox: true},...o]);
+      await db.upsertOrder({...orderWithNum, isSandbox: true});
       if(!order.fromQuote) setTimeout(() => printDoc(orderWithNum, "reserva"), 400);
-      return; // ← no Supabase, no notifs, no push
+      return; // ← no notifs, no log de actividad, no toca stock real
     }
 
     // REAL: descontar stock, guardar en Supabase, notificar
@@ -1108,7 +1125,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     if(stage === "confirmado" && !ord.compNum) {
       const test = isTestOrder(ord.vendedor);
       const n = test ? 0 : await db.nextCounter("comp");
-      updated = {...updated, compNum: test ? "TEST-000000" : fmtDocNum("Comp", n), isTest: test};
+      updated = {...updated, compNum: test ? `TEST-${genId().slice(-6).toUpperCase()}` : fmtDocNum("Comp", n), isTest: test};
     }
 
     setOrders(o=>o.map(x=>x.id===id?updated:x));
@@ -1160,16 +1177,80 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     await db.upsertOrder(ord);
   };
 
-  // Comprobante de pago — opcional, un solo archivo por pedido, lo puede subir admin o vendedor
+  // Comprobante de pago — opcional, un solo archivo por pedido. Queda "pendiente" hasta que el admin lo confirme o rechace.
   const uploadComprobante = async (id, {url, nombre, fecha}) => {
-    const updated = orders.map(o=>o.id===id ? {...o, comprobanteUrl:url, comprobanteNombre:nombre, comprobanteFecha:fecha} : o);
+    const updated = orders.map(o=>o.id===id ? {...o, comprobanteUrl:url, comprobanteNombre:nombre, comprobanteFecha:fecha, pagoTipo:"comprobante_pendiente"} : o);
     setOrders(updated);
     const ord = updated.find(o=>o.id===id);
     await db.upsertOrder(ord);
     // Avisar al admin (salvo en pedidos de prueba/sandbox, o si quien sube ya es el admin)
     const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
-    if(isSandboxOrder || currentUser.role==="admin") return;
+    if(isSandboxOrder) { sendLocalNotif("📎 Comprobante subido", "Esperando confirmación del admin", `comp-${id}`); return; }
+    if(currentUser.role==="admin") return;
     await sendCrossNotif(db, setNotifs, {title:"📎 Comprobante subido", body:`${currentUser.name} subió un comprobante de pago (${ord.client})`, tag:`comp-${id}`, para:"admin", de:currentUser.name});
+  };
+
+  // Admin confirma que el comprobante es correcto
+  const confirmarComprobante = async (id) => {
+    const updated = orders.map(o=>o.id===id ? {...o, pagoTipo:"comprobante_confirmado"} : o);
+    setOrders(updated);
+    const ord = updated.find(o=>o.id===id);
+    const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
+    await db.upsertOrder(ord);
+    if(isSandboxOrder) return;
+    await sendCrossNotif(db, setNotifs, {title:"✅ Comprobante confirmado", body:`El admin confirmó el comprobante del pedido de ${ord.client}`, tag:`comp-ok-${id}`, para:ord.vendedor||"", de:"admin"});
+  };
+
+  // Admin rechaza el comprobante (motivo obligatorio) → vuelve a sin pago, el vendedor puede resubir
+  const rechazarComprobante = async (id, motivo) => {
+    const updated = orders.map(o=>o.id===id ? {...o, pagoTipo:"", comprobanteUrl:"", comprobanteNombre:"", comprobanteFecha:""} : o);
+    setOrders(updated);
+    const ord = updated.find(o=>o.id===id);
+    const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
+    await db.upsertOrder(ord);
+    if(isSandboxOrder) return;
+    await sendCrossNotif(db, setNotifs, {title:"❌ Comprobante rechazado", body:`El admin rechazó el comprobante del pedido de ${ord.client}: "${motivo}"`, tag:`comp-no-${id}`, para:ord.vendedor||"", de:"admin"});
+  };
+
+  // ── PAGO EN EFECTIVO ─────────────────────────────────────────────────────────
+  // Fase 1 (vendedor): solicita registrar efectivo → queda en "efectivo_pendiente"
+  const marcarEfectivo = async (id) => {
+    const updated = orders.map(o=>o.id===id ? {...o, pagoTipo:"efectivo_pendiente", pagoEfectivoFecha:today()} : o);
+    setOrders(updated);
+    const ord = updated.find(o=>o.id===id);
+    const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
+    await db.upsertOrder(ord);
+    if(isSandboxOrder) { sendLocalNotif("💵 Efectivo registrado", "Esperando confirmación del admin", `ef-pend-${id}`); return; }
+    await sendCrossNotif(db, setNotifs, {title:"💵 Pago en efectivo", body:`${currentUser.name} registró pago en efectivo (${ord.client})`, tag:`ef-pend-${id}`, para:"admin", de:currentUser.name});
+  };
+
+  // Fase 2a (admin): confirma el efectivo
+  const confirmarEfectivo = async (id) => {
+    const updated = orders.map(o=>o.id===id ? {...o, pagoTipo:"efectivo_confirmado"} : o);
+    setOrders(updated);
+    const ord = updated.find(o=>o.id===id);
+    const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
+    await db.upsertOrder(ord);
+    if(isSandboxOrder) return;
+    await sendCrossNotif(db, setNotifs, {title:"✅ Efectivo confirmado", body:`El admin confirmó el pago en efectivo del pedido de ${ord.client}`, tag:`ef-ok-${id}`, para:ord.vendedor||"", de:"admin"});
+  };
+
+  // Fase 2b (admin): rechaza el efectivo → vuelve a sin pago
+  const rechazarEfectivo = async (id) => {
+    const updated = orders.map(o=>o.id===id ? {...o, pagoTipo:"", pagoEfectivoFecha:""} : o);
+    setOrders(updated);
+    const ord = updated.find(o=>o.id===id);
+    const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
+    await db.upsertOrder(ord);
+    if(isSandboxOrder) return;
+    await sendCrossNotif(db, setNotifs, {title:"❌ Efectivo no confirmado", body:`El admin no pudo confirmar el pago en efectivo del pedido de ${ord.client}`, tag:`ef-no-${id}`, para:ord.vendedor||"", de:"admin"});
+  };
+
+  // ── CONFIGURACION GLOBAL: exigir pago confirmado para habilitar Entregar ────
+  const toggleExigirPago = async () => {
+    const next = {...settings, exigirPagoConfirmado: !settings.exigirPagoConfirmado};
+    setSettings(next);
+    await db.saveSettings(next);
   };
 
   // ── EDIT REQUEST FLOW ─────────────────────────────────────────────────────
@@ -1271,7 +1352,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   const addQuote = async (quote) => {
     const test = isTestOrder(quote.vendedor);
     const n = test ? 0 : await db.nextCounter("presu");
-    const quoteWithNum = {...quote, docNum: test ? "TEST-000000" : fmtDocNum("Presu", n), isTest: test};
+    const quoteWithNum = {...quote, docNum: test ? `TEST-${genId().slice(-6).toUpperCase()}` : fmtDocNum("Presu", n), isTest: test};
     setQuotes(q=>[quoteWithNum,...q]);
     if(!test) {
       await db.upsertQuote(quoteWithNum);
@@ -1678,6 +1759,9 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
           onRequestEdit={requestEdit} onApproveEditRequest={approveEditRequest} onRejectEditRequest={rejectEditRequest}
           onSubmitEdit={submitEdit} onApproveEdit={approveEdit} onRejectEdit={rejectEdit}
           onUploadComprobante={uploadComprobante}
+          onConfirmarComprobante={confirmarComprobante} onRechazarComprobante={rechazarComprobante}
+          onMarcarEfectivo={marcarEfectivo} onConfirmarEfectivo={confirmarEfectivo} onRechazarEfectivo={rechazarEfectivo}
+          exigirPagoConfirmado={settings.exigirPagoConfirmado}
           currentUser={currentUser} isMobile={isMobile}/>}
         {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} promos={promos}/>}
         {tab==="clientes"   && <ClientesPanel clients={clients} onSave={saveClient} onDelete={deleteClient} onRequestDelete={requestDeleteClient} currentUser={currentUser} isMobile={isMobile} orders={orders}/>}
@@ -1710,7 +1794,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
             });
           }}
         />}
-        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile} sandboxStock={sandboxStock} setSandboxStock={setSandboxStock} updateSandboxStock={updateSandboxStock} promos={promos} setPromos={setPromos}/>}
+        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile} sandboxStock={sandboxStock} setSandboxStock={setSandboxStock} updateSandboxStock={updateSandboxStock} promos={promos} setPromos={setPromos} settings={settings} onToggleExigirPago={toggleExigirPago} onConfirmarComprobante={confirmarComprobante} onRechazarComprobante={rechazarComprobante} onConfirmarEfectivo={confirmarEfectivo} onRechazarEfectivo={rechazarEfectivo}/>}
       </div>
     </div>
   );
@@ -1828,7 +1912,7 @@ function CompPopup({order, onClose}) {
 
 
 // ─── CENTRAL ──────────────────────────────────────────────────────────────────
-function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,currentUser,isMobile}) {
+function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,onConfirmarComprobante,onRechazarComprobante,onMarcarEfectivo,onConfirmarEfectivo,onRechazarEfectivo,exigirPagoConfirmado,currentUser,isMobile}) {
   const [fStage,setFStage]=useState("todos");
   const [fVendedor,setFVendedor]=useState("todos");
   const [search,setSearch]=useState("");
@@ -1866,7 +1950,7 @@ function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onAppro
       </div>
       {filtered.length===0
         ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{fontSize:48}}>📭</div><div style={{marginTop:8}}>No hay pedidos. !Creá uno desde "Nuevo Pedido"!</div></div>
-        : filtered.map(o=><OCard key={o.id} o={o} exp={expanded===o.id} toggle={()=>setExpanded(expanded===o.id?null:o.id)} getP={getP} onStage={onStage} onDel={onDel} onSaveNote={onSaveNote} onRequestEdit={onRequestEdit} onApproveEditRequest={onApproveEditRequest} onRejectEditRequest={onRejectEditRequest} onSubmitEdit={onSubmitEdit} onApproveEdit={onApproveEdit} onRejectEdit={onRejectEdit} onUploadComprobante={onUploadComprobante} currentUser={currentUser} products={products}/>)
+        : filtered.map(o=><OCard key={o.id} o={o} exp={expanded===o.id} toggle={()=>setExpanded(expanded===o.id?null:o.id)} getP={getP} onStage={onStage} onDel={onDel} onSaveNote={onSaveNote} onRequestEdit={onRequestEdit} onApproveEditRequest={onApproveEditRequest} onRejectEditRequest={onRejectEditRequest} onSubmitEdit={onSubmitEdit} onApproveEdit={onApproveEdit} onRejectEdit={onRejectEdit} onUploadComprobante={onUploadComprobante} onConfirmarComprobante={onConfirmarComprobante} onRechazarComprobante={onRechazarComprobante} onMarcarEfectivo={onMarcarEfectivo} onConfirmarEfectivo={onConfirmarEfectivo} onRechazarEfectivo={onRechazarEfectivo} exigirPagoConfirmado={exigirPagoConfirmado} currentUser={currentUser} products={products}/>)
       }
     </div>
   );
@@ -1884,9 +1968,11 @@ function DelBtn({onConfirm}) {
   return <button onClick={()=>setConfirm(true)} style={{marginLeft:"auto",padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>🗑 Eliminar</button>;
 }
 
-function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,currentUser,products}) {
+function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,onConfirmarComprobante,onRechazarComprobante,onMarcarEfectivo,onConfirmarEfectivo,onRechazarEfectivo,exigirPagoConfirmado,currentUser,products}) {
   const isAdmin = currentUser?.role === "admin";
   const idx=STAGES.indexOf(o.stage), next=STAGES[idx+1];
+  const pagoConfirmado = o.pagoTipo==="comprobante_confirmado" || o.pagoTipo==="efectivo_confirmado";
+  const entregaBloqueada = !!exigirPagoConfirmado && next==="entregado" && !pagoConfirmado;
   const [editNote,setEditNote]=useState(false);
   const [noteVal,setNoteVal]=useState(o.internalNote||"");
   const [uploadingComp, setUploadingComp] = useState(false);
@@ -1903,6 +1989,9 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
   const [showFinalReject, setShowFinalReject] = useState(false);
   const [finalRejectReason, setFinalRejectReason] = useState("");
   const [saving, setSaving]               = useState(false);
+  const [savingEfectivo, setSavingEfectivo] = useState(false);
+  const [showRejectComp, setShowRejectComp] = useState(false);
+  const [rejectCompMotivo, setRejectCompMotivo] = useState("");
 
   const es = o.editStatus || "";
 
@@ -1966,7 +2055,11 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
             <span>{o.date}</span>
             {o.vendedor&&<span>· 👤 {o.vendedor}</span>}
             {o.internalNote&&<span style={{color:"#e67e22"}}>· 📝 Nota</span>}
-            {o.comprobanteUrl&&<span style={{color:"#1e8449"}}>· 📎 Comprobante</span>}
+            {/* Pago — badge inline */}
+            {o.pagoTipo==="comprobante_pendiente"  && <span style={{background:"#eaf2f8",color:"#1a5276",border:"1px solid #aed6f1",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}>📎 Comprobante · pendiente</span>}
+            {o.pagoTipo==="comprobante_confirmado" && <span style={{background:"#eafaf1",color:"#1e8449",border:"1px solid #a9dfbf",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}>📎 Comprobante · OK</span>}
+            {o.pagoTipo==="efectivo_pendiente"     && <span style={{background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}>💵 Efectivo · pendiente</span>}
+            {o.pagoTipo==="efectivo_confirmado"    && <span style={{background:"#eafaf1",color:"#1e8449",border:"1px solid #a9dfbf",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}>💵 Efectivo · OK</span>}
             <EditBdg/>
           </div>
         </div>
@@ -2212,46 +2305,183 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
             )}
           </div>
 
-          {/* COMPROBANTE DE PAGO */}
-          <div style={{background:"#eafaf1",border:"1.5px solid #a9dfbf",borderRadius:10,padding:"10px 14px",marginBottom:14}} onClick={e=>e.stopPropagation()}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:o.comprobanteUrl||uploadingComp?8:0,flexWrap:"wrap",gap:6}}>
-              <span style={{fontSize:12,fontWeight:700,color:"#1e8449"}}>📎 Comprobante de pago</span>
-              {!uploadingComp && (
-                <button onClick={()=>compFileRef.current.click()}
-                  style={{padding:"3px 10px",borderRadius:6,border:"1px solid #a9dfbf",background:"#fff",color:"#1e8449",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                  {o.comprobanteUrl?"🔄 Reemplazar":"+ Subir comprobante"}
-                </button>
-              )}
-              <input ref={compFileRef} type="file" accept="image/*,.pdf" onChange={handleCompFile} style={{display:"none"}}/>
-            </div>
-            {uploadingComp ? (
-              <div style={{fontSize:13,color:"#1e8449",display:"flex",alignItems:"center",gap:8}}>
-                <div style={{width:16,height:16,borderRadius:"50%",border:"2.5px solid #a9dfbf",borderTop:"2.5px solid #1e8449",animation:"lm-spin 0.8s linear infinite"}}/>
-                Subiendo...
-                <style>{`@keyframes lm-spin{to{transform:rotate(360deg)}}`}</style>
+          {/* ── PAGO (comprobante digital + efectivo, ambos con aval del admin) ── */}
+          <div style={{background:"#f8fffe",border:"1.5px solid #a9dfbf",borderRadius:10,padding:"10px 14px",marginBottom:14}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:12,fontWeight:700,color:"#1e8449",marginBottom:8}}>💳 Pago</div>
+
+            {/* ── Sin pago registrado: dos opciones ── */}
+            {!o.pagoTipo && (
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <label style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,border:"1px solid #a9dfbf",background:"#fff",color:"#1e8449",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                  <input ref={compFileRef} type="file" accept="image/*,.pdf" onChange={handleCompFile} style={{display:"none"}}/>
+                  {uploadingComp
+                    ? <><div style={{width:13,height:13,borderRadius:"50%",border:"2px solid #a9dfbf",borderTop:"2px solid #1e8449",animation:"lm-spin 0.8s linear infinite",flexShrink:0}}/><style>{`@keyframes lm-spin{to{transform:rotate(360deg)}}`}</style>Subiendo...</>
+                    : <>📎 Subir comprobante</>
+                  }
+                </label>
+                {!isAdmin && (
+                  <button disabled={savingEfectivo}
+                    onClick={async()=>{setSavingEfectivo(true);try{await onMarcarEfectivo(o.id);}catch(e){console.warn(e);alert("No se pudo registrar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
+                    style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,border:"1px solid #f0d080",background:"#fff",color:"#b7770d",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                    💵 Pago en efectivo
+                  </button>
+                )}
               </div>
-            ) : o.comprobanteUrl ? (
-              <div style={{display:"flex",alignItems:"center",gap:10}}>
+            )}
+
+            {/* ── Comprobante pendiente de revisión ── */}
+            {o.pagoTipo==="comprobante_pendiente" && (
+              <div>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                  {/\.(jpe?g|png|gif|webp)$/i.test(o.comprobanteUrl)
+                    ? <img src={o.comprobanteUrl} alt="comprobante" style={{width:48,height:48,borderRadius:8,objectFit:"cover",border:"1.5px solid #aed6f1",flexShrink:0}}/>
+                    : <div style={{width:48,height:48,borderRadius:8,border:"1.5px solid #aed6f1",background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📄</div>}
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,color:"#1a5276",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.comprobanteNombre||"Comprobante"}</div>
+                    <div style={{fontSize:11,color:"#888"}}>{o.comprobanteFecha&&`Subido el ${o.comprobanteFecha}`} · monto del pedido: <strong>{fARS(o.total)}</strong></div>
+                  </div>
+                  <a href={o.comprobanteUrl} target="_blank" rel="noopener noreferrer"
+                    style={{padding:"5px 10px",borderRadius:6,border:"1px solid #aed6f1",background:"#fff",color:"#1a5276",fontSize:11,fontWeight:700,textDecoration:"none",flexShrink:0}}>
+                    👁️ Ver
+                  </a>
+                </div>
+
+                {isAdmin ? (!showRejectComp ? (
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                    <button disabled={savingEfectivo}
+                      onClick={async()=>{setSavingEfectivo(true);try{await onConfirmarComprobante(o.id);}catch(e){console.warn(e);alert("No se pudo confirmar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
+                      style={{padding:"7px 16px",borderRadius:7,border:"none",background:"#1e8449",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                      {savingEfectivo?"Guardando...":"✅ Confirmar — el pago es correcto"}
+                    </button>
+                    <button onClick={()=>setShowRejectComp(true)}
+                      style={{padding:"7px 16px",borderRadius:7,border:"1.5px solid #f1948a",background:"#fff",color:"#c0392b",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                      ❌ Rechazar
+                    </button>
+                    <label style={{display:"flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:7,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                      <input ref={compFileRef} type="file" accept="image/*,.pdf" onChange={handleCompFile} style={{display:"none"}}/>
+                      🔄 Reemplazar
+                    </label>
+                  </div>
+                ) : (
+                  <div style={{padding:"10px 12px",background:"#fdecea",borderRadius:8,border:"1px solid #f1948a"}}>
+                    <div style={{fontSize:11.5,fontWeight:700,color:"#c0392b",marginBottom:6}}>Motivo del rechazo (el vendedor lo va a ver)</div>
+                    <textarea value={rejectCompMotivo} onChange={e=>setRejectCompMotivo(e.target.value)} rows={2}
+                      placeholder="Ej: el monto no coincide, la imagen no se lee..."
+                      style={{width:"100%",padding:8,borderRadius:6,border:"1px solid #e5b4b0",fontSize:12.5,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box"}}/>
+                    <div style={{display:"flex",gap:8,marginTop:8}}>
+                      <button disabled={!rejectCompMotivo.trim()||savingEfectivo}
+                        onClick={async()=>{setSavingEfectivo(true);try{await onRechazarComprobante(o.id,rejectCompMotivo);setShowRejectComp(false);setRejectCompMotivo("");}catch(e){console.warn(e);alert("No se pudo rechazar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
+                        style={{padding:"6px 14px",borderRadius:7,border:"none",background:rejectCompMotivo.trim()?"#c0392b":"#e5b4b0",color:"#fff",fontWeight:700,fontSize:12,cursor:rejectCompMotivo.trim()?"pointer":"not-allowed"}}>
+                        Confirmar rechazo
+                      </button>
+                      <button onClick={()=>{setShowRejectComp(false);setRejectCompMotivo("");}}
+                        style={{padding:"6px 14px",borderRadius:7,border:"1px solid #ccc",background:"#fff",color:"#666",fontWeight:600,fontSize:12,cursor:"pointer"}}>
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )) : (
+                  <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#eaf2f8",border:"1px solid #aed6f1",borderRadius:8}}>
+                    <span style={{fontSize:18}}>📎</span>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:700,color:"#1a5276"}}>Comprobante en revisión</div>
+                      <div style={{fontSize:11,color:"#888"}}>Esperando confirmación del admin</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Comprobante confirmado ── */}
+            {o.pagoTipo==="comprobante_confirmado" && (
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#eafaf1",border:"1px solid #a9dfbf",borderRadius:8}}>
                 {/\.(jpe?g|png|gif|webp)$/i.test(o.comprobanteUrl)
-                  ? <img src={o.comprobanteUrl} alt="comprobante" style={{width:48,height:48,borderRadius:8,objectFit:"cover",border:"1.5px solid #a9dfbf",flexShrink:0}}/>
-                  : <div style={{width:48,height:48,borderRadius:8,border:"1.5px solid #a9dfbf",background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📄</div>}
+                  ? <img src={o.comprobanteUrl} alt="comprobante" style={{width:36,height:36,borderRadius:7,objectFit:"cover",border:"1.5px solid #a9dfbf",flexShrink:0}}/>
+                  : <span style={{fontSize:18}}>📎</span>}
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:12,color:"#1e8449",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.comprobanteNombre||"Comprobante"}</div>
+                  <div style={{fontSize:12,fontWeight:700,color:"#1e8449"}}>Comprobante confirmado</div>
                   <div style={{fontSize:11,color:"#888"}}>{o.comprobanteFecha&&`Subido el ${o.comprobanteFecha}`}</div>
                 </div>
                 <a href={o.comprobanteUrl} target="_blank" rel="noopener noreferrer"
-                  style={{padding:"5px 10px",borderRadius:6,border:"1px solid #a9dfbf",background:"#fff",color:"#1e8449",fontSize:11,fontWeight:700,textDecoration:"none",flexShrink:0}}>
+                  style={{padding:"4px 8px",borderRadius:6,border:"1px solid #a9dfbf",background:"#fff",color:"#1e8449",fontSize:10,fontWeight:700,textDecoration:"none",flexShrink:0}}>
                   👁️ Ver
                 </a>
+                {isAdmin && (
+                  <button disabled={savingEfectivo}
+                    onClick={async()=>{setSavingEfectivo(true);try{await onRechazarComprobante(o.id,"Anulado por el admin");}catch(e){console.warn(e);}finally{setSavingEfectivo(false);}}}
+                    style={{padding:"4px 8px",borderRadius:6,border:"1px solid #f1948a",background:"#fff",color:"#c0392b",fontSize:10,fontWeight:700,cursor:"pointer",flexShrink:0}}>
+                    Anular
+                  </button>
+                )}
               </div>
-            ) : (
-              <div style={{fontSize:13,color:"#888",fontStyle:"italic"}}>Sin comprobante</div>
+            )}
+
+            {/* ── Efectivo pendiente: vendedor espera, admin decide ── */}
+            {o.pagoTipo==="efectivo_pendiente" && (
+              <div>
+                {isAdmin ? (
+                  <div>
+                    <div style={{fontSize:13,color:"#b7770d",marginBottom:10}}>
+                      💵 <strong>{o.vendedor}</strong> registró pago en efectivo{o.pagoEfectivoFecha&&` el ${o.pagoEfectivoFecha}`} por <strong>{fARS(o.total)}</strong>. ¿Confirmás?
+                    </div>
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                      <button disabled={savingEfectivo}
+                        onClick={async()=>{setSavingEfectivo(true);try{await onConfirmarEfectivo(o.id);}catch(e){console.warn(e);alert("No se pudo confirmar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
+                        style={{padding:"7px 16px",borderRadius:7,border:"none",background:"#1e8449",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                        {savingEfectivo?"Guardando...":"✅ Confirmar efectivo"}
+                      </button>
+                      <button disabled={savingEfectivo}
+                        onClick={async()=>{setSavingEfectivo(true);try{await onRechazarEfectivo(o.id);}catch(e){console.warn(e);alert("No se pudo rechazar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
+                        style={{padding:"7px 16px",borderRadius:7,border:"1.5px solid #f1948a",background:"#fff",color:"#c0392b",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                        ❌ No confirmar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#fef9e7",border:"1px solid #f0d080",borderRadius:8}}>
+                    <span style={{fontSize:18}}>💵</span>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:700,color:"#b7770d"}}>Pago en efectivo registrado</div>
+                      <div style={{fontSize:11,color:"#888"}}>Esperando confirmación del admin{o.pagoEfectivoFecha&&` · ${o.pagoEfectivoFecha}`}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Efectivo confirmado ── */}
+            {o.pagoTipo==="efectivo_confirmado" && (
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#eafaf1",border:"1px solid #a9dfbf",borderRadius:8}}>
+                <span style={{fontSize:18}}>💵</span>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"#1e8449"}}>Pago en efectivo confirmado</div>
+                  <div style={{fontSize:11,color:"#888"}}>{o.pagoEfectivoFecha&&`Registrado el ${o.pagoEfectivoFecha}`}</div>
+                </div>
+                {isAdmin && (
+                  <button disabled={savingEfectivo}
+                    onClick={async()=>{setSavingEfectivo(true);try{await onRechazarEfectivo(o.id);}catch(e){console.warn(e);}finally{setSavingEfectivo(false);}}}
+                    style={{padding:"4px 8px",borderRadius:6,border:"1px solid #f1948a",background:"#fff",color:"#c0392b",fontSize:10,fontWeight:700,cursor:"pointer",flexShrink:0}}>
+                    Anular
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
           {/* ACTIONS */}
           <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-            {next&&!es&&<button onClick={()=>onStage(o.id,next)} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",background:SCFG[next].color,color:"#fff",fontWeight:700,fontSize:13}}>{SCFG[next].icon} Pasar a {SCFG[next].label}</button>}
+            {next && !es && entregaBloqueada ? (
+              <div style={{width:"100%"}}>
+                <button disabled style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"not-allowed",background:"#e8e8e8",color:"#aaa",fontWeight:700,fontSize:13}}>
+                  🔒 {SCFG[next].label} (bloqueado)
+                </button>
+                <div style={{fontSize:11.5,color:"#b7770d",marginTop:5}}>
+                  ⚠️ Esperando confirmación de pago para habilitar la entrega
+                </div>
+              </div>
+            ) : (
+              next&&!es&&<button onClick={()=>onStage(o.id,next)} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",background:SCFG[next].color,color:"#fff",fontWeight:700,fontSize:13}}>{SCFG[next].icon} Pasar a {SCFG[next].label}</button>
+            )}
             {idx>0&&o.stage!=="entregado"&&!es&&<button onClick={()=>onStage(o.id,STAGES[idx-1])} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",cursor:"pointer",background:"#fff",color:"#666",fontWeight:600,fontSize:13}}>← Retroceder</button>}
             <button onClick={()=>printDoc(o, o.stage==="reserva"?"reserva":"confirmado")} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #d6eaf8",cursor:"pointer",background:"#fff",color:"#1a5276",fontWeight:600,fontSize:13}}>
               🖨️ {o.stage==="reserva"?(o.docNum||"Imprimir"):(o.compNum||"Imprimir")}
@@ -4986,12 +5216,191 @@ function SandboxStockManager({products, sandboxStock, updateSandboxStock}) {
 }
 
 // ─── ADMIN PANEL ──────────────────────────────────────────────────────────────
-function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,priceLists,setPriceLists,isMobile,sandboxStock,setSandboxStock,updateSandboxStock,promos,setPromos}) {
+// ─── PAGOS — cola centralizada de revisión de comprobantes y efectivo ─────────
+function PagosPanel({orders, onConfirmarComprobante, onRechazarComprobante, onConfirmarEfectivo, onRechazarEfectivo, settings, onToggleExigirPago}) {
+  const [tab, setTab] = useState("pendientes");
+  const [busyId, setBusyId] = useState(null);
+  const [rejectId, setRejectId] = useState(null);
+  const [rejectMotivo, setRejectMotivo] = useState("");
+
+  const pendientes = orders.filter(o=>o.pagoTipo==="comprobante_pendiente"||o.pagoTipo==="efectivo_pendiente")
+    .sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  const confirmados = orders.filter(o=>o.pagoTipo==="comprobante_confirmado"||o.pagoTipo==="efectivo_confirmado")
+    .sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+
+  const TABS = [
+    {k:"pendientes",  label:"Pendientes",  n:pendientes.length,  color:"#b7770d"},
+    {k:"confirmados", label:"Confirmados", n:confirmados.length, color:"#1e8449"},
+  ];
+
+  const handleConfirm = async (o) => {
+    setBusyId(o.id);
+    try {
+      if(o.pagoTipo==="comprobante_pendiente") await onConfirmarComprobante(o.id);
+      else await onConfirmarEfectivo(o.id);
+    } catch(e) { console.warn(e); alert("No se pudo confirmar. Probá de nuevo."); }
+    finally { setBusyId(null); }
+  };
+
+  const handleReject = (o) => {
+    if(o.pagoTipo==="efectivo_pendiente") { rejectEfectivo(o); return; }
+    setRejectId(o.id);
+  };
+
+  const rejectEfectivo = async (o) => {
+    setBusyId(o.id);
+    try { await onRechazarEfectivo(o.id); } catch(e) { console.warn(e); alert("No se pudo rechazar. Probá de nuevo."); }
+    finally { setBusyId(null); }
+  };
+
+  const confirmRejectComprobante = async (o) => {
+    if(!rejectMotivo.trim()) return;
+    setBusyId(o.id);
+    try { await onRechazarComprobante(o.id, rejectMotivo); setRejectId(null); setRejectMotivo(""); }
+    catch(e) { console.warn(e); alert("No se pudo rechazar. Probá de nuevo."); }
+    finally { setBusyId(null); }
+  };
+
+  return (
+    <div>
+      {/* Header + setting */}
+      <div style={{background:"#fff",borderRadius:12,padding:"16px 18px",marginBottom:16,boxShadow:"0 1px 4px #0001"}}>
+        <div style={{fontWeight:800,fontSize:16,color:"#1a1a1a",marginBottom:4}}>💳 Control de Pagos</div>
+        <div style={{fontSize:12.5,color:"#888",marginBottom:14}}>Revisá y confirmá los comprobantes y pagos en efectivo declarados por los vendedores.</div>
+
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",background:settings?.exigirPagoConfirmado?"#fdecea":"#f8f9fa",borderRadius:9,border:`1px solid ${settings?.exigirPagoConfirmado?"#f1948a":"#e5e5e5"}`,flexWrap:"wrap",gap:10}}>
+          <div style={{flex:1,minWidth:240}}>
+            <div style={{fontWeight:700,fontSize:13,color:settings?.exigirPagoConfirmado?"#c0392b":"#333"}}>🔒 Exigir pago confirmado para habilitar "Entregar"</div>
+            <div style={{fontSize:11.5,color:"#888",marginTop:2}}>
+              {settings?.exigirPagoConfirmado
+                ? "Activado: los pedidos no se pueden marcar como Entregado hasta confirmar el comprobante o el efectivo."
+                : "Desactivado: la entrega funciona como siempre, sin esperar la confirmación de pago."}
+            </div>
+          </div>
+          <button onClick={onToggleExigirPago}
+            style={{position:"relative",width:50,height:28,borderRadius:20,border:"none",cursor:"pointer",background:settings?.exigirPagoConfirmado?"#c0392b":"#ccc",flexShrink:0}}>
+            <div style={{position:"absolute",top:3,left:settings?.exigirPagoConfirmado?25:3,width:22,height:22,borderRadius:"50%",background:"#fff",boxShadow:"0 1px 3px #0003",transition:"left .2s"}}/>
+          </button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+        {TABS.map(t=>(
+          <button key={t.k} onClick={()=>setTab(t.k)}
+            style={{padding:"7px 16px",borderRadius:20,border:`1.5px solid ${tab===t.k?t.color:"#e5e5e5"}`,background:tab===t.k?t.color:"#fff",color:tab===t.k?"#fff":"#666",fontWeight:700,fontSize:12.5,cursor:"pointer"}}>
+            {t.label} ({t.n})
+          </button>
+        ))}
+      </div>
+
+      {/* List */}
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {tab==="pendientes" && (pendientes.length ? pendientes.map(o=>(
+          <div key={o.id} style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 4px #0001",border:`1.5px solid ${o.pagoTipo==="comprobante_pendiente"?"#aed6f1":"#f0d080"}`}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+              <div style={{flex:1,minWidth:200}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
+                  <span style={{fontWeight:700,fontSize:14,color:"#1a1a1a"}}>{o.client}</span>
+                  {o.pagoTipo==="comprobante_pendiente"
+                    ? <span style={{background:"#eaf2f8",color:"#1a5276",border:"1px solid #aed6f1",borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:700}}>📎 Comprobante</span>
+                    : <span style={{background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:700}}>💵 Efectivo</span>}
+                </div>
+                <div style={{fontSize:11.5,color:"#888"}}>{o.compNum||o.docNum} · {o.date} · 👤 {o.vendedor}</div>
+              </div>
+              <div style={{fontSize:18,fontWeight:800,color:RED,whiteSpace:"nowrap"}}>{fARS(o.total)}</div>
+            </div>
+
+            {o.pagoTipo==="comprobante_pendiente" && (
+              <div style={{display:"flex",alignItems:"center",gap:10,marginTop:10,padding:"8px 10px",background:"#fafbfc",borderRadius:8}}>
+                {/\.(jpe?g|png|gif|webp)$/i.test(o.comprobanteUrl)
+                  ? <img src={o.comprobanteUrl} alt="comprobante" style={{width:44,height:44,borderRadius:7,objectFit:"cover",border:"1.5px solid #aed6f1",flexShrink:0}}/>
+                  : <div style={{width:44,height:44,borderRadius:7,background:"#e8eef3",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>📄</div>}
+                <div style={{fontSize:12,color:"#555",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.comprobanteNombre||"Comprobante"}</div>
+                <a href={o.comprobanteUrl} target="_blank" rel="noopener noreferrer"
+                  style={{fontSize:11.5,fontWeight:700,color:"#1a5276",textDecoration:"none",padding:"4px 10px",border:"1px solid #aed6f155",borderRadius:6,flexShrink:0}}>👁️ Ver</a>
+              </div>
+            )}
+            {o.pagoTipo==="efectivo_pendiente" && (
+              <div style={{marginTop:10,padding:"8px 10px",background:"#fffdf6",borderRadius:8,fontSize:12,color:"#b7770d",fontWeight:600}}>
+                💵 El vendedor declaró haber cobrado en efectivo{o.pagoEfectivoFecha&&` el ${o.pagoEfectivoFecha}`}.
+              </div>
+            )}
+
+            {rejectId===o.id ? (
+              <div style={{marginTop:12,padding:"10px 12px",background:"#fdecea",borderRadius:8,border:"1px solid #f1948a"}}>
+                <div style={{fontSize:11.5,fontWeight:700,color:"#c0392b",marginBottom:6}}>Motivo del rechazo (el vendedor lo va a ver)</div>
+                <textarea value={rejectMotivo} onChange={e=>setRejectMotivo(e.target.value)} rows={2}
+                  placeholder="Ej: el monto no coincide, la imagen no se lee..."
+                  style={{width:"100%",padding:8,borderRadius:6,border:"1px solid #e5b4b0",fontSize:12.5,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box"}}/>
+                <div style={{display:"flex",gap:8,marginTop:8}}>
+                  <button disabled={!rejectMotivo.trim()||busyId===o.id}
+                    onClick={()=>confirmRejectComprobante(o)}
+                    style={{padding:"6px 14px",borderRadius:7,border:"none",background:rejectMotivo.trim()?"#c0392b":"#e5b4b0",color:"#fff",fontWeight:700,fontSize:12,cursor:rejectMotivo.trim()?"pointer":"not-allowed"}}>
+                    Confirmar rechazo
+                  </button>
+                  <button onClick={()=>{setRejectId(null);setRejectMotivo("");}}
+                    style={{padding:"6px 14px",borderRadius:7,border:"1px solid #ccc",background:"#fff",color:"#666",fontWeight:600,fontSize:12,cursor:"pointer"}}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{display:"flex",gap:8,marginTop:12}}>
+                <button disabled={busyId===o.id} onClick={()=>handleConfirm(o)}
+                  style={{flex:1,padding:"8px 14px",borderRadius:8,border:"none",background:"#1e8449",color:"#fff",fontWeight:700,fontSize:12.5,cursor:"pointer"}}>
+                  {busyId===o.id?"Guardando...":"✅ Confirmar — el pago es correcto"}
+                </button>
+                <button onClick={()=>handleReject(o)}
+                  style={{padding:"8px 14px",borderRadius:8,border:"1.5px solid #f1948a",background:"#fff",color:"#c0392b",fontWeight:700,fontSize:12.5,cursor:"pointer"}}>
+                  ❌ Rechazar
+                </button>
+              </div>
+            )}
+          </div>
+        )) : (
+          <div style={{textAlign:"center",padding:40,background:"#fff",borderRadius:12,color:"#aaa"}}>
+            <div style={{fontSize:36,marginBottom:6}}>🎉</div>
+            <div style={{fontWeight:600,fontSize:13}}>No hay pagos pendientes de revisión</div>
+          </div>
+        ))}
+
+        {tab==="confirmados" && (confirmados.length ? confirmados.map(o=>(
+          <div key={o.id} style={{background:"#fff",borderRadius:12,padding:"12px 16px",boxShadow:"0 1px 4px #0001",border:"1px solid #e5e5e5"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+              <div>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3,flexWrap:"wrap"}}>
+                  <span style={{fontWeight:700,fontSize:13.5,color:"#1a1a1a"}}>{o.client}</span>
+                  {o.pagoTipo==="comprobante_confirmado"
+                    ? <span style={{background:"#eaf2f8",color:"#1a5276",border:"1px solid #aed6f1",borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:700}}>📎 Comprobante</span>
+                    : <span style={{background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:700}}>💵 Efectivo</span>}
+                  <span style={{background:"#eafaf1",color:"#1e8449",border:"1px solid #a9dfbf",borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:700}}>✅ Confirmado</span>
+                </div>
+                <div style={{fontSize:11,color:"#888"}}>{o.compNum||o.docNum} · 👤 {o.vendedor}</div>
+              </div>
+              <div style={{fontSize:15,fontWeight:800,color:"#444"}}>{fARS(o.total)}</div>
+            </div>
+          </div>
+        )) : (
+          <div style={{textAlign:"center",padding:40,background:"#fff",borderRadius:12,color:"#aaa"}}>
+            <div style={{fontSize:36,marginBottom:6}}>📭</div>
+            <div style={{fontWeight:600,fontSize:13}}>Todavía no confirmaste ningún pago</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,priceLists,setPriceLists,isMobile,sandboxStock,setSandboxStock,updateSandboxStock,promos,setPromos,settings,onToggleExigirPago,onConfirmarComprobante,onRechazarComprobante,onConfirmarEfectivo,onRechazarEfectivo}) {
   const [section, setSection] = useState("home");
+
+  const pagosPendientes = orders.filter(o=>o.pagoTipo==="comprobante_pendiente"||o.pagoTipo==="efectivo_pendiente").length;
 
   const SECTIONS = [
     {k:"home",        label:"Administración",   icon:"🏠"},
     {k:"ventas",      label:"Ventas",           icon:"📈"},
+    {k:"pagos",       label:pagosPendientes?`Pagos (${pagosPendientes})`:"Pagos", icon:"💳"},
     {k:"ofertas",     label:"Ofertas y Combos", icon:"🎁"},
     {k:"sandbox",     label:"Demo Sandbox",     icon:"🧪"},
     {k:"sandboxstock",label:"Stock Sandbox",     icon:"📦"},
@@ -5073,6 +5482,11 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
           )}
           <VentasPanel orders={ventasView==="sandbox" ? sandboxOrders : realOrders}/>
         </div>
+      )}
+      {section==="pagos"       && (
+        <PagosPanel orders={orders} onConfirmarComprobante={onConfirmarComprobante} onRechazarComprobante={onRechazarComprobante}
+          onConfirmarEfectivo={onConfirmarEfectivo} onRechazarEfectivo={onRechazarEfectivo}
+          settings={settings} onToggleExigirPago={onToggleExigirPago}/>
       )}
       {section==="ofertas"     && <OfertasPanel   promos={promos} setPromos={setPromos} products={products} isMobile={isMobile}/>}
       {section==="sandboxstock" && (
