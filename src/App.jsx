@@ -1215,13 +1215,16 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
 
   // ── PAGO EN EFECTIVO ─────────────────────────────────────────────────────────
   // Fase 1 (vendedor): solicita registrar efectivo → queda en "efectivo_pendiente"
+  // Si lo marca el Admin (pedido propio, venta directa), queda confirmado de una — no tiene sentido que se apruebe a si mismo
   const marcarEfectivo = async (id) => {
-    const updated = orders.map(o=>o.id===id ? {...o, pagoTipo:"efectivo_pendiente", pagoEfectivoFecha:today()} : o);
+    const esAdmin = currentUser.role === "admin";
+    const updated = orders.map(o=>o.id===id ? {...o, pagoTipo: esAdmin ? "efectivo_confirmado" : "efectivo_pendiente", pagoEfectivoFecha:today()} : o);
     setOrders(updated);
     const ord = updated.find(o=>o.id===id);
     const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
     await db.upsertOrder(ord);
-    if(isSandboxOrder) { sendLocalNotif("💵 Efectivo registrado", "Esperando confirmación del admin", `ef-pend-${id}`); return; }
+    if(isSandboxOrder) { sendLocalNotif(esAdmin?"💵 Efectivo confirmado":"💵 Efectivo registrado", esAdmin?"Pago en efectivo registrado":"Esperando confirmación del admin", `ef-pend-${id}`); return; }
+    if(esAdmin) return; // el admin no necesita notificarse a si mismo
     await sendCrossNotif(db, setNotifs, {title:"💵 Pago en efectivo", body:`${currentUser.name} registró pago en efectivo (${ord.client})`, tag:`ef-pend-${id}`, para:"admin", de:currentUser.name});
   };
 
@@ -1978,6 +1981,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
   const [noteVal,setNoteVal]=useState(o.internalNote||"");
   const [uploadingComp, setUploadingComp] = useState(false);
   const compFileRef = useRef();
+  const compFileRefDoc = useRef();
 
   // Edit request states
   const [showReqForm, setShowReqForm]     = useState(false);
@@ -2314,19 +2318,21 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
             {!o.pagoTipo && (
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                 <label style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,border:"1px solid #a9dfbf",background:"#fff",color:"#1e8449",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                  <input ref={compFileRef} type="file" accept="image/*,.pdf" onChange={handleCompFile} style={{display:"none"}}/>
+                  <input ref={compFileRef} type="file" accept="image/*" onChange={handleCompFile} style={{display:"none"}}/>
                   {uploadingComp
                     ? <><div style={{width:13,height:13,borderRadius:"50%",border:"2px solid #a9dfbf",borderTop:"2px solid #1e8449",animation:"lm-spin 0.8s linear infinite",flexShrink:0}}/><style>{`@keyframes lm-spin{to{transform:rotate(360deg)}}`}</style>Subiendo...</>
-                    : <>📎 Subir comprobante</>
+                    : <>📷 Foto del comprobante</>
                   }
                 </label>
-                {!isAdmin && (
-                  <button disabled={savingEfectivo}
-                    onClick={async()=>{setSavingEfectivo(true);try{await onMarcarEfectivo(o.id);}catch(e){console.warn(e);alert("No se pudo registrar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
-                    style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,border:"1px solid #f0d080",background:"#fff",color:"#b7770d",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                    💵 Pago en efectivo
-                  </button>
-                )}
+                <label style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,border:"1px solid #a9dfbf",background:"#fff",color:"#1e8449",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                  <input ref={compFileRefDoc} type="file" accept="application/pdf,.pdf" onChange={handleCompFile} style={{display:"none"}}/>
+                  📄 Subir PDF
+                </label>
+                <button disabled={savingEfectivo}
+                  onClick={async()=>{setSavingEfectivo(true);try{await onMarcarEfectivo(o.id);}catch(e){console.warn(e);alert("No se pudo registrar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
+                  style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,border:"1px solid #f0d080",background:"#fff",color:"#b7770d",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                  💵 Pago en efectivo
+                </button>
               </div>
             )}
 
@@ -2359,8 +2365,12 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                       ❌ Rechazar
                     </button>
                     <label style={{display:"flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:7,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                      <input ref={compFileRef} type="file" accept="image/*,.pdf" onChange={handleCompFile} style={{display:"none"}}/>
-                      🔄 Reemplazar
+                      <input ref={compFileRef} type="file" accept="image/*" onChange={handleCompFile} style={{display:"none"}}/>
+                      🔄📷 Reemplazar (foto)
+                    </label>
+                    <label style={{display:"flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:7,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                      <input ref={compFileRefDoc} type="file" accept="application/pdf,.pdf" onChange={handleCompFile} style={{display:"none"}}/>
+                      🔄📄 Reemplazar (PDF)
                     </label>
                   </div>
                 ) : (
