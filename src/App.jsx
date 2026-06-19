@@ -1016,11 +1016,12 @@ export default function App() {
     sandboxStock={sandboxStock} setSandboxStock={setSandboxStock}
     clients={clients} setClients={setClients}
     promos={promos} setPromos={setPromos}
+    settings={settings} setSettings={setSettings}
   />;
 }
 
 // ─── MAIN APP (authenticated) ─────────────────────────────────────────────────
-function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,products,setProducts,orders,setOrders,quotes,setQuotes,stockLog,setStockLog,activity,setActivity,priceLists,setPriceLists,purchaseOrders,setPurchaseOrders,notifs,setNotifs,sandboxStock,setSandboxStock,clients,setClients,promos,setPromos}) {
+function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,products,setProducts,orders,setOrders,quotes,setQuotes,stockLog,setStockLog,activity,setActivity,priceLists,setPriceLists,purchaseOrders,setPurchaseOrders,notifs,setNotifs,sandboxStock,setSandboxStock,clients,setClients,promos,setPromos,settings,setSettings}) {
   // updateSandboxStock persists to localStorage on every change
   const updateSandboxStock = (updater) => {
     setSandboxStock(prev => {
