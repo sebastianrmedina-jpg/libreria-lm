@@ -224,6 +224,9 @@ const parseFechaLog = (s) => {
   if(!dd||!mm||!yyyy) return null;
   return new Date(+yyyy, +mm-1, +dd);
 };
+// Pedidos viejos (de versiones anteriores de esta funcionalidad) pueden tener pagoTipo="comprobante"
+// o "efectivo" sin sufijo. Los normalizamos a su equivalente confirmado para que sigan funcionando.
+const normPagoTipo = (tipo) => tipo==="comprobante" ? "comprobante_confirmado" : tipo==="efectivo" ? "efectivo_confirmado" : (tipo||"");
 function isPromoVigente(p) {
   if(!p || !p.activa) return false;
   const t = todayISO();
@@ -1975,7 +1978,8 @@ function DelBtn({onConfirm}) {
 function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,onConfirmarComprobante,onRechazarComprobante,onMarcarEfectivo,onConfirmarEfectivo,onRechazarEfectivo,exigirPagoConfirmado,currentUser,products}) {
   const isAdmin = currentUser?.role === "admin";
   const idx=STAGES.indexOf(o.stage), next=STAGES[idx+1];
-  const pagoConfirmado = o.pagoTipo==="comprobante_confirmado" || o.pagoTipo==="efectivo_confirmado";
+  const pt = normPagoTipo(o.pagoTipo); // normaliza valores viejos ("comprobante"/"efectivo" sin sufijo)
+  const pagoConfirmado = pt==="comprobante_confirmado" || pt==="efectivo_confirmado";
   const entregaBloqueada = !!exigirPagoConfirmado && next==="entregado" && !pagoConfirmado;
   const [editNote,setEditNote]=useState(false);
   const [noteVal,setNoteVal]=useState(o.internalNote||"");
@@ -2061,10 +2065,9 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
             {o.vendedor&&<span>· 👤 {o.vendedor}</span>}
             {o.internalNote&&<span style={{color:"#e67e22"}}>· 📝 Nota</span>}
             {/* Pago — badge inline */}
-            {o.pagoTipo==="comprobante_pendiente"  && <span style={{background:"#eaf2f8",color:"#1a5276",border:"1px solid #aed6f1",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}>📎 Comprobante · pendiente</span>}
-            {o.pagoTipo==="comprobante_confirmado" && <span style={{background:"#eafaf1",color:"#1e8449",border:"1px solid #a9dfbf",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}>📎 Comprobante · OK</span>}
-            {o.pagoTipo==="efectivo_pendiente"     && <span style={{background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}>💵 Efectivo · pendiente</span>}
-            {o.pagoTipo==="efectivo_confirmado"    && <span style={{background:"#eafaf1",color:"#1e8449",border:"1px solid #a9dfbf",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}>💵 Efectivo · OK</span>}
+            {pt==="comprobante_pendiente"  && <span style={{background:"#eaf2f8",color:"#1a5276",border:"1px solid #aed6f1",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}>📎 Comprobante · pendiente</span>}
+            {pt==="efectivo_pendiente"     && <span style={{background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}>💵 Efectivo · pendiente</span>}
+            {pagoConfirmado                && <span style={{background:"#eafaf1",color:"#1e8449",border:"1px solid #a9dfbf",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:800}}>✅ Pagado {pt==="comprobante_confirmado"?"· 📎":"· 💵"}</span>}
             <EditBdg/>
           </div>
         </div>
@@ -2315,29 +2318,29 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
             <div style={{fontSize:12,fontWeight:700,color:"#1e8449",marginBottom:8}}>💳 Pago</div>
 
             {/* ── Sin pago registrado: dos opciones ── */}
-            {!o.pagoTipo && (
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                <label style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,border:"1px solid #a9dfbf",background:"#fff",color:"#1e8449",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+            {!pt && (
+              <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                <label style={{display:"flex",alignItems:"center",gap:8,padding:"11px 14px",borderRadius:9,border:"1px solid #a9dfbf",background:"#fff",color:"#1e8449",fontSize:13,fontWeight:700,cursor:"pointer"}}>
                   <input ref={compFileRef} type="file" accept="image/*" onChange={handleCompFile} style={{display:"none"}}/>
                   {uploadingComp
-                    ? <><div style={{width:13,height:13,borderRadius:"50%",border:"2px solid #a9dfbf",borderTop:"2px solid #1e8449",animation:"lm-spin 0.8s linear infinite",flexShrink:0}}/><style>{`@keyframes lm-spin{to{transform:rotate(360deg)}}`}</style>Subiendo...</>
+                    ? <><div style={{width:14,height:14,borderRadius:"50%",border:"2px solid #a9dfbf",borderTop:"2px solid #1e8449",animation:"lm-spin 0.8s linear infinite",flexShrink:0}}/><style>{`@keyframes lm-spin{to{transform:rotate(360deg)}}`}</style>Subiendo...</>
                     : <>📷 Foto del comprobante</>
                   }
                 </label>
-                <label style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,border:"1px solid #a9dfbf",background:"#fff",color:"#1e8449",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                <label style={{display:"flex",alignItems:"center",gap:8,padding:"11px 14px",borderRadius:9,border:"1px solid #a9dfbf",background:"#fff",color:"#1e8449",fontSize:13,fontWeight:700,cursor:"pointer"}}>
                   <input ref={compFileRefDoc} type="file" accept="application/pdf,.pdf" onChange={handleCompFile} style={{display:"none"}}/>
                   📄 Subir PDF
                 </label>
                 <button disabled={savingEfectivo}
                   onClick={async()=>{setSavingEfectivo(true);try{await onMarcarEfectivo(o.id);}catch(e){console.warn(e);alert("No se pudo registrar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
-                  style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,border:"1px solid #f0d080",background:"#fff",color:"#b7770d",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                  style={{display:"flex",alignItems:"center",gap:8,padding:"11px 14px",borderRadius:9,border:"1px solid #f0d080",background:"#fff",color:"#b7770d",fontSize:13,fontWeight:700,cursor:"pointer"}}>
                   💵 Pago en efectivo
                 </button>
               </div>
             )}
 
             {/* ── Comprobante pendiente de revisión ── */}
-            {o.pagoTipo==="comprobante_pendiente" && (
+            {pt==="comprobante_pendiente" && (
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
                   {/\.(jpe?g|png|gif|webp)$/i.test(o.comprobanteUrl)
@@ -2354,24 +2357,26 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                 </div>
 
                 {isAdmin ? (!showRejectComp ? (
-                  <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <div style={{display:"flex",flexDirection:"column",gap:7}}>
                     <button disabled={savingEfectivo}
                       onClick={async()=>{setSavingEfectivo(true);try{await onConfirmarComprobante(o.id);}catch(e){console.warn(e);alert("No se pudo confirmar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
-                      style={{padding:"7px 16px",borderRadius:7,border:"none",background:"#1e8449",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                      style={{padding:"11px 14px",borderRadius:9,border:"none",background:"#1e8449",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>
                       {savingEfectivo?"Guardando...":"✅ Confirmar — el pago es correcto"}
                     </button>
                     <button onClick={()=>setShowRejectComp(true)}
-                      style={{padding:"7px 16px",borderRadius:7,border:"1.5px solid #f1948a",background:"#fff",color:"#c0392b",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                      style={{padding:"11px 14px",borderRadius:9,border:"1.5px solid #f1948a",background:"#fff",color:"#c0392b",fontSize:13,fontWeight:700,cursor:"pointer"}}>
                       ❌ Rechazar
                     </button>
-                    <label style={{display:"flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:7,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                      <input ref={compFileRef} type="file" accept="image/*" onChange={handleCompFile} style={{display:"none"}}/>
-                      🔄📷 Reemplazar (foto)
-                    </label>
-                    <label style={{display:"flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:7,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                      <input ref={compFileRefDoc} type="file" accept="application/pdf,.pdf" onChange={handleCompFile} style={{display:"none"}}/>
-                      🔄📄 Reemplazar (PDF)
-                    </label>
+                    <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                      <label style={{display:"flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:7,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                        <input ref={compFileRef} type="file" accept="image/*" onChange={handleCompFile} style={{display:"none"}}/>
+                        🔄📷 Reemplazar (foto)
+                      </label>
+                      <label style={{display:"flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:7,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                        <input ref={compFileRefDoc} type="file" accept="application/pdf,.pdf" onChange={handleCompFile} style={{display:"none"}}/>
+                        🔄📄 Reemplazar (PDF)
+                      </label>
+                    </div>
                   </div>
                 ) : (
                   <div style={{padding:"10px 12px",background:"#fdecea",borderRadius:8,border:"1px solid #f1948a"}}>
@@ -2403,53 +2408,29 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
               </div>
             )}
 
-            {/* ── Comprobante confirmado ── */}
-            {o.pagoTipo==="comprobante_confirmado" && (
-              <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#eafaf1",border:"1px solid #a9dfbf",borderRadius:8}}>
-                {/\.(jpe?g|png|gif|webp)$/i.test(o.comprobanteUrl)
-                  ? <img src={o.comprobanteUrl} alt="comprobante" style={{width:36,height:36,borderRadius:7,objectFit:"cover",border:"1.5px solid #a9dfbf",flexShrink:0}}/>
-                  : <span style={{fontSize:18}}>📎</span>}
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:12,fontWeight:700,color:"#1e8449"}}>Comprobante confirmado</div>
-                  <div style={{fontSize:11,color:"#888"}}>{o.comprobanteFecha&&`Subido el ${o.comprobanteFecha}`}</div>
-                </div>
-                <a href={o.comprobanteUrl} target="_blank" rel="noopener noreferrer"
-                  style={{padding:"4px 8px",borderRadius:6,border:"1px solid #a9dfbf",background:"#fff",color:"#1e8449",fontSize:10,fontWeight:700,textDecoration:"none",flexShrink:0}}>
-                  👁️ Ver
-                </a>
-                {isAdmin && (
-                  <button disabled={savingEfectivo}
-                    onClick={async()=>{setSavingEfectivo(true);try{await onRechazarComprobante(o.id,"Anulado por el admin");}catch(e){console.warn(e);}finally{setSavingEfectivo(false);}}}
-                    style={{padding:"4px 8px",borderRadius:6,border:"1px solid #f1948a",background:"#fff",color:"#c0392b",fontSize:10,fontWeight:700,cursor:"pointer",flexShrink:0}}>
-                    Anular
-                  </button>
-                )}
-              </div>
-            )}
-
             {/* ── Efectivo pendiente: vendedor espera, admin decide ── */}
-            {o.pagoTipo==="efectivo_pendiente" && (
+            {pt==="efectivo_pendiente" && (
               <div>
                 {isAdmin ? (
                   <div>
                     <div style={{fontSize:13,color:"#b7770d",marginBottom:10}}>
                       💵 <strong>{o.vendedor}</strong> registró pago en efectivo{o.pagoEfectivoFecha&&` el ${o.pagoEfectivoFecha}`} por <strong>{fARS(o.total)}</strong>. ¿Confirmás?
                     </div>
-                    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                    <div style={{display:"flex",flexDirection:"column",gap:7}}>
                       <button disabled={savingEfectivo}
                         onClick={async()=>{setSavingEfectivo(true);try{await onConfirmarEfectivo(o.id);}catch(e){console.warn(e);alert("No se pudo confirmar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
-                        style={{padding:"7px 16px",borderRadius:7,border:"none",background:"#1e8449",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                        style={{padding:"11px 14px",borderRadius:9,border:"none",background:"#1e8449",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>
                         {savingEfectivo?"Guardando...":"✅ Confirmar efectivo"}
                       </button>
                       <button disabled={savingEfectivo}
                         onClick={async()=>{setSavingEfectivo(true);try{await onRechazarEfectivo(o.id);}catch(e){console.warn(e);alert("No se pudo rechazar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
-                        style={{padding:"7px 16px",borderRadius:7,border:"1.5px solid #f1948a",background:"#fff",color:"#c0392b",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                        style={{padding:"11px 14px",borderRadius:9,border:"1.5px solid #f1948a",background:"#fff",color:"#c0392b",fontSize:13,fontWeight:700,cursor:"pointer"}}>
                         ❌ No confirmar
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#fef9e7",border:"1px solid #f0d080",borderRadius:8}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 10px",background:"#fef9e7",border:"1px solid #f0d080",borderRadius:8}}>
                     <span style={{fontSize:18}}>💵</span>
                     <div>
                       <div style={{fontSize:12,fontWeight:700,color:"#b7770d"}}>Pago en efectivo registrado</div>
@@ -2460,18 +2441,35 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
               </div>
             )}
 
-            {/* ── Efectivo confirmado ── */}
-            {o.pagoTipo==="efectivo_confirmado" && (
-              <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#eafaf1",border:"1px solid #a9dfbf",borderRadius:8}}>
-                <span style={{fontSize:18}}>💵</span>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:12,fontWeight:700,color:"#1e8449"}}>Pago en efectivo confirmado</div>
-                  <div style={{fontSize:11,color:"#888"}}>{o.pagoEfectivoFecha&&`Registrado el ${o.pagoEfectivoFecha}`}</div>
+            {/* ── Pagado (comprobante o efectivo, ya confirmado) — leyenda unificada ── */}
+            {pagoConfirmado && (
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 10px",background:"#eafaf1",border:"1px solid #a9dfbf",borderRadius:8,flexWrap:"wrap"}}>
+                {pt==="comprobante_confirmado" && /\.(jpe?g|png|gif|webp)$/i.test(o.comprobanteUrl)
+                  ? <img src={o.comprobanteUrl} alt="comprobante" style={{width:36,height:36,borderRadius:7,objectFit:"cover",border:"1.5px solid #a9dfbf",flexShrink:0}}/>
+                  : <span style={{fontSize:18}}>✅</span>}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12.5,fontWeight:800,color:"#1e8449"}}>Pagado {pt==="comprobante_confirmado"?"· 📎 Comprobante":"· 💵 Efectivo"}</div>
+                  <div style={{fontSize:11,color:"#888"}}>
+                    {pt==="comprobante_confirmado"
+                      ? (o.comprobanteFecha && `Confirmado · subido el ${o.comprobanteFecha}`)
+                      : (o.pagoEfectivoFecha && `Confirmado · registrado el ${o.pagoEfectivoFecha}`)}
+                  </div>
                 </div>
+                {pt==="comprobante_confirmado" && o.comprobanteUrl && (
+                  <a href={o.comprobanteUrl} target="_blank" rel="noopener noreferrer"
+                    style={{padding:"5px 10px",borderRadius:6,border:"1px solid #a9dfbf",background:"#fff",color:"#1e8449",fontSize:11,fontWeight:700,textDecoration:"none",flexShrink:0}}>
+                    👁️ Ver
+                  </a>
+                )}
                 {isAdmin && (
                   <button disabled={savingEfectivo}
-                    onClick={async()=>{setSavingEfectivo(true);try{await onRechazarEfectivo(o.id);}catch(e){console.warn(e);}finally{setSavingEfectivo(false);}}}
-                    style={{padding:"4px 8px",borderRadius:6,border:"1px solid #f1948a",background:"#fff",color:"#c0392b",fontSize:10,fontWeight:700,cursor:"pointer",flexShrink:0}}>
+                    onClick={async()=>{
+                      setSavingEfectivo(true);
+                      try{ pt==="comprobante_confirmado" ? await onRechazarComprobante(o.id,"Anulado por el admin") : await onRechazarEfectivo(o.id); }
+                      catch(e){console.warn(e);}
+                      finally{setSavingEfectivo(false);}
+                    }}
+                    style={{padding:"5px 9px",borderRadius:6,border:"1px solid #f1948a",background:"#fff",color:"#c0392b",fontSize:10.5,fontWeight:700,cursor:"pointer",flexShrink:0}}>
                     Anular
                   </button>
                 )}
@@ -5236,7 +5234,7 @@ function PagosPanel({orders, onConfirmarComprobante, onRechazarComprobante, onCo
 
   const pendientes = orders.filter(o=>o.pagoTipo==="comprobante_pendiente"||o.pagoTipo==="efectivo_pendiente")
     .sort((a,b)=>(b.date||"").localeCompare(a.date||""));
-  const confirmados = orders.filter(o=>o.pagoTipo==="comprobante_confirmado"||o.pagoTipo==="efectivo_confirmado")
+  const confirmados = orders.filter(o=>normPagoTipo(o.pagoTipo)==="comprobante_confirmado"||normPagoTipo(o.pagoTipo)==="efectivo_confirmado")
     .sort((a,b)=>(b.date||"").localeCompare(a.date||""));
 
   const TABS = [
@@ -5382,7 +5380,7 @@ function PagosPanel({orders, onConfirmarComprobante, onRechazarComprobante, onCo
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3,flexWrap:"wrap"}}>
                   <span style={{fontWeight:700,fontSize:13.5,color:"#1a1a1a"}}>{o.client}</span>
-                  {o.pagoTipo==="comprobante_confirmado"
+                  {normPagoTipo(o.pagoTipo)==="comprobante_confirmado"
                     ? <span style={{background:"#eaf2f8",color:"#1a5276",border:"1px solid #aed6f1",borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:700}}>📎 Comprobante</span>
                     : <span style={{background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:700}}>💵 Efectivo</span>}
                   <span style={{background:"#eafaf1",color:"#1e8449",border:"1px solid #a9dfbf",borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:700}}>✅ Confirmado</span>
