@@ -2920,7 +2920,7 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[]}) {
       return c.map(i=>i.cartKey===p.id?{...i,qty:newQty,disc,promoLabel:label}:i);
     }
     const {disc,label} = computeAutoDisc(promo,1);
-    return [...c,{pid:p.id,cartKey:p.id,qty:1,price:p.salePrice,name:p.name,disc,promoLabel:label}];
+    return [...c,{pid:p.id,id:p.id,cartKey:p.id,qty:1,price:p.salePrice,name:p.name,disc,promoLabel:label}];
   });
   const setQ=(cartKey,qty)=>{
     if(qty<=0){setCart(c=>c.filter(i=>i.cartKey!==cartKey));return;}
@@ -4237,7 +4237,7 @@ function printSolicitudPDF(po, logoSrc) {
   const rows = po.items.map(it=>`
     <tr>
       <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;font-size:14px;">${it.name}</td>
-      <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;font-size:14px;">${it.id||""}</td>
+      <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;font-size:14px;">${it.id||it.pid||""}</td>
       <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;text-align:center;font-size:15px;font-weight:700;">${it.qty}</td>
       <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;font-size:13px;color:#888;">${it.notas||""}</td>
     </tr>`).join("");
@@ -4321,7 +4321,7 @@ function exportSolicitudXLSX(po) {
     ["Notas", po.notas||""],
     [],
     ["Producto","Código","Cantidad","Observaciones"],
-    ...po.items.map(it=>[it.name, it.id||"", it.qty, it.notas||""]),
+    ...po.items.map(it=>[it.name, it.id||it.pid||"", it.qty, it.notas||""]),
     [],
     ["Total productos", po.items.length],
     ["Total unidades", po.items.reduce((s,i)=>s+i.qty,0)],
@@ -4478,7 +4478,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
               {addSearch.length>1 && (
                 <div style={{maxHeight:220,overflowY:"auto",display:"flex",flexDirection:"column",gap:5}}>
                   {products.filter(p=>norm(p.name).includes(norm(addSearch))||normSKU(p.id).includes(normSKU(addSearch))).slice(0,20).map(p=>{
-                    const already = po.items.find(i=>i.id===p.id);
+                    const already = po.items.find(i=>(i.pid||i.id)===p.id);
                     return (
                       <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,background:"#fff",borderRadius:8,padding:"8px 12px",border:"1.5px solid #e5e5e5"}}>
                         <div style={{flex:1,minWidth:0}}>
@@ -4518,7 +4518,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
               {po.items.map((it,i)=>(
                 <tr key={i} style={{borderTop:"1px solid #f5f5f5",background:i%2===0?"#fff":"#fafafa"}}>
                   <td style={{padding:"9px 12px",fontWeight:600}}>{it.name}</td>
-                  <td style={{padding:"9px 12px",color:"#aaa",fontSize:11}}>{it.id||""}</td>
+                  <td style={{padding:"9px 12px",color:"#aaa",fontSize:11}}>{it.id||it.pid||""}</td>
                   <td style={{padding:"9px 12px",textAlign:"center"}}>
                     {isAdmin && po.estado!=="cerrada"
                       ? <div style={{display:"flex",alignItems:"center",gap:4,justifyContent:"center"}}>
