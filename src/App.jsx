@@ -4333,6 +4333,118 @@ function exportSolicitudXLSX(po) {
   XLSX.writeFile(wb, `Solicitud_${po.id.slice(-6).toUpperCase()}_${po.fecha.replace(/\//g,"-")}.xlsx`);
 }
 
+// Toma la planilla de precios/pedido del proveedor (tal cual se descarga de su web) y
+// completa la columna CANTIDAD con lo pedido en la solicitud, matcheando por código (SKU).
+// Devuelve {wb, faltantes} donde faltantes son items de la solicitud que no se encontraron en la plantilla.
+function llenarPlantillaProveedor(po, arrayBuffer) {
+  const wb = XLSX.read(arrayBuffer, {type:"array", cellFormula:true, cellStyles:true});
+  const sheetName = wb.SheetNames[0];
+  const ws = wb.Sheets[sheetName];
+  const range = XLSX.utils.decode_range(ws["!ref"] || "A1:H1");
+
+  const cellStr = (r,c) => {
+    const cell = ws[XLSX.utils.encode_cell({r,c})];
+    return cell && cell.v != null ? String(cell.v).trim() : "";
+  };
+
+  // Buscar la fila de encabezado (la que contiene "CÓDIGO"/"CODIGO" y "CANTIDAD")
+  let headerRow = -1, colCodigo = -1, colCantidad = -1;
+  const norm = s => s.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  for (let r = range.s.r; r <= Math.min(range.e.r, range.s.r + 30); r++) {
+    let foundCodigo = -1, foundCantidad = -1;
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const v = norm(cellStr(r,c));
+      if (v.includes("CODIGO")) foundCodigo = c;
+      if (v.includes("CANTIDAD")) foundCantidad = c;
+    }
+    if (foundCodigo >= 0 && foundCantidad >= 0) {
+      headerRow = r; colCodigo = foundCodigo; colCantidad = foundCantidad;
+      break;
+    }
+  }
+
+  if (headerRow === -1) {
+    return {wb:null, faltantes: po.items, error: "No se encontró la columna CÓDIGO/CANTIDAD en la plantilla."};
+  }
+
+  // Construir índice código normalizado -> fila
+  const lookup = {};
+  for (let r = headerRow + 1; r <= range.e.r; r++) {
+    const code = cellStr(r, colCodigo);
+    if (code) lookup[normSKU(code)] = r;
+  }
+
+  const faltantes = [];
+  po.items.forEach(it => {
+    const sku = normSKU(it.id || it.pid || "");
+    const row = lookup[sku];
+    if (row != null) {
+      const addr = XLSX.utils.encode_cell({r:row, c:colCantidad});
+      ws[addr] = {t:"n", v: it.qty};
+    } else {
+      faltantes.push(it);
+    }
+  });
+
+  return {wb, faltantes, sheetName};
+}
+
+// Modal para subir la plantilla del proveedor y descargar el Excel ya completado con las cantidades.
+function ModalExcelProveedor({po, onClose}) {
+  const fileRef = useRef();
+  const [status, setStatus] = useState(null); // {type:"error"|"ok", msg}
+  const [loading, setLoading] = useState(false);
+
+  const handleFile = (file) => {
+    if (!file) return;
+    setLoading(true); setStatus(null);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const {wb, faltantes, sheetName, error} = llenarPlantillaProveedor(po, e.target.result);
+        if (error) { setStatus({type:"error", msg:error}); setLoading(false); return; }
+        const fname = `${(po.proveedor||"Proveedor").replace(/\s+/g,"_")}_Pedido_${po.id.slice(-6).toUpperCase()}_${po.fecha.replace(/\//g,"-")}.xlsx`;
+        XLSX.writeFile(wb, fname);
+        if (faltantes.length) {
+          setStatus({type:"error", msg:`Se descargó el archivo, pero ${faltantes.length} producto(s) no se encontraron en la plantilla del proveedor: ${faltantes.map(f=>f.name).join(", ")}`});
+        } else {
+          setStatus({type:"ok", msg:`Listo, se completaron las ${po.items.length} cantidades en "${sheetName}" y se descargó el archivo.`});
+        }
+      } catch(err) {
+        setStatus({type:"error", msg:"No se pudo procesar el archivo: " + err.message});
+      }
+      setLoading(false);
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:16}} onClick={onClose}>
+      <div style={{background:"#fff",borderRadius:14,padding:22,maxWidth:440,width:"100%"}} onClick={e=>e.stopPropagation()}>
+        <div style={{fontWeight:800,fontSize:16,marginBottom:6,color:"#1a1a1a"}}>📦 Excel para el Proveedor</div>
+        <div style={{fontSize:13,color:"#777",marginBottom:16,lineHeight:1.5}}>
+          Subí la planilla que bajás de la web del proveedor (con su lista de precios y columna CANTIDAD). Se va a completar automáticamente con lo pedido en esta solicitud, buscando cada producto por su código.
+        </div>
+        <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{display:"none"}}
+          onChange={e=>handleFile(e.target.files[0])}/>
+        <button onClick={()=>fileRef.current?.click()} disabled={loading}
+          style={{width:"100%",padding:"12px",borderRadius:10,border:"none",background: loading?"#aaa":"linear-gradient(135deg,#1a5276,#1e8449)",color:"#fff",fontWeight:700,fontSize:14,cursor:loading?"default":"pointer"}}>
+          {loading?"Procesando...":"📂 Elegir planilla del proveedor"}
+        </button>
+        {status && (
+          <div style={{marginTop:14,padding:"10px 12px",borderRadius:8,fontSize:12.5,lineHeight:1.5,
+            background: status.type==="error" ? "#fdedec" : "#d5f5e3",
+            color: status.type==="error" ? "#c0392b" : "#1e8449",
+            border: `1.5px solid ${status.type==="error"?"#f5b7b1":"#a9dfbf"}`}}>
+            {status.msg}
+          </div>
+        )}
+        <button onClick={onClose} style={{width:"100%",marginTop:12,padding:"10px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cerrar</button>
+      </div>
+    </div>
+  );
+}
+
 function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchaseOrders,isMobile,onStockExternal,addLog,onCreated}) {
   const [view, setView] = useState("lista"); // lista | nueva | detalle
   const [selected, setSelected] = useState(null);
@@ -4342,6 +4454,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
   const [notas, setNotas] = useState("");
   const [saving, setSaving] = useState(false);
   const [itemNotas, setItemNotas] = useState({});
+  const [showProveedorModal, setShowProveedorModal] = useState(false);
 
   const myOrders = isAdmin ? purchaseOrders : purchaseOrders.filter(po=>po.vendedor===currentUser.vendedor||po.vendedor===currentUser.name);
 
@@ -4579,8 +4692,11 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
           {isAdmin && po.estado==="revisando" && <button onClick={()=>changeEstado(po,"cerrada")} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:"#1e8449",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>✅ Cerrar solicitud</button>}
           <button onClick={()=>printSolicitudPDF(po, PDF_LOGO_BANNER)} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #1a5276",background:"#fff",color:"#1a5276",fontWeight:700,fontSize:13,cursor:"pointer"}}>🖨️ PDF</button>
           <button onClick={()=>exportSolicitudXLSX(po)} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #1e8449",background:"#fff",color:"#1e8449",fontWeight:700,fontSize:13,cursor:"pointer"}}>📊 Excel</button>
+          {isAdmin && <button onClick={()=>setShowProveedorModal(true)} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #7b1a1a",background:"#fff",color:"#7b1a1a",fontWeight:700,fontSize:13,cursor:"pointer"}}>📦 Excel Proveedor</button>}
           {isAdmin&&<button onClick={()=>deletePO(po.id)} style={{padding:"11px 16px",borderRadius:10,border:"1.5px solid #fcc",background:"#fff",color:"#c0392b",fontWeight:700,fontSize:13,cursor:"pointer"}}>🗑</button>}
         </div>
+
+        {showProveedorModal && <ModalExcelProveedor po={po} onClose={()=>setShowProveedorModal(false)}/>}
 
         {/* Ingresar mercadería desde solicitud */}
         {isAdmin && po.estado==="cerrada" && (
