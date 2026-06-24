@@ -2,6 +2,7 @@
 import { createClient } from "@supabase/supabase-js";
 import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import * as XLSX from "xlsx";
+import { Clock, CheckCircle2, Package, PartyPopper, Wallet, Search, ShieldCheck, Paperclip, Banknote, ClipboardList, ShoppingCart, Users, FileText, CircleDollarSign, Store, ListChecks, Star, LogOut } from "lucide-react";
 
 // ─── MOBILE HOOK ─────────────────────────────────────────────────────────────
 function useIsMobile() {
@@ -203,6 +204,9 @@ const STAGE_COLORS = {
   entregado:   "#6c3483",
 };
 const STAGES = ["reserva","confirmado","en armado","entregado"];
+// Iconos reales (solo para presentacion visual) — SCFG.icon sigue como string para notificaciones/logs
+const STAGE_ICONS = { reserva: Clock, confirmado: CheckCircle2, "en armado": Package, entregado: PartyPopper };
+const Dot = () => <span style={{width:3,height:3,borderRadius:99,background:"#ccc",display:"inline-block"}}/>;
 const SCFG = {
   reserva:     {label:"Reserva",    color:"#b7770d", bg:"#fef9e7", icon:"🕐"},
   confirmado:  {label:"Confirmado", color:"#1e8449", bg:"#eafaf1", icon:"✅"},
@@ -1426,15 +1430,15 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
 
   const pending = orders.filter(o=>o.stage!=="entregado"&&!o.isSandbox).length;
   const TABS = [
-    {k:"central",   label:"Central",           icon:"📋", roles:["admin","vendedor"]},
-    {k:"nuevo",     label:"Nuevo Pedido",       icon:"🛒", roles:["admin","vendedor"]},
-    {k:"clientes",  label:"Clientes",           icon:"👥", roles:["admin","vendedor"]},
-    {k:"cotizacion",label:"Cotizaciones",       icon:"📄", roles:["admin","vendedor"]},
-    {k:"precios",   label:"Precios",            icon:"💲", roles:["admin","vendedor"]},
-    {k:"stock",     label:"Stock",              icon:"📦", roles:["admin","vendedor"]},
-    {k:"compras",   label:"Alta Mercancía",icon:"🏪", roles:["admin","vendedor"]},
-    {k:"solicitud",  label:"Solicitudes", icon:"📋", roles:["admin","vendedor"]},
-    {k:"admin",     label:"Admin",     icon:"★",   roles:["admin"]},
+    {k:"central",   label:"Central",           icon:ClipboardList, roles:["admin","vendedor"]},
+    {k:"nuevo",     label:"Nuevo Pedido",       icon:ShoppingCart,  roles:["admin","vendedor"]},
+    {k:"clientes",  label:"Clientes",           icon:Users,         roles:["admin","vendedor"]},
+    {k:"cotizacion",label:"Cotizaciones",       icon:FileText,      roles:["admin","vendedor"]},
+    {k:"precios",   label:"Precios",            icon:CircleDollarSign, roles:["admin","vendedor"]},
+    {k:"stock",     label:"Stock",              icon:Package,       roles:["admin","vendedor"]},
+    {k:"compras",   label:"Alta Mercancía",icon:Store,        roles:["admin","vendedor"]},
+    {k:"solicitud",  label:"Solicitudes", icon:ListChecks,    roles:["admin","vendedor"]},
+    {k:"admin",     label:"Admin",     icon:Star,        roles:["admin"]},
   ].filter(t=>t.roles.includes(currentUser.role));
 
   // ── CLIENT FUNCTIONS ──────────────────────────────────────────────────────
@@ -1622,8 +1626,8 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
             <div style={{display:"flex",overflowX:"auto",gap:1,padding:"0 10px",scrollbarWidth:"none",alignItems:"center"}}>
               {TABS.map(t=>(
                 <button key={t.k} onClick={()=>setTab(t.k)}
-                  style={{padding:"7px 13px",border:"none",cursor:"pointer",fontSize:11,color:tab===t.k?"#fff":"#ffbbbb",fontWeight:tab===t.k?700:600,borderRadius:"8px 8px 0 0",background:tab===t.k?"#ffffff18":"transparent",borderBottom:tab===t.k?"3px solid #fff":"3px solid transparent",whiteSpace:"nowrap",flexShrink:0}}>
-                  {t.icon} {t.label}
+                  style={{padding:"7px 13px",border:"none",cursor:"pointer",fontSize:11,color:tab===t.k?"#fff":"#ffbbbb",fontWeight:tab===t.k?700:600,borderRadius:"8px 8px 0 0",background:tab===t.k?"#ffffff18":"transparent",borderBottom:tab===t.k?"3px solid #fff":"3px solid transparent",whiteSpace:"nowrap",flexShrink:0,display:"inline-flex",alignItems:"center",gap:5}}>
+                  <t.icon size={13} strokeWidth={2.25}/> {t.label}
                 </button>
               ))}
               <button onClick={()=>{if(window.confirm("¿Seguro que querés salir?")) onLogout();}}
@@ -1644,8 +1648,8 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
             <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
               <nav style={{display:"flex",gap:2,flexWrap:"wrap"}}>
                 {TABS.map(t=>(
-                  <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"11px 10px",border:"none",cursor:"pointer",fontSize:14,background:tab===t.k?"#fff":"transparent",color:tab===t.k?RED:"#ffcccc",fontWeight:tab===t.k?800:600,borderRadius:"8px 8px 0 0",position:"relative"}}>
-                    {t.icon} {t.label}
+                  <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"11px 10px",border:"none",cursor:"pointer",fontSize:14,background:tab===t.k?"#fff":"transparent",color:tab===t.k?RED:"#ffcccc",fontWeight:tab===t.k?800:600,borderRadius:"8px 8px 0 0",position:"relative",display:"inline-flex",alignItems:"center",gap:6}}>
+                    <t.icon size={14} strokeWidth={2.25}/> {t.label}
                     {t.k==="central"&&pending>0&&<span style={{position:"absolute",top:5,right:3,background:"#fff",color:RED,borderRadius:10,fontSize:10,padding:"1px 5px",fontWeight:800,border:`1.5px solid ${RED}`}}>{pending}</span>}
                   </button>
                 ))}
@@ -1688,7 +1692,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
             {TABS.map(t=>(
               <div key={t.k} onClick={()=>{setTab(t.k);setMobileMenu(false);}}
                 style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:tab===t.k?RED:"#333",background:tab===t.k?"#fdecea":"transparent",cursor:"pointer"}}>
-                <span style={{fontSize:20,width:28,textAlign:"center"}}>{t.icon}</span>{t.label}
+                <span style={{width:28,display:"flex",justifyContent:"center"}}><t.icon size={18} strokeWidth={2.25}/></span>{t.label}
               </div>
             ))}
             <div style={{borderTop:"2px solid #e5e5e5",marginTop:216,paddingTop:8}}>
@@ -1937,15 +1941,41 @@ function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onAppro
   const deliv = orders.filter(o=>o.stage==="entregado"&&(allSandbox||!o.isSandbox)).reduce((s,o)=>s+o.total,0);
   return (
     <div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(135px,1fr))",gap:12,marginBottom:20}}>
-        {STAGES.map(s=>{const c=SCFG[s],cnt=orders.filter(o=>o.stage===s&&(allSandbox||!o.isSandbox)).length;return <div key={s} onClick={()=>setFStage(fStage===s?"todos":s)} style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 6px #0001",borderLeft:`4px solid ${c.color}`,cursor:"pointer",outline:fStage===s?`2px solid ${c.color}`:"none"}}><div style={{fontSize:26,fontWeight:800,color:c.color}}>{cnt}</div><div style={{fontSize:12,color:"#666",fontWeight:600}}>{c.icon} {c.label}</div></div>;})}
-        <div style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 6px #0001",borderLeft:`4px solid ${RED}`}}>
-          <div style={{fontSize:14,fontWeight:800,color:RED}}>{fARS(deliv)}</div>
-          <div style={{fontSize:12,color:"#666",fontWeight:600}}>💰 Entregado</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12,marginBottom:20}}>
+        {STAGES.map(s=>{
+          const c=SCFG[s], Icon=STAGE_ICONS[s], cnt=orders.filter(o=>o.stage===s&&(allSandbox||!o.isSandbox)).length;
+          return (
+            <div key={s} onClick={()=>setFStage(fStage===s?"todos":s)} style={{
+              background:"#fff",borderRadius:12,padding:"14px 16px",
+              boxShadow:"0 1px 2px rgba(20,20,20,.04), 0 4px 14px rgba(20,20,20,.06)",
+              borderLeft:`3px solid ${c.color}`,cursor:"pointer",
+              outline:fStage===s?`2px solid ${c.color}`:"none",
+            }}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div style={{fontFamily:SERIF,fontSize:26,fontWeight:700,color:"#1a1a1a"}}>{cnt}</div>
+                <div style={{width:30,height:30,borderRadius:9,background:c.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <Icon size={15} color={c.color} strokeWidth={2.25}/>
+                </div>
+              </div>
+              <div style={{fontSize:11.5,color:"#7a7a7a",marginTop:4,fontWeight:600}}>{c.label}</div>
+            </div>
+          );
+        })}
+        <div style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 2px rgba(20,20,20,.04), 0 4px 14px rgba(20,20,20,.06)",borderLeft:`3px solid ${RED}`}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div style={{fontFamily:SERIF,fontSize:18,fontWeight:700,color:RED}}>{fARS(deliv)}</div>
+            <div style={{width:30,height:30,borderRadius:9,background:"#fdecea",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <Wallet size={15} color={RED} strokeWidth={2.25}/>
+            </div>
+          </div>
+          <div style={{fontSize:11.5,color:"#7a7a7a",marginTop:4,fontWeight:600}}>Total entregado</div>
         </div>
       </div>
       <div style={{background:"#fff",borderRadius:12,padding:14,marginBottom:14,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",boxShadow:"0 1px 4px #0001"}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar cliente o No pedido..." style={{flex:1,minWidth:180,padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none"}}/>
+        <div style={{position:"relative",flex:1,minWidth:180}}>
+          <Search size={15} color="#aaa" strokeWidth={2.25} style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)"}}/>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar cliente o N° pedido..." style={{width:"100%",padding:"8px 12px 8px 32px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+        </div>
         {vendedores.length>1&&<select value={fVendedor} onChange={e=>setFVendedor(e.target.value)}
           style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",cursor:"pointer",background:"#fff"}}>
           <option value="todos">👤 Todos los vendedores</option>
@@ -2052,28 +2082,28 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
   const editTotal = editItems.reduce((s,it)=>s+it.price*it.qty,0);
 
   return (
-    <div style={{background:"#fff",borderRadius:12,boxShadow:"0 2px 8px #0000000a",overflow:"hidden",marginBottom:8,borderLeft:`4px solid ${STAGE_COLORS[o.stage]||"#ccc"}`}}>
+    <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 2px rgba(20,20,20,.04), 0 4px 14px rgba(20,20,20,.06)",overflow:"hidden",marginBottom:8,borderLeft:`3px solid ${STAGE_COLORS[o.stage]||"#ccc"}`}}>
       <div onClick={toggle} style={{padding:"13px 18px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",cursor:"pointer"}}>
         <div style={{flex:1,minWidth:100}}>
-          <div style={{fontWeight:700,fontSize:14,color:"#1a1a1a"}}>{o.client}</div>
-          <div style={{fontSize:11,color:"#aaa",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+          <div style={{fontWeight:700,fontSize:14,color:"#1a1a1a",letterSpacing:-0.1}}>{o.client}</div>
+          <div style={{fontSize:11,color:"#999",display:"flex",gap:7,flexWrap:"wrap",alignItems:"center",marginTop:3}}>
             {o.isTest&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:800}}>TEST</span>}
             {o.isSandbox&&<span style={{background:"#9b59b6",color:"#fff",borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:800}}>🧪 SANDBOX</span>}
             {o.docNum&&!o.isTest&&<span style={{fontWeight:700,color:RED,fontFamily:SERIF}}>{o.docNum}</span>}
             {o.compNum&&!o.isTest&&<span style={{fontWeight:700,color:"#1a5276",fontFamily:SERIF}}>{o.compNum}</span>}
             <span>{o.date}</span>
-            {o.vendedor&&<span>· 👤 {o.vendedor}</span>}
-            {o.internalNote&&<span style={{color:"#e67e22"}}>· 📝 Nota</span>}
+            {o.vendedor&&<><Dot/><span>{o.vendedor}</span></>}
+            {o.internalNote&&<><Dot/><span style={{color:"#e67e22"}}>📝 Nota</span></>}
             {/* Pago — badge inline */}
-            {pt==="comprobante_pendiente"  && <span style={{background:"#eaf2f8",color:"#1a5276",border:"1px solid #aed6f1",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}>📎 Comprobante · pendiente</span>}
-            {pt==="efectivo_pendiente"     && <span style={{background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}>💵 Efectivo · pendiente</span>}
-            {pagoConfirmado                && <span style={{background:"#eafaf1",color:"#1e8449",border:"1px solid #a9dfbf",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:800}}>✅ Pagado {pt==="comprobante_confirmado"?"· 📎":"· 💵"}</span>}
+            {pt==="comprobante_pendiente"  && <span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#eaf2f8",color:"#1a5276",border:"1px solid #aed6f1",borderRadius:20,padding:"2.5px 9px 2.5px 7px",fontSize:10.5,fontWeight:700}}><Paperclip size={10} strokeWidth={2.5}/>Comprobante · pendiente</span>}
+            {pt==="efectivo_pendiente"     && <span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"2.5px 9px 2.5px 7px",fontSize:10.5,fontWeight:700}}><Banknote size={10} strokeWidth={2.5}/>Efectivo · pendiente</span>}
+            {pagoConfirmado                && <span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#eafaf1",color:"#1e8449",border:"1px solid #a9dfbf",borderRadius:20,padding:"2.5px 9px 2.5px 7px",fontSize:10.5,fontWeight:700}}><ShieldCheck size={10.5} strokeWidth={2.5}/>Pagado</span>}
             <EditBdg/>
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
           <Bdg stage={o.stage}/>
-          <span style={{fontWeight:800,color:RED,fontSize:15}}>{fARS(o.total)}</span>
+          <span style={{fontFamily:SERIF,fontWeight:700,color:RED,fontSize:16}}>{fARS(o.total)}</span>
           <span style={{color:"#ccc"}}>{exp?"▲":"▼"}</span>
         </div>
       </div>
@@ -4333,118 +4363,6 @@ function exportSolicitudXLSX(po) {
   XLSX.writeFile(wb, `Solicitud_${po.id.slice(-6).toUpperCase()}_${po.fecha.replace(/\//g,"-")}.xlsx`);
 }
 
-// Toma la planilla de precios/pedido del proveedor (tal cual se descarga de su web) y
-// completa la columna CANTIDAD con lo pedido en la solicitud, matcheando por código (SKU).
-// Devuelve {wb, faltantes} donde faltantes son items de la solicitud que no se encontraron en la plantilla.
-function llenarPlantillaProveedor(po, arrayBuffer) {
-  const wb = XLSX.read(arrayBuffer, {type:"array", cellFormula:true, cellStyles:true});
-  const sheetName = wb.SheetNames[0];
-  const ws = wb.Sheets[sheetName];
-  const range = XLSX.utils.decode_range(ws["!ref"] || "A1:H1");
-
-  const cellStr = (r,c) => {
-    const cell = ws[XLSX.utils.encode_cell({r,c})];
-    return cell && cell.v != null ? String(cell.v).trim() : "";
-  };
-
-  // Buscar la fila de encabezado (la que contiene "CÓDIGO"/"CODIGO" y "CANTIDAD")
-  let headerRow = -1, colCodigo = -1, colCantidad = -1;
-  const norm = s => s.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
-  for (let r = range.s.r; r <= Math.min(range.e.r, range.s.r + 30); r++) {
-    let foundCodigo = -1, foundCantidad = -1;
-    for (let c = range.s.c; c <= range.e.c; c++) {
-      const v = norm(cellStr(r,c));
-      if (v.includes("CODIGO")) foundCodigo = c;
-      if (v.includes("CANTIDAD")) foundCantidad = c;
-    }
-    if (foundCodigo >= 0 && foundCantidad >= 0) {
-      headerRow = r; colCodigo = foundCodigo; colCantidad = foundCantidad;
-      break;
-    }
-  }
-
-  if (headerRow === -1) {
-    return {wb:null, faltantes: po.items, error: "No se encontró la columna CÓDIGO/CANTIDAD en la plantilla."};
-  }
-
-  // Construir índice código normalizado -> fila
-  const lookup = {};
-  for (let r = headerRow + 1; r <= range.e.r; r++) {
-    const code = cellStr(r, colCodigo);
-    if (code) lookup[normSKU(code)] = r;
-  }
-
-  const faltantes = [];
-  po.items.forEach(it => {
-    const sku = normSKU(it.id || it.pid || "");
-    const row = lookup[sku];
-    if (row != null) {
-      const addr = XLSX.utils.encode_cell({r:row, c:colCantidad});
-      ws[addr] = {t:"n", v: it.qty};
-    } else {
-      faltantes.push(it);
-    }
-  });
-
-  return {wb, faltantes, sheetName};
-}
-
-// Modal para subir la plantilla del proveedor y descargar el Excel ya completado con las cantidades.
-function ModalExcelProveedor({po, onClose}) {
-  const fileRef = useRef();
-  const [status, setStatus] = useState(null); // {type:"error"|"ok", msg}
-  const [loading, setLoading] = useState(false);
-
-  const handleFile = (file) => {
-    if (!file) return;
-    setLoading(true); setStatus(null);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const {wb, faltantes, sheetName, error} = llenarPlantillaProveedor(po, e.target.result);
-        if (error) { setStatus({type:"error", msg:error}); setLoading(false); return; }
-        const fname = `${(po.proveedor||"Proveedor").replace(/\s+/g,"_")}_Pedido_${po.id.slice(-6).toUpperCase()}_${po.fecha.replace(/\//g,"-")}.xlsx`;
-        XLSX.writeFile(wb, fname);
-        if (faltantes.length) {
-          setStatus({type:"error", msg:`Se descargó el archivo, pero ${faltantes.length} producto(s) no se encontraron en la plantilla del proveedor: ${faltantes.map(f=>f.name).join(", ")}`});
-        } else {
-          setStatus({type:"ok", msg:`Listo, se completaron las ${po.items.length} cantidades en "${sheetName}" y se descargó el archivo.`});
-        }
-      } catch(err) {
-        setStatus({type:"error", msg:"No se pudo procesar el archivo: " + err.message});
-      }
-      setLoading(false);
-    };
-    reader.readAsArrayBuffer(file);
-  };
-
-  return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:16}} onClick={onClose}>
-      <div style={{background:"#fff",borderRadius:14,padding:22,maxWidth:440,width:"100%"}} onClick={e=>e.stopPropagation()}>
-        <div style={{fontWeight:800,fontSize:16,marginBottom:6,color:"#1a1a1a"}}>📦 Excel para el Proveedor</div>
-        <div style={{fontSize:13,color:"#777",marginBottom:16,lineHeight:1.5}}>
-          Subí la planilla que bajás de la web del proveedor (con su lista de precios y columna CANTIDAD). Se va a completar automáticamente con lo pedido en esta solicitud, buscando cada producto por su código.
-        </div>
-        <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{display:"none"}}
-          onChange={e=>handleFile(e.target.files[0])}/>
-        <button onClick={()=>fileRef.current?.click()} disabled={loading}
-          style={{width:"100%",padding:"12px",borderRadius:10,border:"none",background: loading?"#aaa":"linear-gradient(135deg,#1a5276,#1e8449)",color:"#fff",fontWeight:700,fontSize:14,cursor:loading?"default":"pointer"}}>
-          {loading?"Procesando...":"📂 Elegir planilla del proveedor"}
-        </button>
-        {status && (
-          <div style={{marginTop:14,padding:"10px 12px",borderRadius:8,fontSize:12.5,lineHeight:1.5,
-            background: status.type==="error" ? "#fdedec" : "#d5f5e3",
-            color: status.type==="error" ? "#c0392b" : "#1e8449",
-            border: `1.5px solid ${status.type==="error"?"#f5b7b1":"#a9dfbf"}`}}>
-            {status.msg}
-          </div>
-        )}
-        <button onClick={onClose} style={{width:"100%",marginTop:12,padding:"10px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cerrar</button>
-      </div>
-    </div>
-  );
-}
-
 function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchaseOrders,isMobile,onStockExternal,addLog,onCreated}) {
   const [view, setView] = useState("lista"); // lista | nueva | detalle
   const [selected, setSelected] = useState(null);
@@ -4454,7 +4372,6 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
   const [notas, setNotas] = useState("");
   const [saving, setSaving] = useState(false);
   const [itemNotas, setItemNotas] = useState({});
-  const [showProveedorModal, setShowProveedorModal] = useState(false);
 
   const myOrders = isAdmin ? purchaseOrders : purchaseOrders.filter(po=>po.vendedor===currentUser.vendedor||po.vendedor===currentUser.name);
 
@@ -4692,11 +4609,8 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
           {isAdmin && po.estado==="revisando" && <button onClick={()=>changeEstado(po,"cerrada")} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:"#1e8449",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>✅ Cerrar solicitud</button>}
           <button onClick={()=>printSolicitudPDF(po, PDF_LOGO_BANNER)} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #1a5276",background:"#fff",color:"#1a5276",fontWeight:700,fontSize:13,cursor:"pointer"}}>🖨️ PDF</button>
           <button onClick={()=>exportSolicitudXLSX(po)} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #1e8449",background:"#fff",color:"#1e8449",fontWeight:700,fontSize:13,cursor:"pointer"}}>📊 Excel</button>
-          {isAdmin && <button onClick={()=>setShowProveedorModal(true)} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #7b1a1a",background:"#fff",color:"#7b1a1a",fontWeight:700,fontSize:13,cursor:"pointer"}}>📦 Excel Proveedor</button>}
           {isAdmin&&<button onClick={()=>deletePO(po.id)} style={{padding:"11px 16px",borderRadius:10,border:"1.5px solid #fcc",background:"#fff",color:"#c0392b",fontWeight:700,fontSize:13,cursor:"pointer"}}>🗑</button>}
         </div>
-
-        {showProveedorModal && <ModalExcelProveedor po={po} onClose={()=>setShowProveedorModal(false)}/>}
 
         {/* Ingresar mercadería desde solicitud */}
         {isAdmin && po.estado==="cerrada" && (
