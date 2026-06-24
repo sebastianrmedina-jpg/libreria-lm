@@ -6741,27 +6741,34 @@ function ExcelPanel({products,setProducts}) {
           return String(cell.v).trim();
         };
 
+        // FIX 1: rango de busqueda del encabezado mas amplio (algunas listas de proveedores
+        // traen varias filas de texto legal/contacto antes del encabezado real) + corte
+        // correcto del loop externo apenas se encuentra (antes seguia pisando headerRow).
         let headerRow = 0;
-        for(let r = 0; r <= Math.min(5, totalRows); r++) {
-          for(let c = 0; c <= 10; c++) {
+        let headerFound = false;
+        for(let r = 0; r <= Math.min(40, totalRows) && !headerFound; r++) {
+          for(let c = 0; c <= 20; c++) {
             const v = cellStr(r, c).toUpperCase()
               .normalize("NFD").replace(/[̀-ͯ]/g,"");
-            if(v.includes("CODIGO") || v.includes("COD")) { headerRow = r; break; }
+            if(v === "CODIGO" || v === "COD") { headerRow = r; headerFound = true; break; }
           }
         }
 
         const norm = s => String(s).toUpperCase().trim()
           .normalize("NFD").replace(/[̀-ͯ]/g,"");
 
+        // FIX 2: cada columna se asigna solo si todavia no tiene match ("COL.x<0 &&"), asi la
+        // PRIMERA columna que matchea gana siempre. Antes "CODIGO DE BARRAS" pisaba a "CODIGO"
+        // porque ambas contienen la palabra CODIGO y el codigo se quedaba con la ultima.
         const COL = { codigo:-1, descripcion:-1, precioIVA:-1, precioOferta:-1, precioFinal:-1, fecha:-1 };
         for(let c = range.s.c; c <= range.e.c; c++) {
           const h = norm(cellStr(headerRow, c));
-          if(h.includes("CODIGO") || h === "COD" || h === "ID") COL.codigo = c;
-          else if(h.includes("DESCRIP") || h.includes("NOMBRE"))       COL.descripcion = c;
-          else if(h.includes("CON IVA") || (h.includes("IVA") && !h.includes("OFERTA") && !h.includes("FINAL"))) COL.precioIVA = c;
-          else if(h.includes("OFERTA"))  COL.precioOferta = c;
-          else if(h.includes("FINAL") || h.includes("PRECIO FINAL"))   COL.precioFinal  = c;
-          else if(h.includes("FECHA") || h.includes("ULTIMA") || h.includes("ACT")) COL.fecha = c;
+          if(COL.codigo<0 && (h==="CODIGO" || h==="COD" || h==="ID")) COL.codigo = c;
+          else if(COL.descripcion<0 && (h.includes("DESCRIP") || h.includes("NOMBRE"))) COL.descripcion = c;
+          else if(COL.precioIVA<0 && (h.includes("CON IVA") || (h.includes("IVA") && !h.includes("OFERTA") && !h.includes("FINAL")))) COL.precioIVA = c;
+          else if(COL.precioOferta<0 && h.includes("OFERTA")) COL.precioOferta = c;
+          else if(COL.precioFinal<0 && h.includes("FINAL")) COL.precioFinal = c;
+          else if(COL.fecha<0 && (h.includes("FECHA") || h.includes("ULTIMA") || h.includes("ACT"))) COL.fecha = c;
         }
 
         if(COL.codigo      < 0) COL.codigo      = 0;
@@ -6769,7 +6776,9 @@ function ExcelPanel({products,setProducts}) {
         if(COL.precioIVA   < 0) COL.precioIVA   = 2;
         if(COL.precioOferta< 0) COL.precioOferta = 3;
         if(COL.fecha       < 0) COL.fecha        = 4;
-        if(COL.precioFinal < 0) COL.precioFinal  = 5;
+        // FIX 3: "Precio Final" NO tiene un fallback adivinado. Si la lista no trae esa columna
+        // (como la de Papelera Bariloche), se deja sin mapear: mas abajo se ignora en vez de
+        // leer por accidente la columna de fecha y guardar un numero de serie como si fuera precio.
 
         const colLetter = c => c < 0 ? "-" : String.fromCharCode(65 + c);
         const detectedCols = {
@@ -6787,7 +6796,7 @@ function ExcelPanel({products,setProducts}) {
           if(!id) continue;
           const pIVA    = cellNum(r, COL.precioIVA);
           const pOferta = cellNum(r, COL.precioOferta);
-          const pFinal  = cellNum(r, COL.precioFinal);
+          const pFinal  = COL.precioFinal >= 0 ? cellNum(r, COL.precioFinal) : null;
           parsed.push({
             id,
             name:         cellStr(r, COL.descripcion),
