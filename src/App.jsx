@@ -2240,6 +2240,7 @@ function ConsolaAprobaciones({orders,clients,purchaseOrders,onApproveEditRequest
 
 // ─── CENTRAL ──────────────────────────────────────────────────────────────────
 function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,onConfirmarComprobante,onRechazarComprobante,onMarcarEfectivo,onConfirmarEfectivo,onRechazarEfectivo,exigirPagoConfirmado,clients,purchaseOrders,onDeleteClient,onRejectDeleteClient,onQuickReviewPO,onViewPO,currentUser,isMobile}) {
+  const isAdmin = currentUser?.role === "admin";
   const [fStage,setFStage]=useState("todos");
   const [fVendedor,setFVendedor]=useState("todos");
   const [search,setSearch]=useState("");
