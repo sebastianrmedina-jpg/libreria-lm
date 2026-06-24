@@ -30,6 +30,92 @@ const CircleDollarSign = (p) => <Ico {...p}><circle cx="12" cy="12" r="9"/><path
 const Store = (p) => <Ico {...p}><path d="M3 9l1.5-5h15L21 9"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/></Ico>;
 const ListChecks = (p) => <Ico {...p}><polyline points="3 7 4.5 8.5 7 6"/><line x1="11" y1="7" x2="21" y2="7"/><polyline points="3 13 4.5 14.5 7 12"/><line x1="11" y1="13" x2="21" y2="13"/><polyline points="3 19 4.5 20.5 7 18"/><line x1="11" y1="19" x2="21" y2="19"/></Ico>;
 const Star = (p) => <Ico {...p}><path d="M12 3l2.9 6 6.6.6-5 4.4 1.5 6.5L12 17l-5.9 3.5L7.6 14l-5-4.4 6.6-.6z"/></Ico>;
+const CheckCircle = (p) => <Ico {...p}><circle cx="12" cy="12" r="9"/><polyline points="8 12 11 15 16 9"/></Ico>;
+const XCircle = (p) => <Ico {...p}><circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></Ico>;
+const AlertTriangle = (p) => <Ico {...p}><path d="M12 3l9.5 17H2.5z"/><line x1="12" y1="10" x2="12" y2="14.5"/><circle cx="12" cy="17.3" r="0.4" fill={p.color||"currentColor"} stroke="none"/></Ico>;
+const XIcon = (p) => <Ico {...p}><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></Ico>;
+const Pencil = (p) => <Ico {...p}><path d="M4 20l1-4 11-11 3 3-11 11-4 1Z"/><path d="M14 6l3 3"/></Ico>;
+const Truck = (p) => <Ico {...p}><rect x="1" y="7" width="13" height="9" rx="1"/><path d="M14 10h4l3 3v3h-7z"/><circle cx="6" cy="18.5" r="1.6"/><circle cx="17" cy="18.5" r="1.6"/></Ico>;
+const UserMinus = (p) => <Ico {...p}><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6"/><line x1="16" y1="10" x2="22" y2="10"/></Ico>;
+const ArrowLeftIcon = (p) => <Ico {...p}><line x1="20" y1="12" x2="4" y2="12"/><polyline points="11 5 4 12 11 19"/></Ico>;
+const Eye = (p) => <Ico {...p}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></Ico>;
+const BoxIcon = (p) => <Ico {...p}><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></Ico>;
+
+// ─── Sistema global de toasts (reemplaza toast.error()) — sin Context ni prop-drilling ──
+let _pushToast = null;
+function ToastHost() {
+  const [toasts, setToasts] = useState([]);
+  const idRef = useRef(0);
+  useEffect(() => {
+    _pushToast = (type, msg) => {
+      const id = ++idRef.current;
+      setToasts(t => [...t, {id, type, msg}]);
+      setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4200);
+    };
+    return () => { _pushToast = null; };
+  }, []);
+  const dismiss = id => setToasts(t => t.filter(x => x.id !== id));
+  const CFG = {
+    success: {color:"#1e8449", bg:"#eafaf1", border:"#a9dfbf", Icon:CheckCircle},
+    error:   {color:"#c0392b", bg:"#fdecea", border:"#f1948a", Icon:XCircle},
+    info:    {color:"#1a5276", bg:"#eaf2f8", border:"#aed6f1", Icon:AlertTriangle},
+  };
+  return (
+    <div style={{position:"fixed",bottom:18,right:18,left:18,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8,zIndex:99999,pointerEvents:"none"}}>
+      {toasts.map(t=>{
+        const c = CFG[t.type]||CFG.info;
+        return (
+          <div key={t.id} style={{background:"#fff",border:`1.5px solid ${c.border}`,borderRadius:11,padding:"11px 14px",display:"flex",alignItems:"center",gap:10,minWidth:240,maxWidth:360,boxShadow:"0 4px 18px rgba(0,0,0,.15)",pointerEvents:"auto",animation:"lm-toast-in .2s ease"}}>
+            <div style={{width:26,height:26,borderRadius:8,background:c.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <c.Icon size={14} color={c.color} strokeWidth={2.4}/>
+            </div>
+            <div style={{fontSize:12.5,color:"#333",flex:1,lineHeight:1.35}}>{t.msg}</div>
+            <button onClick={()=>dismiss(t.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#bbb",padding:2,flexShrink:0}}><XIcon size={13} strokeWidth={2.2}/></button>
+          </div>
+        );
+      })}
+      <style>{`@keyframes lm-toast-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}`}</style>
+    </div>
+  );
+}
+const toast = {
+  success: (msg) => _pushToast && _pushToast("success", msg),
+  error:   (msg) => _pushToast && _pushToast("error", msg),
+  info:    (msg) => _pushToast && _pushToast("info", msg),
+};
+
+// ─── Sistema global de confirmación (reemplaza window.confirm()) ──────────
+let _askConfirm = null;
+function ConfirmHost() {
+  const [state, setState] = useState(null);
+  useEffect(() => {
+    _askConfirm = (title, msg, danger=false) => new Promise(resolve => setState({title,msg,danger,resolve}));
+    return () => { _askConfirm = null; };
+  }, []);
+  if(!state) return null;
+  const close = (val) => { state.resolve(val); setState(null); };
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(20,20,20,.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100000,padding:20}} onClick={()=>close(false)}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,padding:"22px 24px",maxWidth:340,width:"100%",boxShadow:"0 12px 40px rgba(0,0,0,.25)",animation:"lm-pop-in .15s ease"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+          <div style={{width:34,height:34,borderRadius:10,flexShrink:0,background:state.danger?"#fdecea":"#eaf2f8",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <AlertTriangle size={17} color={state.danger?"#c0392b":"#1a5276"} strokeWidth={2.2}/>
+          </div>
+          <div style={{fontWeight:700,fontSize:15,color:"#1a1a1a"}}>{state.title}</div>
+        </div>
+        <div style={{fontSize:13,color:"#666",marginBottom:18,lineHeight:1.5}}>{state.msg}</div>
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+          <button onClick={()=>close(false)} style={{padding:"8px 16px",borderRadius:8,border:"1px solid #ddd",background:"#fff",color:"#666",fontWeight:600,fontSize:12.5,cursor:"pointer"}}>Cancelar</button>
+          <button onClick={()=>close(true)} style={{padding:"8px 16px",borderRadius:8,border:"none",fontWeight:700,fontSize:12.5,cursor:"pointer",color:"#fff",background:state.danger?"#c0392b":"#1e8449"}}>
+            {state.danger?"Sí, continuar":"Confirmar"}
+          </button>
+        </div>
+      </div>
+      <style>{`@keyframes lm-pop-in{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}`}</style>
+    </div>
+  );
+}
+const confirmDialog = (title, msg, danger=false) => _askConfirm ? _askConfirm(title, msg, danger) : Promise.resolve(window.confirm(`${title}\n${msg}`));
 
 // ─── MOBILE HOOK ─────────────────────────────────────────────────────────────
 function useIsMobile() {
@@ -49,7 +135,7 @@ const SUPA_SERVICE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const supabase = createClient(SUPA_URL, SUPA_ANON);
 const supaAdmin = supabase;
 
-const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock});
+const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock,multiploCompra:r.multiplo_compra||1});
 const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||"",isTest:r.is_test||false,isSandbox:r.is_sandbox||false,internalNote:r.internal_note||"",editStatus:r.edit_status||"",editReason:r.edit_reason||"",editItems:r.edit_items||null,editRejectReason:r.edit_reject_reason||"",comprobanteUrl:r.comprobante_url||"",comprobanteNombre:r.comprobante_nombre||"",comprobanteFecha:r.comprobante_fecha||"",pagoTipo:r.pago_tipo||"",pagoEfectivoFecha:r.pago_efectivo_fecha||""});
 const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,date:r.date,items:r.items||[],validity:r.validity||"",docNum:r.doc_num||"",convertida:r.convertida||false,ordenId:r.orden_id||"",extendida:r.extendida||false,extendReason:r.extend_reason||"",extendDate:r.extend_date||"",globalDisc:r.global_disc||null,subtotal:r.subtotal||0});
 
@@ -151,8 +237,8 @@ const db = {
     }
     return all.map(mapProduct);
   },
-  upsertProduct: async (p) => { const {error} = await supaAdmin.from("lm_products").upsert({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0}); if(error) throw error; },
-  upsertProducts: async (arr) => { const {error} = await supaAdmin.from("lm_products").upsert(arr.map(p=>({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0}))); if(error) throw error; },
+  upsertProduct: async (p) => { const {error} = await supaAdmin.from("lm_products").upsert({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0,multiplo_compra:p.multiploCompra||1}); if(error) throw error; },
+  upsertProducts: async (arr) => { const {error} = await supaAdmin.from("lm_products").upsert(arr.map(p=>({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0,multiplo_compra:p.multiploCompra||1}))); if(error) throw error; },
   deleteProduct: async (id) => { const {error} = await supaAdmin.from("lm_products").delete().eq("id",id); if(error) throw error; },
 
   getOrders:    async () => { const {data,error} = await supabase.from("lm_orders").select("*").order("date",{ascending:false}); if(error) throw error; return (data||[]).map(mapOrder); },
@@ -927,7 +1013,7 @@ function Login({users, onLogin}) {
 
 
 // ─── ROOT APP ─────────────────────────────────────────────────────────────────
-export default function App() {
+function AppInner() {
   // ── SANDBOX STOCK — copia para el vendedor Prueba, persiste en localStorage ──
   const [sandboxStock, setSandboxStock] = useState({});
   const isSandboxUser = (user) => user && isTestOrder(user.vendedor || user.name);
@@ -1052,6 +1138,19 @@ export default function App() {
     promos={promos} setPromos={setPromos}
     settings={settings} setSettings={setSettings}
   />;
+}
+
+// ─── Wrapper raiz: monta los hosts de toasts/confirmacion una sola vez, ──────
+// sin importar el estado de auth (loading/error/login/app), y sin necesitar
+// pasar props a traves de toda la app (toast.success(...) y confirmDialog(...) funcionan desde cualquier componente)
+export default function App() {
+  return (
+    <>
+      <AppInner/>
+      <ToastHost/>
+      <ConfirmHost/>
+    </>
+  );
 }
 
 // ─── MAIN APP (authenticated) ─────────────────────────────────────────────────
@@ -1492,6 +1591,29 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       tag:`del-client-${id}`, para:"admin", de:currentUser.name
     });
   };
+  // El admin rechaza la baja solicitada — el cliente queda activo, sin necesidad de eliminarlo
+  const rejectDeleteClient = async (id) => {
+    const client = clients.find(c=>c.id===id);
+    if(!client) return;
+    const updated = {...client, deleteRequested:false, deleteReason:""};
+    setClients(prev=>prev.map(c=>c.id===id?updated:c));
+    await db.saveClient(updated);
+    await sendCrossNotif(db, setNotifs, {
+      title:"❌ Baja de cliente rechazada",
+      body:`El admin no aprobó la baja de "${client.name}" — sigue activo`,
+      tag:`del-client-rej-${id}`, para:client.createdBy||"", de:"admin"
+    });
+  };
+
+  // ── BANDEJA DE APROBACIONES — deep-link a solicitudes de compra desde Central ──
+  const [deepLinkPOId, setDeepLinkPOId] = useState(null);
+  const quickReviewPO = async (id) => {
+    const po = purchaseOrders.find(p=>p.id===id);
+    if(!po) return;
+    const updated = {...po, estado:"revisando"};
+    setPurchaseOrders(prev=>prev.map(x=>x.id===id?updated:x));
+    await db.savePurchaseOrder(updated);
+  };
 
   const isMobile = useIsMobile();
   const [mobileMenu, setMobileMenu] = useState(false);
@@ -1657,7 +1779,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                   <t.icon size={13} strokeWidth={2.25}/> {t.label}
                 </button>
               ))}
-              <button onClick={()=>{if(window.confirm("¿Seguro que querés salir?")) onLogout();}}
+              <button onClick={async()=>{if(await confirmDialog("¿Seguro que querés salir?","Vas a cerrar tu sesión.")) onLogout();}}
                 style={{padding:"5px 10px",border:"1px solid #ffffff33",cursor:"pointer",fontSize:11,color:"#ffbbbb",fontWeight:600,borderRadius:7,background:"transparent",whiteSpace:"nowrap",flexShrink:0,marginLeft:6}}>
                 🚪 Salir
               </button>
@@ -1728,7 +1850,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                 try {
                   const OS = await getOneSignal();
                   if(!OS) {
-                    alert("El sistema de notificaciones no está disponible. Verificá tu conexión y recargá la app.");
+                    toast.error("El sistema de notificaciones no está disponible. Verificá tu conexión y recargá la app.");
                     setMobileMenu(false);
                     return;
                   }
@@ -1743,7 +1865,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                   }
                 } catch(e) {
                   console.warn("OneSignal:", e);
-                  alert("Hubo un problema al activar las notificaciones. Intentá de nuevo.");
+                  toast.error("Hubo un problema al activar las notificaciones. Intentá de nuevo.");
                 }
                 setMobileMenu(false);
               }} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,
@@ -1760,7 +1882,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                     : "Activar notificaciones push"
                 }
               </div>
-              <div onClick={()=>{if(window.confirm("¿Seguro que querés salir de la app?")) onLogout();}} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:RED,cursor:"pointer",background:"#fdecea"}}>
+              <div onClick={async()=>{if(await confirmDialog("¿Seguro que querés salir?","Vas a cerrar la sesión y volver a la pantalla de inicio.")) onLogout();}} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:RED,cursor:"pointer",background:"#fdecea"}}>
                 <span style={{fontSize:20,width:28,textAlign:"center"}}>🚪</span>Salir
               </div>
               <div onClick={()=>{setShowChangePass(true);setMobileMenu(false);}} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:"#333",cursor:"pointer"}}>
@@ -1800,9 +1922,12 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
           onConfirmarComprobante={confirmarComprobante} onRechazarComprobante={rechazarComprobante}
           onMarcarEfectivo={marcarEfectivo} onConfirmarEfectivo={confirmarEfectivo} onRechazarEfectivo={rechazarEfectivo}
           exigirPagoConfirmado={settings.exigirPagoConfirmado}
+          clients={clients} purchaseOrders={purchaseOrders}
+          onDeleteClient={deleteClient} onRejectDeleteClient={rejectDeleteClient}
+          onQuickReviewPO={quickReviewPO} onViewPO={(id)=>{setDeepLinkPOId(id);setTab("solicitud");}}
           currentUser={currentUser} isMobile={isMobile}/>}
         {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} promos={promos}/>}
-        {tab==="clientes"   && <ClientesPanel clients={clients} onSave={saveClient} onDelete={deleteClient} onRequestDelete={requestDeleteClient} currentUser={currentUser} isMobile={isMobile} orders={orders}/>}
+        {tab==="clientes"   && <ClientesPanel clients={clients} onSave={saveClient} onDelete={deleteClient} onRequestDelete={requestDeleteClient} onRejectDelete={rejectDeleteClient} currentUser={currentUser} isMobile={isMobile} orders={orders}/>}
         {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient}/>}
         {tab==="precios"    && <Precios products={pricedProducts}/>}
         {tab==="stock"      && <>
@@ -1822,6 +1947,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
             </>}
         {tab==="compras"    && <Compras products={products} onStock={addStock} isMobile={isMobile} canScan={currentUser.role==="admin"||isTestOrder(currentUser.vendedor||currentUser.name)||currentUser.barcodeEnabled}/>}
         {tab==="solicitud"  && <SolicitudCompra products={products} currentUser={currentUser} isAdmin={isAdmin} purchaseOrders={purchaseOrders} setPurchaseOrders={setPurchaseOrders} isMobile={isMobile} onStockExternal={addStock} addLog={addLog}
+          autoOpenId={deepLinkPOId} onConsumedAutoOpen={()=>setDeepLinkPOId(null)}
           onCreated={async(po)=>{
             await sendCrossNotif(db, setNotifs, {
               title:"📋 Nueva solicitud de compra",
@@ -1949,8 +2075,171 @@ function CompPopup({order, onClose}) {
 }
 
 
+// ─── CONSOLA DE APROBACIONES — todo lo que el admin necesita revisar, en un solo lugar ──
+function ConsolaAprobAccionBtn({color,bg="#fff",children,onClick,disabled}) {
+  return <button disabled={disabled} onClick={onClick} style={{padding:"6px 12px",borderRadius:7,border:`1px solid ${color}55`,background:bg,color,fontWeight:700,fontSize:11.5,cursor:disabled?"default":"pointer",opacity:disabled?0.6:1}}>{children}</button>;
+}
+function ConsolaAprobItem({children}) {
+  return <div style={{background:"#fafafa",borderRadius:9,padding:"10px 12px",marginBottom:8}}>{children}</div>;
+}
+function ConsolaAprobSection({icon:Icon,color,title,n,children}) {
+  if(n===0) return null;
+  return (
+    <div style={{marginBottom:16}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:9}}>
+        <div style={{width:24,height:24,borderRadius:7,background:color+"18",display:"flex",alignItems:"center",justifyContent:"center"}}><Icon size={13} color={color} strokeWidth={2.3}/></div>
+        <div style={{fontWeight:700,fontSize:12.5,color:"#1a1a1a"}}>{title}</div>
+        <span style={{background:color,color:"#fff",borderRadius:20,fontSize:10,fontWeight:800,padding:"1px 7px"}}>{n}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+function ConsolaAprobEdicion({o,onApproveEditRequest,onRejectEditRequest,onApproveEdit,onRejectEdit,onViewOrder}) {
+  const [busy,setBusy]=useState(false);
+  const [rejecting,setRejecting]=useState(false);
+  const [motivo,setMotivo]=useState("");
+  const esSolicitud = o.editStatus==="solicitada";
+  const aprobar = esSolicitud ? onApproveEditRequest : onApproveEdit;
+  const rechazar = esSolicitud ? onRejectEditRequest : onRejectEdit;
+  return (
+    <ConsolaAprobItem>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+        <div>
+          <div style={{fontWeight:700,fontSize:12.5,color:"#1a1a1a"}}>{o.client}</div>
+          <div style={{fontSize:11,color:"#999",margin:"2px 0 5px"}}>👤 {o.vendedor} · {esSolicitud?"pide permiso para editar":"envió cambios para revisar"}</div>
+        </div>
+        <button onClick={()=>onViewOrder(o.id)} style={{display:"flex",alignItems:"center",gap:4,background:"none",border:"none",color:"#1a5276",fontWeight:700,fontSize:11,cursor:"pointer",padding:0,flexShrink:0}}><Eye size={12} strokeWidth={2.3}/>Ver pedido</button>
+      </div>
+      {o.editReason&&<div style={{fontSize:11.5,color:"#666",marginBottom:8,fontStyle:"italic"}}>"{o.editReason}"</div>}
+      {!rejecting ? (
+        <div style={{display:"flex",gap:6}}>
+          <ConsolaAprobAccionBtn color="#1e8449" disabled={busy} onClick={async()=>{setBusy(true);try{await aprobar(o.id);toast.success(`Edición ${esSolicitud?"habilitada":"aprobada"} — ${o.client}`);}catch(e){console.warn(e);toast.error("No se pudo aprobar. Probá de nuevo.");}finally{setBusy(false);}}}>✅ Aprobar</ConsolaAprobAccionBtn>
+          <ConsolaAprobAccionBtn color="#c0392b" disabled={busy} onClick={()=>setRejecting(true)}>❌ Rechazar</ConsolaAprobAccionBtn>
+        </div>
+      ) : (
+        <div>
+          <input value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="Motivo del rechazo..." style={{width:"100%",padding:"6px 9px",borderRadius:7,border:"1px solid #e5b4b0",fontSize:11.5,boxSizing:"border-box",marginBottom:6}}/>
+          <div style={{display:"flex",gap:6}}>
+            <ConsolaAprobAccionBtn color="#fff" bg="#c0392b" disabled={!motivo.trim()||busy} onClick={async()=>{setBusy(true);try{await rechazar(o.id,motivo);toast.info(`Edición rechazada — ${o.client}`);setRejecting(false);setMotivo("");}catch(e){console.warn(e);toast.error("No se pudo rechazar. Probá de nuevo.");}finally{setBusy(false);}}}>Confirmar rechazo</ConsolaAprobAccionBtn>
+            <ConsolaAprobAccionBtn color="#999" onClick={()=>{setRejecting(false);setMotivo("");}}>Cancelar</ConsolaAprobAccionBtn>
+          </div>
+        </div>
+      )}
+    </ConsolaAprobItem>
+  );
+}
+function ConsolaAprobPago({o,onConfirmarComprobante,onRechazarComprobante,onConfirmarEfectivo,onRechazarEfectivo,onViewOrder}) {
+  const [busy,setBusy]=useState(false);
+  const [rejecting,setRejecting]=useState(false);
+  const [motivo,setMotivo]=useState("");
+  const pt = normPagoTipo(o.pagoTipo);
+  const esComprobante = pt==="comprobante_pendiente";
+  return (
+    <ConsolaAprobItem>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+        <div>
+          <div style={{fontWeight:700,fontSize:12.5,color:"#1a1a1a"}}>{o.client}</div>
+          <div style={{fontSize:11,color:"#999"}}>{esComprobante?"📎 Comprobante":"💵 Efectivo"} · 👤 {o.vendedor}</div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+          <div style={{fontWeight:800,fontSize:13,color:"#c0392b"}}>{fARS(o.total)}</div>
+          <button onClick={()=>onViewOrder(o.id)} style={{display:"flex",alignItems:"center",gap:4,background:"none",border:"none",color:"#1a5276",fontWeight:700,fontSize:11,cursor:"pointer",padding:0}}><Eye size={12} strokeWidth={2.3}/>Ver</button>
+        </div>
+      </div>
+      {!rejecting ? (
+        <div style={{display:"flex",gap:6,marginTop:8}}>
+          <ConsolaAprobAccionBtn color="#1e8449" disabled={busy} onClick={async()=>{setBusy(true);try{await (esComprobante?onConfirmarComprobante(o.id):onConfirmarEfectivo(o.id));toast.success(`Pago de ${o.client} confirmado`);}catch(e){console.warn(e);toast.error("No se pudo confirmar. Probá de nuevo.");}finally{setBusy(false);}}}>✅ Confirmar</ConsolaAprobAccionBtn>
+          {esComprobante
+            ? <ConsolaAprobAccionBtn color="#c0392b" disabled={busy} onClick={()=>setRejecting(true)}>❌ Rechazar</ConsolaAprobAccionBtn>
+            : <ConsolaAprobAccionBtn color="#c0392b" disabled={busy} onClick={async()=>{setBusy(true);try{await onRechazarEfectivo(o.id);toast.info(`Pago de ${o.client} rechazado`);}catch(e){console.warn(e);toast.error("No se pudo rechazar. Probá de nuevo.");}finally{setBusy(false);}}}>❌ Rechazar</ConsolaAprobAccionBtn>}
+        </div>
+      ) : (
+        <div style={{marginTop:8}}>
+          <input value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="Motivo del rechazo..." style={{width:"100%",padding:"6px 9px",borderRadius:7,border:"1px solid #e5b4b0",fontSize:11.5,boxSizing:"border-box",marginBottom:6}}/>
+          <div style={{display:"flex",gap:6}}>
+            <ConsolaAprobAccionBtn color="#fff" bg="#c0392b" disabled={!motivo.trim()||busy} onClick={async()=>{setBusy(true);try{await onRechazarComprobante(o.id,motivo);toast.info(`Comprobante de ${o.client} rechazado`);setRejecting(false);setMotivo("");}catch(e){console.warn(e);toast.error("No se pudo rechazar. Probá de nuevo.");}finally{setBusy(false);}}}>Confirmar rechazo</ConsolaAprobAccionBtn>
+            <ConsolaAprobAccionBtn color="#999" onClick={()=>{setRejecting(false);setMotivo("");}}>Cancelar</ConsolaAprobAccionBtn>
+          </div>
+        </div>
+      )}
+    </ConsolaAprobItem>
+  );
+}
+function ConsolaAprobSolicitud({po,onQuickReviewPO,onViewPO}) {
+  const [busy,setBusy]=useState(false);
+  return (
+    <ConsolaAprobItem>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div>
+          <div style={{fontWeight:700,fontSize:12.5,color:"#1a1a1a"}}>Solicitud de compra</div>
+          <div style={{fontSize:11,color:"#999"}}>{po.items?.length||0} productos · 👤 {po.vendedor}</div>
+        </div>
+        <button onClick={()=>onViewPO(po.id)} style={{display:"flex",alignItems:"center",gap:4,background:"none",border:"none",color:"#1a5276",fontWeight:700,fontSize:11,cursor:"pointer",padding:0}}><Eye size={12} strokeWidth={2.3}/>Ver detalle</button>
+      </div>
+      <div style={{marginTop:8}}>
+        <ConsolaAprobAccionBtn color="#b7770d" disabled={busy} onClick={async()=>{setBusy(true);try{await onQuickReviewPO(po.id);toast.info("Marcada como revisando");}catch(e){console.warn(e);toast.error("No se pudo actualizar.");}finally{setBusy(false);}}}>🔍 Marcar revisando</ConsolaAprobAccionBtn>
+      </div>
+    </ConsolaAprobItem>
+  );
+}
+function ConsolaAprobBaja({c,onDeleteClient,onRejectDeleteClient}) {
+  const [busy,setBusy]=useState(false);
+  return (
+    <ConsolaAprobItem>
+      <div style={{fontWeight:700,fontSize:12.5,color:"#1a1a1a"}}>{c.name}</div>
+      <div style={{fontSize:11,color:"#999",margin:"2px 0 6px"}}>👤 solicitado por {c.createdBy||"—"}</div>
+      {c.deleteReason&&<div style={{fontSize:11.5,color:"#666",marginBottom:8,fontStyle:"italic"}}>"{c.deleteReason}"</div>}
+      <div style={{display:"flex",gap:6}}>
+        <ConsolaAprobAccionBtn color="#c0392b" disabled={busy} onClick={async()=>{
+          const ok = await confirmDialog("¿Eliminar cliente?",`Vas a eliminar a "${c.name}" definitivamente. Esta acción no se puede deshacer.`,true);
+          if(!ok) return;
+          setBusy(true);try{await onDeleteClient(c.id);toast.success("Cliente eliminado");}catch(e){console.warn(e);toast.error("No se pudo eliminar.");}finally{setBusy(false);}
+        }}>🗑️ Aprobar baja</ConsolaAprobAccionBtn>
+        <ConsolaAprobAccionBtn color="#999" disabled={busy} onClick={async()=>{setBusy(true);try{await onRejectDeleteClient(c.id);toast.info("Baja rechazada, el cliente sigue activo");}catch(e){console.warn(e);toast.error("No se pudo actualizar.");}finally{setBusy(false);}}}>Rechazar</ConsolaAprobAccionBtn>
+      </div>
+    </ConsolaAprobItem>
+  );
+}
+function ConsolaAprobaciones({orders,clients,purchaseOrders,onApproveEditRequest,onRejectEditRequest,onApproveEdit,onRejectEdit,onConfirmarComprobante,onRechazarComprobante,onConfirmarEfectivo,onRechazarEfectivo,onDeleteClient,onRejectDeleteClient,onQuickReviewPO,onViewPO,onViewOrder}) {
+  const ediciones = orders.filter(o=>o.editStatus==="solicitada"||o.editStatus==="en revisión");
+  const pagos = orders.filter(o=>{const pt=normPagoTipo(o.pagoTipo); return pt==="comprobante_pendiente"||pt==="efectivo_pendiente";});
+  const solicitudes = (purchaseOrders||[]).filter(po=>po.estado==="abierta");
+  const bajas = (clients||[]).filter(c=>c.deleteRequested);
+  const total = ediciones.length+pagos.length+solicitudes.length+bajas.length;
+  const [open,setOpen] = useState(true);
+
+  if(total===0) return null; // no molestar si no hay nada pendiente
+
+  return (
+    <div style={{background:"#fff",borderRadius:14,padding:"16px 18px",marginBottom:18,boxShadow:"0 1px 4px #0001"}}>
+      <div onClick={()=>setOpen(o=>!o)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",marginBottom:open?14:0}}>
+        <div style={{fontWeight:800,fontSize:14.5,color:"#1a1a1a"}}>📋 Necesita tu aprobación</div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{background:"#c0392b",color:"#fff",borderRadius:20,fontSize:11,fontWeight:800,padding:"2px 9px"}}>{total}</span>
+          <ChevronDown size={14} strokeWidth={2.3} color="#bbb" style={{transform:open?"rotate(180deg)":"none",transition:"transform .15s"}}/>
+        </div>
+      </div>
+      {open && <>
+        <ConsolaAprobSection icon={Pencil} color="#1a5276" title="Ediciones de pedido" n={ediciones.length}>
+          {ediciones.map(o=><ConsolaAprobEdicion key={o.id} o={o} onApproveEditRequest={onApproveEditRequest} onRejectEditRequest={onRejectEditRequest} onApproveEdit={onApproveEdit} onRejectEdit={onRejectEdit} onViewOrder={onViewOrder}/>)}
+        </ConsolaAprobSection>
+        <ConsolaAprobSection icon={Banknote} color="#b7770d" title="Pagos por confirmar" n={pagos.length}>
+          {pagos.map(o=><ConsolaAprobPago key={o.id} o={o} onConfirmarComprobante={onConfirmarComprobante} onRechazarComprobante={onRechazarComprobante} onConfirmarEfectivo={onConfirmarEfectivo} onRechazarEfectivo={onRechazarEfectivo} onViewOrder={onViewOrder}/>)}
+        </ConsolaAprobSection>
+        <ConsolaAprobSection icon={Truck} color="#6c3483" title="Solicitudes de compra" n={solicitudes.length}>
+          {solicitudes.map(po=><ConsolaAprobSolicitud key={po.id} po={po} onQuickReviewPO={onQuickReviewPO} onViewPO={onViewPO}/>)}
+        </ConsolaAprobSection>
+        <ConsolaAprobSection icon={UserMinus} color="#c0392b" title="Bajas de cliente" n={bajas.length}>
+          {bajas.map(c=><ConsolaAprobBaja key={c.id} c={c} onDeleteClient={onDeleteClient} onRejectDeleteClient={onRejectDeleteClient}/>)}
+        </ConsolaAprobSection>
+      </>}
+    </div>
+  );
+}
+
 // ─── CENTRAL ──────────────────────────────────────────────────────────────────
-function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,onConfirmarComprobante,onRechazarComprobante,onMarcarEfectivo,onConfirmarEfectivo,onRechazarEfectivo,exigirPagoConfirmado,currentUser,isMobile}) {
+function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,onConfirmarComprobante,onRechazarComprobante,onMarcarEfectivo,onConfirmarEfectivo,onRechazarEfectivo,exigirPagoConfirmado,clients,purchaseOrders,onDeleteClient,onRejectDeleteClient,onQuickReviewPO,onViewPO,currentUser,isMobile}) {
   const [fStage,setFStage]=useState("todos");
   const [fVendedor,setFVendedor]=useState("todos");
   const [search,setSearch]=useState("");
@@ -1968,6 +2257,17 @@ function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onAppro
   const deliv = orders.filter(o=>o.stage==="entregado"&&(allSandbox||!o.isSandbox)).reduce((s,o)=>s+o.total,0);
   return (
     <div>
+      {isAdmin && <ConsolaAprobaciones
+        orders={orders} clients={clients} purchaseOrders={purchaseOrders}
+        onApproveEditRequest={onApproveEditRequest} onRejectEditRequest={onRejectEditRequest}
+        onApproveEdit={onApproveEdit} onRejectEdit={onRejectEdit}
+        onConfirmarComprobante={onConfirmarComprobante} onRechazarComprobante={onRechazarComprobante}
+        onConfirmarEfectivo={onConfirmarEfectivo} onRechazarEfectivo={onRechazarEfectivo}
+        onDeleteClient={onDeleteClient} onRejectDeleteClient={onRejectDeleteClient}
+        onQuickReviewPO={onQuickReviewPO} onViewPO={onViewPO}
+        onViewOrder={(id)=>{setExpanded(id);setSearch("");setFStage("todos");setFVendedor("todos");
+          setTimeout(()=>{document.getElementById(`order-${id}`)?.scrollIntoView({behavior:"smooth",block:"center"});},80);}}
+      />}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12,marginBottom:20}}>
         {STAGES.map(s=>{
           const c=SCFG[s], Icon=STAGE_ICONS[s], cnt=orders.filter(o=>o.stage===s&&(allSandbox||!o.isSandbox)).length;
@@ -2085,7 +2385,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
       await onUploadComprobante(o.id, { url, nombre, fecha: today() });
     } catch(err) {
       console.warn(err);
-      alert("No se pudo subir el comprobante. Probá de nuevo.");
+      toast.error("No se pudo subir el comprobante. Probá de nuevo.");
     } finally {
       setUploadingComp(false);
     }
@@ -2109,7 +2409,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
   const editTotal = editItems.reduce((s,it)=>s+it.price*it.qty,0);
 
   return (
-    <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 2px rgba(20,20,20,.04), 0 4px 14px rgba(20,20,20,.06)",overflow:"hidden",marginBottom:8,borderLeft:`3px solid ${STAGE_COLORS[o.stage]||"#ccc"}`}}>
+    <div id={`order-${o.id}`} style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 2px rgba(20,20,20,.04), 0 4px 14px rgba(20,20,20,.06)",overflow:"hidden",marginBottom:8,borderLeft:`3px solid ${STAGE_COLORS[o.stage]||"#ccc"}`}}>
       <div onClick={toggle} style={{padding:"13px 18px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",cursor:"pointer"}}>
         <div style={{flex:1,minWidth:100}}>
           <div style={{fontWeight:700,fontSize:14,color:"#1a1a1a",letterSpacing:-0.1}}>{o.client}</div>
@@ -2151,7 +2451,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
               <div style={{fontWeight:800,fontSize:13,color:"#b7770d",marginBottom:4}}>✏️ Solicitud de edición</div>
               <div style={{fontSize:12,color:"#7d6608",marginBottom:10}}>Motivo: "{o.editReason}"</div>
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                <button onClick={async()=>{setSaving(true);try{await onApproveEditRequest(o.id);}catch(e){console.warn(e);alert("No se pudo aprobar. Probá de nuevo.");}finally{setSaving(false);}}}
+                <button onClick={async()=>{setSaving(true);try{await onApproveEditRequest(o.id);}catch(e){console.warn(e);toast.error("No se pudo aprobar. Probá de nuevo.");}finally{setSaving(false);}}}
                   style={{padding:"7px 14px",borderRadius:8,border:"none",background:"#1e8449",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer"}}>
                   ✅ Aprobar solicitud
                 </button>
@@ -2166,7 +2466,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                     placeholder="Motivo del rechazo..."
                     style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #f1948a",fontSize:13,resize:"vertical",minHeight:60,outline:"none",boxSizing:"border-box"}}/>
                   <div style={{display:"flex",gap:8,marginTop:6}}>
-                    <button onClick={async()=>{if(!rejectReason.trim())return;setSaving(true);try{await onRejectEditRequest(o.id,rejectReason);setShowRejectForm(false);setRejectReason("");}catch(e){console.warn(e);alert("No se pudo rechazar. Probá de nuevo.");}finally{setSaving(false);}}}
+                    <button onClick={async()=>{if(!rejectReason.trim())return;setSaving(true);try{await onRejectEditRequest(o.id,rejectReason);setShowRejectForm(false);setRejectReason("");}catch(e){console.warn(e);toast.error("No se pudo rechazar. Probá de nuevo.");}finally{setSaving(false);}}}
                       disabled={!rejectReason.trim()}
                       style={{padding:"6px 14px",borderRadius:7,border:"none",background:rejectReason.trim()?"#c0392b":"#e5e5e5",color:rejectReason.trim()?"#fff":"#aaa",fontWeight:700,fontSize:12,cursor:rejectReason.trim()?"pointer":"not-allowed"}}>
                       Confirmar rechazo
@@ -2193,7 +2493,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
               <div style={{fontSize:12,color:"#922b21"}}>Motivo: "{o.editRejectReason}"</div>
               <button
                 style={{marginTop:8,padding:"5px 12px",borderRadius:7,border:"1px solid #f1948a",background:"#fff",color:"#c0392b",fontSize:11,fontWeight:600,cursor:"pointer"}}
-                onClick={async()=>{setSaving(true);try{await onRequestEdit(o.id,"");}catch(e){console.warn(e);alert("No se pudo enviar la solicitud. Probá de nuevo.");}finally{setSaving(false);}}}>
+                onClick={async()=>{setSaving(true);try{await onRequestEdit(o.id,"");}catch(e){console.warn(e);toast.error("No se pudo enviar la solicitud. Probá de nuevo.");}finally{setSaving(false);}}}>
                 Volver a solicitar
               </button>
             </div>
@@ -2264,7 +2564,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
               <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:15,color:RED,padding:"10px 0",borderTop:"2px solid #d6eaf8",margin:"4px 0 10px"}}>
                 <span>Nuevo total</span><span>{fARS(editTotal)}</span>
               </div>
-              <button onClick={async()=>{if(!editItems.length)return;setSaving(true);try{await onSubmitEdit(o.id,editItems,editTotal);setShowEditMode(false);}catch(e){console.warn(e);alert("No se pudo enviar la edición. Probá de nuevo.");}finally{setSaving(false);}}}
+              <button onClick={async()=>{if(!editItems.length)return;setSaving(true);try{await onSubmitEdit(o.id,editItems,editTotal);setShowEditMode(false);}catch(e){console.warn(e);toast.error("No se pudo enviar la edición. Probá de nuevo.");}finally{setSaving(false);}}}
                 disabled={!editItems.length||saving}
                 style={{width:"100%",padding:"10px",borderRadius:9,border:"none",background:editItems.length?"linear-gradient(135deg,#1a5276,#2980b9)":"#e5e5e5",color:editItems.length?"#fff":"#aaa",fontWeight:800,fontSize:14,cursor:editItems.length?"pointer":"not-allowed",marginBottom:8}}>
                 {saving?"Enviando...":"📤 Enviar para revisión"}
@@ -2296,7 +2596,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                 <div style={{fontWeight:800,fontSize:13,color:RED,marginTop:6,textAlign:"right"}}>{fARS((o.editItems||[]).reduce((s,it)=>s+it.price*it.qty,0))}</div>
               </div>
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                <button onClick={async()=>{setSaving(true);try{await onApproveEdit(o.id);}catch(e){console.warn(e);alert("No se pudo aprobar. Probá de nuevo.");}finally{setSaving(false);}}}
+                <button onClick={async()=>{setSaving(true);try{await onApproveEdit(o.id);}catch(e){console.warn(e);toast.error("No se pudo aprobar. Probá de nuevo.");}finally{setSaving(false);}}}
                   style={{padding:"8px 16px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#1a5e20,#1e8449)",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>
                   ✅ Aprobar cambios
                 </button>
@@ -2311,7 +2611,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                     placeholder="Motivo del rechazo..."
                     style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #f1948a",fontSize:13,resize:"vertical",minHeight:60,outline:"none",boxSizing:"border-box"}}/>
                   <div style={{display:"flex",gap:8,marginTop:6}}>
-                    <button onClick={async()=>{if(!finalRejectReason.trim())return;setSaving(true);try{await onRejectEdit(o.id,finalRejectReason);setShowFinalReject(false);setFinalRejectReason("");}catch(e){console.warn(e);alert("No se pudo rechazar. Probá de nuevo.");}finally{setSaving(false);}}}
+                    <button onClick={async()=>{if(!finalRejectReason.trim())return;setSaving(true);try{await onRejectEdit(o.id,finalRejectReason);setShowFinalReject(false);setFinalRejectReason("");}catch(e){console.warn(e);toast.error("No se pudo rechazar. Probá de nuevo.");}finally{setSaving(false);}}}
                       disabled={!finalRejectReason.trim()}
                       style={{padding:"6px 14px",borderRadius:7,border:"none",background:finalRejectReason.trim()?"#c0392b":"#e5e5e5",color:finalRejectReason.trim()?"#fff":"#aaa",fontWeight:700,fontSize:12,cursor:finalRejectReason.trim()?"pointer":"not-allowed"}}>
                       Confirmar rechazo
@@ -2389,7 +2689,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                   📄 Subir PDF
                 </label>
                 <button disabled={savingEfectivo}
-                  onClick={async()=>{setSavingEfectivo(true);try{await onMarcarEfectivo(o.id);}catch(e){console.warn(e);alert("No se pudo registrar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
+                  onClick={async()=>{setSavingEfectivo(true);try{await onMarcarEfectivo(o.id);}catch(e){console.warn(e);toast.error("No se pudo registrar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
                   style={{display:"flex",alignItems:"center",gap:8,padding:"11px 14px",borderRadius:9,border:"1px solid #f0d080",background:"#fff",color:"#b7770d",fontSize:13,fontWeight:700,cursor:"pointer"}}>
                   💵 Pago en efectivo
                 </button>
@@ -2416,7 +2716,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                 {isAdmin ? (!showRejectComp ? (
                   <div style={{display:"flex",flexDirection:"column",gap:7}}>
                     <button disabled={savingEfectivo}
-                      onClick={async()=>{setSavingEfectivo(true);try{await onConfirmarComprobante(o.id);}catch(e){console.warn(e);alert("No se pudo confirmar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
+                      onClick={async()=>{setSavingEfectivo(true);try{await onConfirmarComprobante(o.id);}catch(e){console.warn(e);toast.error("No se pudo confirmar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
                       style={{padding:"11px 14px",borderRadius:9,border:"none",background:"#1e8449",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>
                       {savingEfectivo?"Guardando...":"✅ Confirmar — el pago es correcto"}
                     </button>
@@ -2443,7 +2743,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                       style={{width:"100%",padding:8,borderRadius:6,border:"1px solid #e5b4b0",fontSize:12.5,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box"}}/>
                     <div style={{display:"flex",gap:8,marginTop:8}}>
                       <button disabled={!rejectCompMotivo.trim()||savingEfectivo}
-                        onClick={async()=>{setSavingEfectivo(true);try{await onRechazarComprobante(o.id,rejectCompMotivo);setShowRejectComp(false);setRejectCompMotivo("");}catch(e){console.warn(e);alert("No se pudo rechazar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
+                        onClick={async()=>{setSavingEfectivo(true);try{await onRechazarComprobante(o.id,rejectCompMotivo);setShowRejectComp(false);setRejectCompMotivo("");}catch(e){console.warn(e);toast.error("No se pudo rechazar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
                         style={{padding:"6px 14px",borderRadius:7,border:"none",background:rejectCompMotivo.trim()?"#c0392b":"#e5b4b0",color:"#fff",fontWeight:700,fontSize:12,cursor:rejectCompMotivo.trim()?"pointer":"not-allowed"}}>
                         Confirmar rechazo
                       </button>
@@ -2475,12 +2775,12 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                     </div>
                     <div style={{display:"flex",flexDirection:"column",gap:7}}>
                       <button disabled={savingEfectivo}
-                        onClick={async()=>{setSavingEfectivo(true);try{await onConfirmarEfectivo(o.id);}catch(e){console.warn(e);alert("No se pudo confirmar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
+                        onClick={async()=>{setSavingEfectivo(true);try{await onConfirmarEfectivo(o.id);}catch(e){console.warn(e);toast.error("No se pudo confirmar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
                         style={{padding:"11px 14px",borderRadius:9,border:"none",background:"#1e8449",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>
                         {savingEfectivo?"Guardando...":"✅ Confirmar efectivo"}
                       </button>
                       <button disabled={savingEfectivo}
-                        onClick={async()=>{setSavingEfectivo(true);try{await onRechazarEfectivo(o.id);}catch(e){console.warn(e);alert("No se pudo rechazar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
+                        onClick={async()=>{setSavingEfectivo(true);try{await onRechazarEfectivo(o.id);}catch(e){console.warn(e);toast.error("No se pudo rechazar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
                         style={{padding:"11px 14px",borderRadius:9,border:"1.5px solid #f1948a",background:"#fff",color:"#c0392b",fontSize:13,fontWeight:700,cursor:"pointer"}}>
                         ❌ No confirmar
                       </button>
@@ -2568,7 +2868,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                       placeholder="Motivo de la edición..."
                       style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #aed6f1",fontSize:13,resize:"vertical",minHeight:60,outline:"none",boxSizing:"border-box"}}/>
                     <div style={{display:"flex",gap:8,marginTop:6}}>
-                      <button onClick={async()=>{if(!reqReason.trim())return;setSaving(true);try{await onRequestEdit(o.id,reqReason);setShowReqForm(false);setReqReason("");}catch(e){console.warn(e);alert("No se pudo enviar la solicitud. Probá de nuevo.");}finally{setSaving(false);}}}
+                      <button onClick={async()=>{if(!reqReason.trim())return;setSaving(true);try{await onRequestEdit(o.id,reqReason);setShowReqForm(false);setReqReason("");}catch(e){console.warn(e);toast.error("No se pudo enviar la solicitud. Probá de nuevo.");}finally{setSaving(false);}}}
                         disabled={!reqReason.trim()||saving}
                         style={{padding:"6px 14px",borderRadius:7,border:"none",background:reqReason.trim()?"#1a5276":"#e5e5e5",color:reqReason.trim()?"#fff":"#aaa",fontWeight:700,fontSize:12,cursor:reqReason.trim()?"pointer":"not-allowed"}}>
                         {saving?"Enviando...":"📤 Enviar solicitud"}
@@ -2600,7 +2900,7 @@ function ClientSelector({clients, onSelect, onSaveClient, currentUser}) {
   }, [clients, search]);
 
   const createAndSelect = async () => {
-    if(!form.name.trim()||!form.phone.trim()) { alert("Nombre y teléfono son obligatorios"); return; }
+    if(!form.name.trim()||!form.phone.trim()) { toast.error("Nombre y teléfono son obligatorios"); return; }
     setSaving(true);
     const newClient = {id:genId(), name:form.name.trim(), phone:form.phone.trim(), email:"", cuit:"", address:"", notes:"", deleteRequested:false, deleteReason:"", createdBy:currentUser.name, createdAt:today()};
     await onSaveClient(newClient);
@@ -2772,7 +3072,7 @@ function ClientHistorial({client, orders, period, setPeriod, onBack}) {
   );
 }
 
-function ClientesPanel({clients, onSave, onDelete, onRequestDelete, currentUser, isMobile, orders=[]}) {
+function ClientesPanel({clients, onSave, onDelete, onRequestDelete, onRejectDelete, currentUser, isMobile, orders=[]}) {
   const isAdmin = currentUser.role === "admin";
   const [view, setView] = useState("lista");
   const [search, setSearch] = useState("");
@@ -2796,7 +3096,7 @@ function ClientesPanel({clients, onSave, onDelete, onRequestDelete, currentUser,
   const cancelEdit = () => { setEditing(null); setForm({name:"",phone:"",email:"",cuit:"",address:"",notes:""}); setView("lista"); };
 
   const save = async () => {
-    if(!form.name.trim()||!form.phone.trim()){alert("Nombre y teléfono son obligatorios");return;}
+    if(!form.name.trim()||!form.phone.trim()){toast.error("Nombre y teléfono son obligatorios");return;}
     setSaving(true);
     const client = editing
       ? {...clients.find(c=>c.id===editing), ...form}
@@ -2846,14 +3146,17 @@ function ClientesPanel({clients, onSave, onDelete, onRequestDelete, currentUser,
                   {c.notes&&<div style={{fontSize:11,color:"#aaa",marginTop:4,fontStyle:"italic"}}>"{c.notes}"</div>}
                   {c.deleteRequested&&<div style={{background:"#fef9e7",border:"1px solid #f0d080",borderRadius:6,padding:"4px 8px",fontSize:11,color:"#b7770d",fontWeight:600,marginTop:6}}>
                     ⏳ Solicitud de baja pendiente — "{c.deleteReason}"
-                    {isAdmin&&<button onClick={()=>onDelete(c.id)} style={{marginLeft:8,padding:"2px 8px",borderRadius:4,border:"none",background:"#c0392b",color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer"}}>Aprobar baja</button>}
+                    {isAdmin&&<>
+                      <button onClick={()=>onDelete(c.id)} style={{marginLeft:8,padding:"2px 8px",borderRadius:4,border:"none",background:"#c0392b",color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer"}}>Aprobar baja</button>
+                      <button onClick={()=>onRejectDelete(c.id)} style={{marginLeft:6,padding:"2px 8px",borderRadius:4,border:"1px solid #ccc",background:"#fff",color:"#666",fontSize:10,fontWeight:700,cursor:"pointer"}}>Rechazar</button>
+                    </>}
                   </div>}
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:5,flexShrink:0}}>
                   <button onClick={()=>{setHistorialClient(c);setView("historial");}} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #eaf4fc",background:"#fff",color:"#1a5276",cursor:"pointer",fontSize:11,fontWeight:600}}>📋</button>
             <button onClick={()=>startEdit(c)} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11,fontWeight:600}}>✏️</button>
                   {isAdmin
-                    ? <button onClick={()=>{if(window.confirm(`¿Eliminar a "${c.name}"?`))onDelete(c.id);}} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #fcc",background:"#fff",color:"#c0392b",cursor:"pointer",fontSize:11}}>🗑</button>
+                    ? <button onClick={async()=>{if(await confirmDialog("¿Eliminar cliente?",`Vas a eliminar a "${c.name}" definitivamente.`,true))onDelete(c.id);}} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #fcc",background:"#fff",color:"#c0392b",cursor:"pointer",fontSize:11}}>🗑</button>
                     : !c.deleteRequested&&<button onClick={()=>setDelForm({id:c.id,reason:""})} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #fcc",background:"#fff",color:"#c0392b",cursor:"pointer",fontSize:10,fontWeight:600}}>Solicitar baja</button>
                   }
                 </div>
@@ -2862,7 +3165,7 @@ function ClientesPanel({clients, onSave, onDelete, onRequestDelete, currentUser,
                 <div style={{fontSize:12,fontWeight:700,color:"#b7770d",marginBottom:6}}>Motivo de la solicitud de baja</div>
                 <input value={delForm.reason} onChange={e=>setDelForm(f=>({...f,reason:e.target.value}))} placeholder="Ej: Cliente duplicado..." style={{...inputStyle,fontSize:12,marginBottom:8}}/>
                 <div style={{display:"flex",gap:6}}>
-                  <button onClick={async()=>{if(!delForm.reason.trim()){alert("Escribí un motivo");return;}await onRequestDelete(delForm.id,delForm.reason);setDelForm({id:null,reason:""}); }}
+                  <button onClick={async()=>{if(!delForm.reason.trim()){toast.error("Escribí un motivo");return;}await onRequestDelete(delForm.id,delForm.reason);setDelForm({id:null,reason:""}); }}
                     style={{flex:1,padding:"7px",borderRadius:7,border:"none",background:"#b7770d",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer"}}>Enviar solicitud</button>
                   <button onClick={()=>setDelForm({id:null,reason:""})} style={{padding:"7px 12px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontSize:12,cursor:"pointer"}}>Cancelar</button>
                 </div>
@@ -2948,7 +3251,7 @@ function Precios({products}) {
 }
 
 // ─── NUEVO PEDIDO ─────────────────────────────────────────────────────────────
-function ProductSelector({products,cart,setCart,isMobile,promos=[]}) {
+function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=false}) {
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("todos");
   const [catOpen,setCatOpen]=useState(false);
@@ -2968,16 +3271,19 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[]}) {
   const shownCombos = search.trim() ? combos.filter(c=>norm(c.nombre).includes(norm(search))) : combos;
 
   // ── Productos regulares (no-combo) ──
+  // En loteMode (Solicitud de Compra), el proveedor exige pedir en multiplos de caja (columna UNIDAD del Excel)
+  const step = p => loteMode ? (p.multiploCompra||1) : 1;
   const addC=p=>setCart(c=>{
     const promo = getProductPromo(promos,p.id);
     const ex = c.find(i=>i.cartKey===p.id);
     if(ex) {
-      const newQty = ex.qty+1;
+      const newQty = ex.qty+step(p);
       const {disc,label} = computeAutoDisc(promo,newQty);
       return c.map(i=>i.cartKey===p.id?{...i,qty:newQty,disc,promoLabel:label}:i);
     }
-    const {disc,label} = computeAutoDisc(promo,1);
-    return [...c,{pid:p.id,id:p.id,cartKey:p.id,qty:1,price:p.salePrice,name:p.name,disc,promoLabel:label}];
+    const qtyInicial = step(p);
+    const {disc,label} = computeAutoDisc(promo,qtyInicial);
+    return [...c,{pid:p.id,id:p.id,cartKey:p.id,qty:qtyInicial,price:p.salePrice,name:p.name,disc,promoLabel:label}];
   });
   const setQ=(cartKey,qty)=>{
     if(qty<=0){setCart(c=>c.filter(i=>i.cartKey!==cartKey));return;}
@@ -3067,6 +3373,7 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[]}) {
                   {promo && <span style={{fontSize:10,fontWeight:800,borderRadius:6,padding:"1px 6px",marginBottom:3,display:"inline-block",background:promo.tipo==="3x2"?"#fef9e7":"#fdecea",color:promo.tipo==="3x2"?"#b7770d":"#c0392b",border:promo.tipo==="3x2"?"1px solid #f3d98a":"1px solid #f5b7b1"}}>{promo.tipo==="3x2"?`🏷️ ${promo.data.comprar}×${promo.data.pagar}`:`🔻 -${promo.data.valor}${promo.data.tipoValor==="%"?"%":""}`}</span>}
                   <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",lineHeight:1.3,marginBottom:2}}>{p.name}</div>
                   <div style={{fontSize:11,color:"#666"}}>{p.id} · {p.category}</div>
+                  {loteMode && p.multiploCompra>1 && <span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"1.5px 8px",fontSize:10,fontWeight:700,marginTop:3}}><BoxIcon size={10} strokeWidth={2.4}/>Caja de {p.multiploCompra}</span>}
                   <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4}}>
                     {isDesc&&<span style={{fontSize:11,color:"#aaa",textDecoration:"line-through"}}>{fARS(p.salePrice)}</span>}
                     <span style={{fontSize:15,fontWeight:800,color:RED}}>{fARS(finalPrice)}</span>
@@ -3075,9 +3382,9 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[]}) {
                 </div>
                 {ic
                   ? <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-                      <button onClick={()=>setQ(p.id,ic.qty-1)} style={{width:30,height:30,borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:16,fontWeight:700}}>−</button>
+                      <button onClick={()=>setQ(p.id,ic.qty-step(p))} style={{width:30,height:30,borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:16,fontWeight:700}}>−</button>
                       <span style={{minWidth:24,textAlign:"center",fontWeight:800,fontSize:14}}>{ic.qty}</span>
-                      <button onClick={()=>setQ(p.id,ic.qty+1)} style={{width:30,height:30,borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:16,fontWeight:700}}>+</button>
+                      <button onClick={()=>setQ(p.id,ic.qty+step(p))} style={{width:30,height:30,borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:16,fontWeight:700}}>+</button>
                     </div>
                   : <button onClick={()=>addC(p)} style={{padding:"7px 12px",borderRadius:7,border:"none",cursor:"pointer",background:RED,color:"#fff",fontWeight:700,fontSize:12,flexShrink:0}}>+ Agregar</button>
                 }
@@ -3108,13 +3415,21 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[]}) {
               {promo && <div style={{marginBottom:5}}><span style={{fontSize:10,fontWeight:800,borderRadius:6,padding:"2px 7px",display:"inline-block",background:promo.tipo==="3x2"?"#fef9e7":"#fdecea",color:promo.tipo==="3x2"?"#b7770d":"#c0392b",border:promo.tipo==="3x2"?"1px solid #f3d98a":"1px solid #f5b7b1"}}>{promo.tipo==="3x2"?`🏷️ ${promo.data.comprar}×${promo.data.pagar}`:`🔻 -${promo.data.valor}${promo.data.tipoValor==="%"?"%":""}`}</span></div>}
               <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",marginBottom:3,lineHeight:1.3}}>{p.name}</div>
               <div style={{fontSize:12,color:"#666",marginBottom:7,fontWeight:500}}>{p.id} · {p.category}</div>
+              {loteMode && p.multiploCompra>1 && <div style={{marginBottom:7}}><span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"1.5px 8px",fontSize:10,fontWeight:700}}><BoxIcon size={10} strokeWidth={2.4}/>Caja de {p.multiploCompra}</span></div>}
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                 <span>{isDesc&&<span style={{fontSize:11,color:"#aaa",textDecoration:"line-through",marginRight:5}}>{fARS(p.salePrice)}</span>}<span style={{fontSize:17,fontWeight:800,color:RED}}>{fARS(finalPrice)}</span></span><SPill n={p.stock}/>
               </div>
               {ic?<div style={{display:"flex",alignItems:"center",gap:5}}>
-                <button onClick={()=>setQ(p.id,ic.qty-1)} style={{width:27,height:27,borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:15,fontWeight:700}}>−</button>
-                <input type="number" value={ic.qty} onChange={e=>setQ(p.id,+e.target.value||0)} style={{width:40,textAlign:"center",padding:3,borderRadius:6,border:`1.5px solid ${RED}`,fontWeight:700,fontSize:13,outline:"none"}}/>
-                <button onClick={()=>setQ(p.id,ic.qty+1)} style={{width:27,height:27,borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:15,fontWeight:700}}>+</button>
+                <button onClick={()=>setQ(p.id,ic.qty-step(p))} style={{width:27,height:27,borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:15,fontWeight:700}}>−</button>
+                <input type="number" value={ic.qty} onChange={e=>{
+                  const val = +e.target.value||0;
+                  if(loteMode && p.multiploCompra>1 && val>0 && val%p.multiploCompra!==0) {
+                    const snapped = Math.max(p.multiploCompra, Math.round(val/p.multiploCompra)*p.multiploCompra);
+                    toast.info(`${p.name} se vende por caja de ${p.multiploCompra} — ajustado a ${snapped}`);
+                    setQ(p.id, snapped);
+                  } else setQ(p.id, val);
+                }} style={{width:40,textAlign:"center",padding:3,borderRadius:6,border:`1.5px solid ${RED}`,fontWeight:700,fontSize:13,outline:"none"}}/>
+                <button onClick={()=>setQ(p.id,ic.qty+step(p))} style={{width:27,height:27,borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:15,fontWeight:700}}>+</button>
                 <span style={{color:"#1e8449",fontSize:12,fontWeight:700}}>✓</span>
               </div>:<button onClick={()=>addC(p)} style={{width:"100%",padding:"7px",borderRadius:7,border:"none",cursor:"pointer",background:RED,color:"#fff",fontWeight:700,fontSize:12}}>+ Agregar</button>}
             </div>;})}
@@ -3173,9 +3488,9 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
   const globalDiscAmt=subtotal-total;
 
   const submit=async ()=>{
-    if(!selectedClient){alert("Seleccioná un cliente");return;}
-    if(!vendedor&&currentUser.role==="admin"){alert("Seleccioná un vendedor");return;}
-    if(!cart.length){alert("Agregá productos");return;}
+    if(!selectedClient){toast.error("Seleccioná un cliente");return;}
+    if(!vendedor&&currentUser.role==="admin"){toast.error("Seleccioná un vendedor");return;}
+    if(!cart.length){toast.error("Agregá productos");return;}
     setSaving(true);
     await onAdd({id:genId(),client:selectedClient.name,clientId:selectedClient.id,notes,vendedor:vendedor||currentUser.vendedor||currentUser.name,items:cart,total,subtotal,globalDisc,stage:"reserva",date:today()});
     setSaving(false);
@@ -3215,7 +3530,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
             }
             {currentUser.role==="admin"&&<Field label="Vendedor *"><select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,cursor:"pointer",color:vendedor?"#1a1a1a":"#aaa",marginBottom:8}}><option value="">— Seleccioná vendedor —</option>{vendors.map(v=><option key={v} value={v}>{v}</option>)}</select></Field>}
             <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
-            <button onClick={()=>{if(!selectedClient){alert("Seleccioná un cliente");return;}if(!vendedor&&currentUser.role==="admin"){alert("Seleccioná un vendedor");return;}setMStep(2);}}
+            <button onClick={()=>{if(!selectedClient){toast.error("Seleccioná un cliente");return;}if(!vendedor&&currentUser.role==="admin"){toast.error("Seleccioná un vendedor");return;}setMStep(2);}}
               style={{width:"100%",padding:"12px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:selectedClient?`linear-gradient(135deg,${REDD},${RED})`:"#e5e5e5",color:selectedClient?"#fff":"#aaa",marginTop:8}}>
               Siguiente → Productos
             </button>
@@ -3481,8 +3796,8 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,on
   const globalDiscAmt = subtotal - total;
 
   const submit=async()=>{
-    if(!selectedClient){alert("Seleccioná un cliente");return;}
-    if(!cart.length){alert("Agregá productos");return;}
+    if(!selectedClient){toast.error("Seleccioná un cliente");return;}
+    if(!cart.length){toast.error("Agregá productos");return;}
     setSaving(true);
     const q={id:genId(),client:selectedClient.name,clientId:selectedClient.id,notes,vendedor,validity,items:cart,total,subtotal,globalDisc,date:today()};
     await onAdd(q);
@@ -3529,7 +3844,7 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,on
           {currentUser?.role==="admin"&&<Field label="Vendedor"><select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,cursor:"pointer"}}><option value="">- Sin asignar -</option>{vendors.map(v=><option key={v} value={v}>{v}</option>)}</select></Field>}
           <Field label="Válida hasta"><input value={validity} onChange={e=>setValidity(e.target.value)} placeholder="Ej: 48 horas" style={inputStyle}/></Field>
           <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones, condiciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
-          <button onClick={()=>{if(!selectedClient){alert("Seleccioná un cliente");return;}setMStep(2);}}
+          <button onClick={()=>{if(!selectedClient){toast.error("Seleccioná un cliente");return;}setMStep(2);}}
             style={{width:"100%",padding:"12px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:selectedClient?PURPLEG:"#e5e5e5",color:selectedClient?"#fff":"#aaa",marginTop:8}}>
             Siguiente → Productos
           </button>
@@ -3826,7 +4141,7 @@ function StockAdjust({products,onDel,onAdjust,addLog}) {
 
   const confirmAction = async () => {
     if(!selected) return;
-    if(!reason.trim()){alert("El motivo es obligatorio para registrar el movimiento");return;}
+    if(!reason.trim()){toast.error("El motivo es obligatorio para registrar el movimiento");return;}
     if(mode==="baja") {
       await onDel(selected.id);
       addLog({
@@ -3840,7 +4155,7 @@ function StockAdjust({products,onDel,onAdjust,addLog}) {
       });
       setDone({msg:`✅ Producto "${selected.name}" dado de baja.`, color:"#c0392b"});
     } else {
-      if(qty===0){alert("El ajuste no puede ser 0");return;}
+      if(qty===0){toast.error("El ajuste no puede ser 0");return;}
       const stockDespues = Math.max(0, selected.stock + qty);
       onAdjust(selected.id, qty);
       addLog({
@@ -4211,7 +4526,7 @@ function IngresarDesdeSolicitud({po, products, onStock, onDone}) {
 
   const submit = async () => {
     const toIngresar = items.filter(i => i.incluir && i.qtyRecibida > 0);
-    if(!toIngresar.length) { alert("Seleccioná al menos un producto para ingresar"); return; }
+    if(!toIngresar.length) { toast.error("Seleccioná al menos un producto para ingresar"); return; }
     setSaving(true);
     for(const it of toIngresar) {
       await onStock(it.pid, +it.qtyRecibida, +it.cost);
@@ -4390,7 +4705,7 @@ function exportSolicitudXLSX(po) {
   XLSX.writeFile(wb, `Solicitud_${po.id.slice(-6).toUpperCase()}_${po.fecha.replace(/\//g,"-")}.xlsx`);
 }
 
-function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchaseOrders,isMobile,onStockExternal,addLog,onCreated}) {
+function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchaseOrders,isMobile,onStockExternal,addLog,onCreated,autoOpenId,onConsumedAutoOpen}) {
   const [view, setView] = useState("lista"); // lista | nueva | detalle
   const [selected, setSelected] = useState(null);
   const [showAddProduct, setShowAddProduct] = useState(false);
@@ -4400,6 +4715,14 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
   const [saving, setSaving] = useState(false);
   const [itemNotas, setItemNotas] = useState({});
 
+  // Deep-link desde la consola de aprobaciones: abre directo el detalle de una solicitud puntual
+  useEffect(() => {
+    if(!autoOpenId) return;
+    const po = purchaseOrders.find(p=>p.id===autoOpenId);
+    if(po) { setSelected(po); setView("detalle"); }
+    onConsumedAutoOpen && onConsumedAutoOpen();
+  }, [autoOpenId, purchaseOrders]);
+
   const myOrders = isAdmin ? purchaseOrders : purchaseOrders.filter(po=>po.vendedor===currentUser.vendedor||po.vendedor===currentUser.name);
 
   const savePO = async (po) => {
@@ -4408,7 +4731,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
   };
 
   const createNew = async () => {
-    if(!cart.length){alert("Agregá al menos un producto");return;}
+    if(!cart.length){toast.error("Agregá al menos un producto");return;}
     setSaving(true);
     const po = {
       id: genId(),
@@ -4433,7 +4756,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
   };
 
   const deletePO = async (id) => {
-    if(!window.confirm("¿Eliminar esta solicitud?")) return;
+    if(!await confirmDialog("¿Eliminar esta solicitud?","Esta acción no se puede deshacer.",true)) return;
     setPurchaseOrders(prev=>prev.filter(x=>x.id!==id));
     await db.deletePurchaseOrder(id);
     if(selected?.id===id){setSelected(null);setView("lista");}
@@ -4667,7 +4990,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
               // handled by ProductSelector below
             }} placeholder="Usá el buscador de productos abajo" style={{...inputStyle,background:"#f9f9f9",color:"#aaa"}} readOnly/>
         </div>
-        <ProductSelector products={products} cart={cart} setCart={setCart} isMobile={isMobile}/>
+        <ProductSelector products={products} cart={cart} setCart={setCart} isMobile={isMobile} loteMode={true}/>
       </div>
 
       <div style={{position:isMobile?"static":"sticky",top:16,margin:isMobile?"12px":"0"}}>
@@ -5304,7 +5627,7 @@ function PagosPanel({orders, onConfirmarComprobante, onRechazarComprobante, onCo
     try {
       if(o.pagoTipo==="comprobante_pendiente") await onConfirmarComprobante(o.id);
       else await onConfirmarEfectivo(o.id);
-    } catch(e) { console.warn(e); alert("No se pudo confirmar. Probá de nuevo."); }
+    } catch(e) { console.warn(e); toast.error("No se pudo confirmar. Probá de nuevo."); }
     finally { setBusyId(null); }
   };
 
@@ -5315,7 +5638,7 @@ function PagosPanel({orders, onConfirmarComprobante, onRechazarComprobante, onCo
 
   const rejectEfectivo = async (o) => {
     setBusyId(o.id);
-    try { await onRechazarEfectivo(o.id); } catch(e) { console.warn(e); alert("No se pudo rechazar. Probá de nuevo."); }
+    try { await onRechazarEfectivo(o.id); } catch(e) { console.warn(e); toast.error("No se pudo rechazar. Probá de nuevo."); }
     finally { setBusyId(null); }
   };
 
@@ -5323,7 +5646,7 @@ function PagosPanel({orders, onConfirmarComprobante, onRechazarComprobante, onCo
     if(!rejectMotivo.trim()) return;
     setBusyId(o.id);
     try { await onRechazarComprobante(o.id, rejectMotivo); setRejectId(null); setRejectMotivo(""); }
-    catch(e) { console.warn(e); alert("No se pudo rechazar. Probá de nuevo."); }
+    catch(e) { console.warn(e); toast.error("No se pudo rechazar. Probá de nuevo."); }
     finally { setBusyId(null); }
   };
 
@@ -5848,7 +6171,7 @@ function OfertasPanel({promos, setPromos, products, isMobile}) {
     setPromos(prev=>prev.map(p=>p.id===promo.id?updated:p));
   };
   const delPromo = async (promo) => {
-    if(!window.confirm(`¿Eliminar "${promo.nombre}"? Esta acción no se puede deshacer.`)) return;
+    if(!await confirmDialog("¿Eliminar oferta?",`Vas a eliminar "${promo.nombre}". Esta acción no se puede deshacer.`,true)) return;
     await db.deletePromo(promo.id);
     setPromos(prev => prev.filter(p=>p.id!==promo.id));
   };
@@ -6368,9 +6691,9 @@ function PriceListsPanel({priceLists, setPriceLists}) {
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
-    if(!form.name.trim()) { alert("Ingresá un nombre"); return; }
+    if(!form.name.trim()) { toast.error("Ingresá un nombre"); return; }
     const disc = parseFloat(form.discount)||0;
-    if(disc < 0 || disc >= 100) { alert("El descuento debe ser entre 0 y 99"); return; }
+    if(disc < 0 || disc >= 100) { toast.error("El descuento debe ser entre 0 y 99"); return; }
     setSaving(true);
     const pl = {id: editing || genId(), name: form.name.trim(), discount: disc};
     setPriceLists(list => editing ? list.map(x=>x.id===editing?pl:x) : [...list, pl]);
@@ -6379,8 +6702,8 @@ function PriceListsPanel({priceLists, setPriceLists}) {
   };
 
   const del = async (id) => {
-    if(id==="default") { alert("No se puede eliminar la lista Normal"); return; }
-    if(!window.confirm("¿Eliminar esta lista?")) return;
+    if(id==="default") { toast.error("No se puede eliminar la lista Normal"); return; }
+    if(!await confirmDialog("¿Eliminar esta lista?","Esta acción no se puede deshacer.",true)) return;
     setPriceLists(list=>list.filter(x=>x.id!==id));
     await db.deletePriceList(id);
   };
@@ -6463,14 +6786,14 @@ function VendorsPanel({vendors,setVendors}) {
   const add = async () => {
     const n = newName.trim();
     if(!n) return;
-    if(vendors.includes(n)){alert("Ya existe ese vendedor");return;}
+    if(vendors.includes(n)){toast.error("Ya existe ese vendedor");return;}
     setLoading(true);
     try {
       await db.addVendor(n);
       setVendors(v=>[...v,n]);
       setNewName("");
     } catch(e) {
-      alert("Error al guardar el vendedor: " + e.message);
+      toast.error("Error al guardar el vendedor: " + e.message);
     } finally {
       setLoading(false);
     }
@@ -6482,7 +6805,7 @@ function VendorsPanel({vendors,setVendors}) {
       setVendors(vs=>vs.filter(x=>x!==confirmDel));
       setConfirmDel(null);
     } catch(e) {
-      alert("Error al eliminar el vendedor: " + e.message);
+      toast.error("Error al eliminar el vendedor: " + e.message);
     }
   };
 
@@ -6494,7 +6817,7 @@ function VendorsPanel({vendors,setVendors}) {
       setVendors(vs=>vs.map(x=>x===old?n:x));
       setEditing(null);
     } catch(e) {
-      alert("Error al editar el vendedor: " + e.message);
+      toast.error("Error al editar el vendedor: " + e.message);
     }
   };
 
@@ -6570,26 +6893,26 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
   };
 
   const save = async () => {
-    if(!form.username.trim()||!form.password.trim()||!form.name.trim()){alert("Completá nombre, usuario y contraseña");return;}
+    if(!form.username.trim()||!form.password.trim()||!form.name.trim()){toast.error("Completá nombre, usuario y contraseña");return;}
     try {
       if(editing) {
         const updated = {...users.find(u=>u.id===editing), ...form, priceList:form.priceList||"default", canSeeAll:form.canSeeAll!==false};
         setUsers(us=>us.map(u=>u.id===editing?updated:u));
         await db.saveUser(updated);
       } else {
-        if(users.find(u=>u.username===form.username.trim())){alert("Ese usuario ya existe");return;}
+        if(users.find(u=>u.username===form.username.trim())){toast.error("Ese usuario ya existe");return;}
         const newUser = {id:genId(),username:form.username.trim(),password:form.password,name:form.name.trim(),role:form.role||"vendedor",email:form.email||"",phone:form.phone||"",cargo:form.cargo||"",vendedor:form.vendedor||"",priceList:form.priceList||"default",canSeeAll:form.canSeeAll!==false,avatar:form.avatar||"",barcodeEnabled:form.barcodeEnabled||false};
         setUsers(us=>[...us,newUser]);
         await db.saveUser(newUser);
       }
       cancelEdit();
     } catch(e) {
-      alert("Error al guardar: " + (e.message||JSON.stringify(e)));
+      toast.error("Error al guardar: " + (e.message||JSON.stringify(e)));
     }
   };
 
   const remove = async (id) => {
-    if(users.filter(u=>u.role==="admin").length===1&&users.find(u=>u.id===id)?.role==="admin"){alert("Debe haber al menos un administrador");return;}
+    if(users.filter(u=>u.role==="admin").length===1&&users.find(u=>u.id===id)?.role==="admin"){toast.error("Debe haber al menos un administrador");return;}
     setUsers(us=>us.filter(u=>u.id!==id));
     await db.deleteUser(id);
   };
@@ -6760,7 +7083,7 @@ function ExcelPanel({products,setProducts}) {
         // FIX 2: cada columna se asigna solo si todavia no tiene match ("COL.x<0 &&"), asi la
         // PRIMERA columna que matchea gana siempre. Antes "CODIGO DE BARRAS" pisaba a "CODIGO"
         // porque ambas contienen la palabra CODIGO y el codigo se quedaba con la ultima.
-        const COL = { codigo:-1, descripcion:-1, precioIVA:-1, precioOferta:-1, precioFinal:-1, fecha:-1 };
+        const COL = { codigo:-1, descripcion:-1, precioIVA:-1, precioOferta:-1, precioFinal:-1, fecha:-1, unidad:-1 };
         for(let c = range.s.c; c <= range.e.c; c++) {
           const h = norm(cellStr(headerRow, c));
           if(COL.codigo<0 && (h==="CODIGO" || h==="COD" || h==="ID")) COL.codigo = c;
@@ -6769,6 +7092,7 @@ function ExcelPanel({products,setProducts}) {
           else if(COL.precioOferta<0 && h.includes("OFERTA")) COL.precioOferta = c;
           else if(COL.precioFinal<0 && h.includes("FINAL")) COL.precioFinal = c;
           else if(COL.fecha<0 && (h.includes("FECHA") || h.includes("ULTIMA") || h.includes("ACT"))) COL.fecha = c;
+          else if(COL.unidad<0 && h==="UNIDAD") COL.unidad = c;
         }
 
         if(COL.codigo      < 0) COL.codigo      = 0;
@@ -6779,6 +7103,8 @@ function ExcelPanel({products,setProducts}) {
         // FIX 3: "Precio Final" NO tiene un fallback adivinado. Si la lista no trae esa columna
         // (como la de Papelera Bariloche), se deja sin mapear: mas abajo se ignora en vez de
         // leer por accidente la columna de fecha y guardar un numero de serie como si fuera precio.
+        // "Unidad" (multiplo obligatorio de compra al proveedor) tampoco tiene fallback adivinado:
+        // si no existe esa columna, se asume multiplo 1 (se puede pedir suelto).
 
         const colLetter = c => c < 0 ? "-" : String.fromCharCode(65 + c);
         const detectedCols = {
@@ -6788,6 +7114,7 @@ function ExcelPanel({products,setProducts}) {
           "Precio Oferta": colLetter(COL.precioOferta),
           "Fecha":         colLetter(COL.fecha),
           "Precio Final":  colLetter(COL.precioFinal),
+          "Múltiplo (Unidad)": colLetter(COL.unidad),
         };
 
         const parsed = [];
@@ -6797,11 +7124,14 @@ function ExcelPanel({products,setProducts}) {
           const pIVA    = cellNum(r, COL.precioIVA);
           const pOferta = cellNum(r, COL.precioOferta);
           const pFinal  = COL.precioFinal >= 0 ? cellNum(r, COL.precioFinal) : null;
+          const unidadRaw = COL.unidad >= 0 ? cellNum(r, COL.unidad) : null;
+          const multiplo = (unidadRaw && unidadRaw > 0) ? Math.round(unidadRaw) : 1;
           parsed.push({
             id,
             name:         cellStr(r, COL.descripcion),
             precioIVA:    pIVA,
             precioOferta: pOferta,
+            multiplo,
             precioFinal:  pFinal,
             fecha:        cellStr(r, COL.fecha),
           });
@@ -6840,6 +7170,7 @@ function ExcelPanel({products,setProducts}) {
                                    newProds[idx].salePrice = row.precioFinal;
         else if(precioVenta!==null) newProds[idx].salePrice = precioVenta;
         if(precioCosto!==null)     newProds[idx].costPrice = precioCosto;  // siempre IVA como costo
+        newProds[idx].multiploCompra = row.multiplo||1;
         if(row.name) newProds[idx].name = row.name;
         updated.push(row.id);
       } else {
@@ -6856,7 +7187,7 @@ function ExcelPanel({products,setProducts}) {
             id:row.id, name:row.name||row.id,
             costPrice:costo||0,
             salePrice:(row.precioFinal&&row.precioFinal>0)?row.precioFinal:(precio||0),
-            category:"Importado", stock:0
+            category:"Importado", stock:0, multiploCompra:row.multiplo||1
           });
         }
       });
@@ -6950,13 +7281,14 @@ function ExcelPanel({products,setProducts}) {
                 <div><strong>Col D:</strong> PRECIO OFERTA</div>
                 <div><strong>Col E:</strong> FECHA ULTIMA ACTUALIZACIÓN</div>
                 <div><strong>Col F:</strong> PRECIO FINAL</div>
+                <div><strong>Col G:</strong> UNIDAD (múltiplo de compra, opcional)</div>
               </div>
               <div style={{marginTop:12,fontSize:12,color:"#aaa"}}>El sistema detecta automáticamente las columnas por nombre. Las columnas no tienen que estar en un orden específico.</div>
             </div>
           : <div style={{overflowX:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                 <thead><tr style={{background:"#f9f9f9"}}>
-                  {["Código","Descripción","P. IVA","P. Oferta","P. Final","Fecha"].map(h=><th key={h} style={{padding:"7px 8px",textAlign:"left",fontWeight:700,color:"#888",whiteSpace:"nowrap"}}>{h}</th>)}
+                  {["Código","Descripción","P. IVA","P. Oferta","P. Final","Fecha","Múltiplo"].map(h=><th key={h} style={{padding:"7px 8px",textAlign:"left",fontWeight:700,color:"#888",whiteSpace:"nowrap"}}>{h}</th>)}
                 </tr></thead>
                 <tbody>
                   {preview.rows.map((r,i)=>(
@@ -6967,6 +7299,7 @@ function ExcelPanel({products,setProducts}) {
                       <td style={{padding:"6px 8px",color:"#666"}}>{r.precioOferta!=null?fARS(r.precioOferta):"-"}</td>
                       <td style={{padding:"6px 8px",fontWeight:700,color:RED}}>{r.precioFinal!=null?fARS(r.precioFinal):"-"}</td>
                       <td style={{padding:"6px 8px",color:"#aaa",fontSize:10}}>{r.fecha}</td>
+                      <td style={{padding:"6px 8px",color:r.multiplo>1?"#b7770d":"#ccc",fontWeight:r.multiplo>1?700:400}}>{r.multiplo>1?`×${r.multiplo}`:"—"}</td>
                     </tr>
                   ))}
                 </tbody>
