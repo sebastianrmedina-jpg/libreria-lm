@@ -7225,7 +7225,7 @@ function ExcelPanel({products,setProducts}) {
         <div style={{fontWeight:800,fontSize:16,marginBottom:6}}>📊 Importar Lista de Precios</div>
         <div style={{fontSize:13,color:"#666",marginBottom:16,lineHeight:1.6}}>
           El sistema lee automáticamente las columnas:<br/>
-          <strong>CÓDIGO . DESCRIPCIÓN . PRECIO CON IVA . PRECIO OFERTA . FECHA ULTIMA ACTUALIZACIÓN . PRECIO FINAL</strong>
+          <strong>CÓDIGO . DESCRIPCIÓN . PRECIO CON IVA . PRECIO OFERTA . FECHA ULTIMA ACTUALIZACIÓN . PRECIO FINAL . UNIDAD (múltiplo de compra)</strong>
         </div>
         <div style={{marginBottom:14}}>
           <div style={{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}}>Modo de importación</div>
