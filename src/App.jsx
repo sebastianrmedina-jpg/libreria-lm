@@ -2,7 +2,34 @@
 import { createClient } from "@supabase/supabase-js";
 import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import * as XLSX from "xlsx";
-import { Clock, CheckCircle2, Package, PartyPopper, Wallet, Search, ShieldCheck, Paperclip, Banknote, ClipboardList, ShoppingCart, Users, FileText, CircleDollarSign, Store, ListChecks, Star, LogOut } from "lucide-react";
+// ─── Iconos propios (SVG inline, sin dependencias externas) ──────────────────
+// Reemplaza a lucide-react: mismo nombre/props (size, color, strokeWidth) para no tener
+// que tocar nada mas en el codigo. No requiere "npm install" ni tocar package.json.
+function Ico({ children, size = 16, strokeWidth = 2, color, style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"}
+      strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" style={style}>
+      {children}
+    </svg>
+  );
+}
+const Clock = (p) => <Ico {...p}><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></Ico>;
+const CheckCircle2 = (p) => <Ico {...p}><circle cx="12" cy="12" r="9"/><polyline points="8 12 11 15 16 9"/></Ico>;
+const Package = (p) => <Ico {...p}><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></Ico>;
+const PartyPopper = (p) => <Ico {...p}><path d="M5 19l3-8 8-3-3 8-8 3z"/><path d="M14 5l1 2"/><path d="M19 9l1 2"/><path d="M17 4l2 1"/></Ico>;
+const Wallet = (p) => <Ico {...p}><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="16" cy="14" r="1" fill={p.color||"currentColor"} stroke="none"/></Ico>;
+const Search = (p) => <Ico {...p}><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></Ico>;
+const ShieldCheck = (p) => <Ico {...p}><path d="M12 3l7 3v6c0 5-3 8-7 9-4-1-7-4-7-9V6l7-3z"/><polyline points="9 12 11.5 14.5 15 10"/></Ico>;
+const Paperclip = (p) => <Ico {...p}><path d="M19 11l-7.5 7.5a4 4 0 1 1-5.5-5.5l8-8a2.7 2.7 0 1 1 3.8 3.8L11 15.5"/></Ico>;
+const Banknote = (p) => <Ico {...p}><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/></Ico>;
+const ClipboardList = (p) => <Ico {...p}><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9z"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/></Ico>;
+const ShoppingCart = (p) => <Ico {...p}><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M3 4h2l2.4 12.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 2-1.6L21 8H6"/></Ico>;
+const Users = (p) => <Ico {...p}><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.5 3-6 6-6s6 2.5 6 6"/><circle cx="17.5" cy="9.5" r="2.8"/><path d="M22 20c0-2.8-2-5-4.5-5.6"/></Ico>;
+const FileText = (p) => <Ico {...p}><path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></Ico>;
+const CircleDollarSign = (p) => <Ico {...p}><circle cx="12" cy="12" r="9"/><path d="M9 15.5c.5 1 1.5 1.5 3 1.5 2 0 3-.9 3-2.2 0-3-6-1.4-6-4.4 0-1.3 1.2-2.2 3-2.2 1.5 0 2.5.5 3 1.5"/><line x1="12" y1="6.5" x2="12" y2="17.5"/></Ico>;
+const Store = (p) => <Ico {...p}><path d="M3 9l1.5-5h15L21 9"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/></Ico>;
+const ListChecks = (p) => <Ico {...p}><polyline points="3 7 4.5 8.5 7 6"/><line x1="11" y1="7" x2="21" y2="7"/><polyline points="3 13 4.5 14.5 7 12"/><line x1="11" y1="13" x2="21" y2="13"/><polyline points="3 19 4.5 20.5 7 18"/><line x1="11" y1="19" x2="21" y2="19"/></Ico>;
+const Star = (p) => <Ico {...p}><path d="M12 3l2.9 6 6.6.6-5 4.4 1.5 6.5L12 17l-5.9 3.5L7.6 14l-5-4.4 6.6-.6z"/></Ico>;
 
 // ─── MOBILE HOOK ─────────────────────────────────────────────────────────────
 function useIsMobile() {
