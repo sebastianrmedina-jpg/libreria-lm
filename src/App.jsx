@@ -38,6 +38,13 @@ const Pencil = (p) => <Ico {...p}><path d="M4 20l1-4 11-11 3 3-11 11-4 1Z"/><pat
 const Truck = (p) => <Ico {...p}><rect x="1" y="7" width="13" height="9" rx="1"/><path d="M14 10h4l3 3v3h-7z"/><circle cx="6" cy="18.5" r="1.6"/><circle cx="17" cy="18.5" r="1.6"/></Ico>;
 const TrendUp = (p) => <Ico {...p}><polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/></Ico>;
 const TrendDown = (p) => <Ico {...p}><polyline points="3 7 9 13 13 9 21 17"/><polyline points="14 17 21 17 21 10"/></Ico>;
+const Home = (p) => <Ico {...p}><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></Ico>;
+const CreditCard = (p) => <Ico {...p}><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></Ico>;
+const Gift = (p) => <Ico {...p}><rect x="3" y="9" width="18" height="11" rx="1"/><path d="M12 9v11"/><path d="M8 9c-2 0-3-1.5-3-3s2-3 4 0c2-3 4-3 4 0s-1 3-3 3"/></Ico>;
+const Beaker = (p) => <Ico {...p}><path d="M9 3h6"/><path d="M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/></Ico>;
+const Lock = (p) => <Ico {...p}><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></Ico>;
+const BarChart = (p) => <Ico {...p}><line x1="5" y1="20" x2="5" y2="11"/><line x1="12" y1="20" x2="12" y2="5"/><line x1="19" y1="20" x2="19" y2="14"/></Ico>;
+const Bell = (p) => <Ico {...p}><path d="M6 9a6 6 0 1 1 12 0c0 3 1 5 2 6H4c1-1 2-3 2-6Z"/><path d="M10 19a2 2 0 0 0 4 0"/></Ico>;
 const UserMinus = (p) => <Ico {...p}><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6"/><line x1="16" y1="10" x2="22" y2="10"/></Ico>;
 const ArrowLeftIcon = (p) => <Ico {...p}><line x1="20" y1="12" x2="4" y2="12"/><polyline points="11 5 4 12 11 19"/></Ico>;
 const ArrowRightIcon = (p) => <Ico {...p}><line x1="4" y1="12" x2="20" y2="12"/><polyline points="13 5 20 12 13 19"/></Ico>;
@@ -6068,39 +6075,66 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
   const negativosCount = products.filter(p=>p.costPrice>0 && p.costPrice>=p.salePrice).length;
 
   const SECTIONS = [
-    {k:"home",        label:"Administración",   icon:"🏠"},
-    {k:"ventas",      label:"Ventas",           icon:"📈"},
-    {k:"pagos",       label:pagosPendientes?`Pagos (${pagosPendientes})`:"Pagos", icon:"💳"},
-    {k:"ofertas",     label:"Ofertas y Combos", icon:"🎁"},
-    {k:"sandbox",     label:"Demo Sandbox",     icon:"🧪"},
-    {k:"sandboxstock",label:"Stock Sandbox",     icon:"📦"},
-    {k:"activity",    label:"Actividad",        icon:"📝"},
-    {k:"vendors",     label:"Vendedores",       icon:"👥"},
-    {k:"users",       label:"Usuarios",         icon:"🔐"},
-    {k:"pricelists",  label:"Listas de Precio", icon:"💲"},
-    {k:"excel",       label:"Importar Precios", icon:"📊"},
-    {k:"compras",     label:negativosCount?`Análisis Compras (${negativosCount})`:"Análisis Compras", icon:"💹"},
-    {k:"notifcfg",    label:"Notificaciones",   icon:"🔔"},
+    {k:"home",        label:"Administración",   Icon:Home,        grp:"home"},
+    {k:"ventas",      label:"Ventas",           Icon:TrendUp,      grp:"negocio"},
+    {k:"pagos",       label:"Pagos",            Icon:CreditCard,   grp:"negocio", badge:pagosPendientes, urgentColor:"#b7770d"},
+    {k:"ofertas",     label:"Ofertas y Combos", Icon:Gift,         grp:"negocio"},
+    {k:"pricelists",  label:"Listas de Precio", Icon:CircleDollarSign, grp:"negocio"},
+    {k:"compras",     label:"Análisis Compras", Icon:TrendDown,    grp:"negocio", badge:negativosCount, urgentColor:"#c0392b"},
+    {k:"vendors",     label:"Vendedores",       Icon:Users,        grp:"equipo"},
+    {k:"users",       label:"Usuarios",         Icon:Lock,         grp:"equipo"},
+    {k:"sandbox",     label:"Demo Sandbox",     Icon:Beaker,       grp:"config"},
+    {k:"sandboxstock",label:"Stock Sandbox",     Icon:Package,      grp:"config"},
+    {k:"activity",    label:"Actividad",        Icon:Pencil,       grp:"config"},
+    {k:"excel",       label:"Importar Precios", Icon:BarChart,     grp:"config"},
+    {k:"notifcfg",    label:"Notificaciones",   Icon:Bell,         grp:"config"},
   ];
+  const GRP_LABELS = {negocio:"📈 Negocio", equipo:"👥 Equipo", config:"⚙️ Configuración"};
 
   const sandboxOrders = orders.filter(o=>o.isSandbox);
   const realOrders    = orders.filter(o=>!o.isSandbox);
   const [ventasView, setVentasView] = useState("real");
 
+  // Card reutilizable para las dos grillas (entrada mobile + dashboard "home")
+  const AdminCard = ({s}) => {
+    const urgent = s.urgentColor && s.badge>0;
+    return (
+      <div onClick={()=>setSection(s.k)} style={{
+        background: urgent ? `${s.urgentColor}0a` : "#fff",
+        borderRadius:14, padding:"16px 14px", textAlign:"center", cursor:"pointer", position:"relative",
+        boxShadow: urgent ? `0 1px 4px #0001, 0 0 0 1.5px ${s.urgentColor}44` : "0 1px 4px #0001",
+        border: urgent ? `1.5px solid ${s.urgentColor}33` : "1px solid transparent",
+      }}>
+        {urgent && (
+          <span style={{position:"absolute",top:8,right:8,background:s.urgentColor,color:"#fff",borderRadius:20,fontSize:10,fontWeight:800,padding:"2px 7px",minWidth:18}}>
+            {s.badge>999?"999+":s.badge}
+          </span>
+        )}
+        <div style={{width:42,height:42,borderRadius:12,background:urgent?`${s.urgentColor}18`:"#f4f6f9",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 9px"}}>
+          <s.Icon size={20} color={urgent?s.urgentColor:"#555"} strokeWidth={2.1}/>
+        </div>
+        <div style={{fontSize:12,fontWeight:700,color:"#1a1a1a"}}>{s.label}</div>
+      </div>
+    );
+  };
+  const AdminGrid = ({cols}) => {
+    const grouped = {};
+    SECTIONS.filter(s=>s.k!=="home").forEach(s=>{ (grouped[s.grp]=grouped[s.grp]||[]).push(s); });
+    return Object.entries(grouped).map(([grp,items])=>(
+      <div key={grp} style={{marginBottom:18}}>
+        <div style={{fontSize:11.5,fontWeight:700,color:"#999",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>{GRP_LABELS[grp]}</div>
+        <div style={{display:"grid",gridTemplateColumns:cols,gap:10}}>
+          {items.map(s=><AdminCard key={s.k} s={s}/>)}
+        </div>
+      </div>
+    ));
+  };
+
   // Mobile: show icon grid when no section selected, back button when inside
   if(isMobile && !section) return (
     <div style={{padding:12}}>
-      <div style={{fontWeight:800,fontSize:16,marginBottom:12}}>★ Administración</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        {SECTIONS.map(s=>(
-          <div key={s.k} onClick={()=>setSection(s.k)}
-            style={{background:"#fff",borderRadius:14,padding:"18px 14px",textAlign:"center",boxShadow:"0 1px 6px #0001",cursor:"pointer"}}>
-            <div style={{fontSize:32,marginBottom:8}}>{s.icon}</div>
-            <div style={{fontSize:12,fontWeight:700,color:"#1a1a1a"}}>{s.label}</div>
-            <div style={{fontSize:10,color:"#aaa",marginTop:2}}>{s.sub}</div>
-          </div>
-        ))}
-      </div>
+      <div style={{fontWeight:800,fontSize:16,marginBottom:12,display:"flex",alignItems:"center",gap:7}}><Star size={16} color="#1a1a1a" strokeWidth={2.2}/> Administración</div>
+      <AdminGrid cols="1fr 1fr"/>
     </div>
   );
 
@@ -6109,30 +6143,22 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
       {isMobile && section && (
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 12px 0",marginBottom:8}}>
           <button onClick={()=>setSection(null)} style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",fontWeight:600,fontSize:12,cursor:"pointer",color:"#555"}}>← Volver</button>
-          <div style={{fontWeight:800,fontSize:15}}>{SECTIONS.find(s=>s.k===section)?.icon} {SECTIONS.find(s=>s.k===section)?.label}</div>
+          <div style={{fontWeight:800,fontSize:15,display:"flex",alignItems:"center",gap:6}}>
+            {(() => { const cur = SECTIONS.find(s=>s.k===section); return cur ? <><cur.Icon size={15} color="#1a1a1a" strokeWidth={2.2}/> {cur.label}</> : null; })()}
+          </div>
         </div>
       )}
       {!isMobile && <div style={{background:"#fff",borderRadius:12,padding:4,marginBottom:16,display:"flex",gap:4,boxShadow:"0 1px 4px #0001",flexWrap:"wrap"}}>
         {SECTIONS.map(s=>(
-          <button key={s.k} onClick={()=>setSection(s.k)} style={{flex:1,minWidth:120,padding:"10px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:section===s.k?`linear-gradient(135deg,${REDD},${RED})`:"transparent",color:section===s.k?"#fff":"#555",transition:"all .15s"}}>
-            {s.icon} {s.label}
+          <button key={s.k} onClick={()=>setSection(s.k)} style={{flex:1,minWidth:120,padding:"10px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:section===s.k?`linear-gradient(135deg,${REDD},${RED})`:"transparent",color:section===s.k?"#fff":"#555",transition:"all .15s",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+            <s.Icon size={14} strokeWidth={2.2}/> {s.label}{s.urgentColor&&s.badge>0?` (${s.badge>999?"999+":s.badge})`:""}
           </button>
         ))}
       </div>}
       {section==="home" && (
         <div>
-          <div style={{fontWeight:800,fontSize:16,marginBottom:16,color:"#1a1a1a"}}>🏠 Central de Administración</div>
-          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(160px,1fr))",gap:10,marginBottom:24}}>
-            {SECTIONS.filter(s=>s.k!=="home").map(s=>(
-              <div key={s.k} onClick={()=>setSection(s.k)}
-                style={{background:"#fff",borderRadius:12,padding:"18px 14px",boxShadow:"0 1px 6px #0001",cursor:"pointer",textAlign:"center",border:"2px solid transparent",transition:"border .15s"}}
-                onMouseEnter={e=>e.currentTarget.style.border="2px solid #c0392b"}
-                onMouseLeave={e=>e.currentTarget.style.border="2px solid transparent"}>
-                <div style={{fontSize:30,marginBottom:8}}>{s.icon}</div>
-                <div style={{fontWeight:700,fontSize:13,color:"#1a1a1a"}}>{s.label}</div>
-              </div>
-            ))}
-          </div>
+          <div style={{fontWeight:800,fontSize:16,marginBottom:16,color:"#1a1a1a",display:"flex",alignItems:"center",gap:7}}><Home size={17} color="#1a1a1a" strokeWidth={2.2}/> Central de Administración</div>
+          <AdminGrid cols={isMobile?"1fr 1fr":"repeat(auto-fill,minmax(160px,1fr))"}/>
         </div>
       )}
       {section==="ventas"      && (
