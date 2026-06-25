@@ -1611,6 +1611,8 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   // Deep-link a una seccion puntual de Admin (ej: "Ver en Pagos" desde un pedido bloqueado)
   const [deepLinkAdminSection, setDeepLinkAdminSection] = useState(null);
   const [deepLinkOfertaProductId, setDeepLinkOfertaProductId] = useState(null);
+  // Deep-link desde "Pedir reposicion" en stock bajo -> abre Solicitud de Compra con el producto precargado
+  const [deepLinkSolicitudItem, setDeepLinkSolicitudItem] = useState(null);
   const quickReviewPO = async (id) => {
     const po = purchaseOrders.find(p=>p.id===id);
     if(!po) return;
@@ -1949,11 +1951,13 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                 </div>
               )}
               <Stock products={pricedProducts} onUpd={updProd} onDel={pid=>setProducts(p=>p.filter(x=>x.id!==pid))} onAdjust={(pid,qty)=>setProducts(p=>p.map(x=>x.id===pid?{...x,stock:x.stock+qty}:x))} isAdmin={isAdmin} addLog={addLog} stockLog={stockLog} setStockLog={setStockLog} isMobile={isMobile}
-                onCrearOferta={(pid)=>{setDeepLinkOfertaProductId(pid);setDeepLinkAdminSection("ofertas");setTab("admin");}}/>
+                onCrearOferta={(pid)=>{setDeepLinkOfertaProductId(pid);setDeepLinkAdminSection("ofertas");setTab("admin");}}
+                onPedirReposicion={(pid,qty)=>{setDeepLinkSolicitudItem({pid,qty});setTab("solicitud");}}/>
             </>}
         {tab==="compras"    && <Compras products={products} onStock={addStock} isMobile={isMobile} canScan={currentUser.role==="admin"||isTestOrder(currentUser.vendedor||currentUser.name)||currentUser.barcodeEnabled}/>}
         {tab==="solicitud"  && <SolicitudCompra products={products} currentUser={currentUser} isAdmin={isAdmin} purchaseOrders={purchaseOrders} setPurchaseOrders={setPurchaseOrders} isMobile={isMobile} onStockExternal={addStock} addLog={addLog}
           autoOpenId={deepLinkPOId} onConsumedAutoOpen={()=>setDeepLinkPOId(null)}
+          prefillItem={deepLinkSolicitudItem} onConsumedPrefillItem={()=>setDeepLinkSolicitudItem(null)}
           onCreated={async(po)=>{
             await sendCrossNotif(db, setNotifs, {
               title:"📋 Nueva solicitud de compra",
@@ -4016,7 +4020,7 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,on
 
 
 // ─── STOCK ────────────────────────────────────────────────────────────────────
-function StockAlert({low}) {
+function StockAlert({low, onPedirReposicion}) {
   const [open, setOpen] = useState(false);
   return (
     <div style={{background:"#fef9e7",border:"1px solid #f1c40f",borderRadius:12,marginBottom:14,overflow:"hidden"}}>
@@ -4031,14 +4035,23 @@ function StockAlert({low}) {
       {open && (
         <div style={{borderTop:"1px solid #f1c40f22",padding:"4px 16px 14px"}}>
           {low.map(p=>(
-            <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #f1c40f22"}}>
+            <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #f1c40f22",gap:8,flexWrap:"wrap"}}>
               <div>
                 <span style={{fontWeight:600,fontSize:13,color:"#555"}}>{p.name}</span>
                 <span style={{fontSize:11,color:"#aaa",marginLeft:8}}>{p.id}</span>
+                {p.multiploCompra>1&&<span style={{fontSize:10,color:"#9a7d0a",marginLeft:6}}>(caja de {p.multiploCompra})</span>}
               </div>
-              <span style={{background:p.stock===0?"#fdecea":"#fff3cd",color:p.stock===0?RED:"#856404",borderRadius:8,padding:"2px 8px",fontSize:12,fontWeight:700,border:`1px solid ${p.stock===0?"#f5c6cb":"#ffc107"}`}}>
-                {p.stock===0?"Sin stock":`🎉 ${p.stock} u.`}
-              </span>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{background:p.stock===0?"#fdecea":"#fff3cd",color:p.stock===0?RED:"#856404",borderRadius:8,padding:"2px 8px",fontSize:12,fontWeight:700,border:`1px solid ${p.stock===0?"#f5c6cb":"#ffc107"}`}}>
+                  {p.stock===0?"Sin stock":`🎉 ${p.stock} u.`}
+                </span>
+                {onPedirReposicion && (
+                  <button onClick={(e)=>{e.stopPropagation();onPedirReposicion(p.id,p.multiploCompra||1);}}
+                    style={{display:"flex",alignItems:"center",gap:4,padding:"3px 9px",borderRadius:7,border:"1px solid #6c348355",background:"#f5eef8",color:"#6c3483",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+                    📦 Pedir reposición
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -4305,7 +4318,7 @@ function BajaConfirm({onConfirm,disabled}) {
   );
 }
 
-function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLog,isMobile,onCrearOferta}) {
+function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLog,isMobile,onCrearOferta,onPedirReposicion}) {
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("todos");
   const [editing,setEditing]=useState(null);
@@ -4368,7 +4381,7 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
       {isAdmin && stockTab==="ajuste" && <StockAdjust products={products} onDel={onDel} onAdjust={onAdjust} addLog={addLog}/>}
       {isAdmin && stockTab==="log" && <StockLog log={stockLog} onClear={async()=>{setStockLog([]);await db.clearStockLog();}}/>}
       {stockTab==="lista" && <>
-        {low.length>0&&<StockAlert low={low}/>}
+        {low.length>0&&<StockAlert low={low} onPedirReposicion={onPedirReposicion}/>}
 
         {/* ── Alerta de stock sin rotación (solo admin) ── */}
         {isAdmin && (stale180>0||stale360>0) && (
@@ -4738,7 +4751,7 @@ function exportSolicitudXLSX(po) {
   XLSX.writeFile(wb, `Solicitud_${po.id.slice(-6).toUpperCase()}_${po.fecha.replace(/\//g,"-")}.xlsx`);
 }
 
-function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchaseOrders,isMobile,onStockExternal,addLog,onCreated,autoOpenId,onConsumedAutoOpen}) {
+function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchaseOrders,isMobile,onStockExternal,addLog,onCreated,autoOpenId,onConsumedAutoOpen,prefillItem,onConsumedPrefillItem}) {
   const [view, setView] = useState("lista"); // lista | nueva | detalle
   const [selected, setSelected] = useState(null);
   const [showAddProduct, setShowAddProduct] = useState(false);
@@ -4755,6 +4768,18 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
     if(po) { setSelected(po); setView("detalle"); }
     onConsumedAutoOpen && onConsumedAutoOpen();
   }, [autoOpenId, purchaseOrders]);
+
+  // Deep-link desde "Pedir reposicion" (stock bajo) — abre Nueva Solicitud con el producto
+  // ya cargado, en la cantidad del multiplo del proveedor (el admin la puede modificar despues)
+  useEffect(() => {
+    if(!prefillItem) return;
+    const p = products.find(pr=>pr.id===prefillItem.pid);
+    if(p) {
+      setCart([{pid:p.id, id:p.id, cartKey:p.id, qty:prefillItem.qty||1, price:p.salePrice, name:p.name}]);
+      setView("nueva");
+    }
+    onConsumedPrefillItem && onConsumedPrefillItem();
+  }, [prefillItem]);
 
   const myOrders = isAdmin ? purchaseOrders : purchaseOrders.filter(po=>po.vendedor===currentUser.vendedor||po.vendedor===currentUser.name);
 
@@ -4924,6 +4949,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
               <th style={{padding:"10px 12px",textAlign:"left",fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Producto</th>
               <th style={{padding:"10px 12px",textAlign:"left",fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Código</th>
               <th style={{padding:"10px 12px",textAlign:"center",fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Cant.</th>
+              {isAdmin && <th style={{padding:"10px 12px",textAlign:"right",fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Costo</th>}
               <th style={{padding:"10px 12px",textAlign:"left",fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Obs.</th>
               {isAdmin && po.estado!=="cerrada" && <th style={{padding:"10px 12px",textAlign:"center",fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Quitar</th>}
             </tr></thead>
@@ -4956,6 +4982,11 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
                       : <span style={{fontWeight:800,fontSize:15,color:"#1a5276"}}>{it.qty}</span>
                     }
                   </td>
+                  {isAdmin && (()=>{
+                    const prod = products.find(p=>p.id===(it.id||it.pid));
+                    const costo = prod?.costPrice||0;
+                    return <td style={{padding:"9px 12px",textAlign:"right",fontSize:12,color:"#666",whiteSpace:"nowrap"}}>{costo>0?fARS(costo*it.qty):"—"}</td>;
+                  })()}
                   <td style={{padding:"9px 12px"}}>
                     {isAdmin && po.estado!=="cerrada"
                       ? <input value={it.notas||""} onChange={e=>{
@@ -4980,9 +5011,10 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
               ))}
             </tbody>
           </table>
-          <div style={{padding:"10px 14px",borderTop:"1px solid #f0f0f0",display:"flex",justifyContent:"flex-end",gap:20,fontSize:12,color:"#888"}}>
+          <div style={{padding:"10px 14px",borderTop:"1px solid #f0f0f0",display:"flex",justifyContent:"flex-end",gap:20,fontSize:12,color:"#888",flexWrap:"wrap"}}>
             <span>Total productos: <strong style={{color:"#1a5276",fontSize:14}}>{po.items.length}</strong></span>
             <span>Total unidades: <strong style={{color:"#1a5276",fontSize:14}}>{po.items.reduce((s,i)=>s+i.qty,0)}</strong></span>
+            {isAdmin && <span>Costo total: <strong style={{color:RED,fontFamily:SERIF,fontSize:14}}>{fARS(po.items.reduce((s,i)=>{const prod=products.find(p=>p.id===(i.id||i.pid));return s+(prod?.costPrice||0)*i.qty;},0))}</strong></span>}
           </div>
         </div>
 
@@ -5036,7 +5068,10 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
           {/* Items con notas por item */}
           {cart.length===0
             ? <div style={{textAlign:"center",color:"#aaa",fontSize:12,padding:"16px 0"}}>Agregá productos del catálogo</div>
-            : cart.map(i=>(
+            : cart.map(i=>{
+                const prod = products.find(p=>p.id===i.pid);
+                const costo = prod?.costPrice||0;
+                return (
                 <div key={i.pid} style={{background:"#f9f9f9",borderRadius:8,padding:"10px 12px",marginBottom:8}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                     <span style={{fontWeight:600,fontSize:12,flex:1,lineHeight:1.3,marginRight:8}}>{i.name}</span>
@@ -5046,11 +5081,21 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
                       <button onClick={()=>setQty(i.pid,i.qty+1)} style={{width:24,height:24,borderRadius:5,border:"1.5px solid #ccc",background:"#fff",cursor:"pointer",fontSize:14,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
                     </div>
                   </div>
+                  {isAdmin && costo>0 && (
+                    <div style={{fontSize:10.5,color:"#999",marginBottom:6}}>{fARS(costo)} c/u · <strong style={{color:"#555"}}>{fARS(costo*i.qty)}</strong> subtotal</div>
+                  )}
                   <input value={itemNotas[i.pid]||""} onChange={e=>setItemNotas(n=>({...n,[i.pid]:e.target.value}))}
                     placeholder="Obs. (color, medida, marca...)" style={{...inputStyle,fontSize:11,padding:"4px 8px",background:"#fff"}}/>
                 </div>
-              ))
+                );
+              })
           }
+          {isAdmin && cart.length>0 && (
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",background:"#fdecea",borderRadius:8,marginBottom:14}}>
+              <span style={{fontWeight:700,fontSize:12.5,color:"#1a1a1a"}}>Costo total estimado</span>
+              <span style={{fontFamily:SERIF,fontWeight:700,fontSize:16,color:RED}}>{fARS(cart.reduce((s,i)=>s+(products.find(p=>p.id===i.pid)?.costPrice||0)*i.qty,0))}</span>
+            </div>
+          )}
 
           <Field label="Notas generales"><textarea value={notas} onChange={e=>setNotas(e.target.value)} placeholder="Urgencia, proveedor sugerido..." style={{...inputStyle,resize:"vertical",minHeight:52,fontSize:12}}/></Field>
 
