@@ -7124,6 +7124,34 @@ function ExcelPanel({products,setProducts}) {
   const [preview, setPreview] = useState(null);
   const [status, setStatus] = useState(null);
   const [mode, setMode] = useState("update");
+  const [fixing, setFixing] = useState(false);
+
+  // Productos con el precio de venta roto (igual o menor al costo) por un import anterior
+  const rotos = useMemo(()=>products.filter(p=>p.costPrice>0 && p.salePrice<=p.costPrice), [products]);
+
+  const corregirPrecios = async () => {
+    const ok = await confirmDialog(
+      "¿Corregir precios?",
+      `Se va a recalcular el precio de venta de ${rotos.length} producto${rotos.length!==1?"s":""} como costo × 1,5 (tu fórmula: ×1.25 y ×1.20). Esta acción no se puede deshacer.`,
+      true
+    );
+    if(!ok) return;
+    setFixing(true);
+    try {
+      const corregidos = rotos.map(p=>({...p, salePrice: Math.round(p.costPrice*1.5*100)/100}));
+      await db.upsertProducts(corregidos);
+      setProducts(prev=>prev.map(p=>{
+        const fix = corregidos.find(c=>c.id===p.id);
+        return fix ? fix : p;
+      }));
+      toast.success(`${corregidos.length} producto${corregidos.length!==1?"s":""} corregido${corregidos.length!==1?"s":""}`);
+    } catch(e) {
+      console.warn(e);
+      toast.error("No se pudieron corregir los precios. Probá de nuevo.");
+    } finally {
+      setFixing(false);
+    }
+  };
 
   const parseExcel = (file) => {
     const reader = new FileReader();
@@ -7250,7 +7278,14 @@ function ExcelPanel({products,setProducts}) {
     const updated=[], notFound=[];
     const newProds = products.map(p=>({...p}));
 
-    const resolvePrice = (row) => {
+    // Formula real de venta de Sebastian: costo x 1.25 x 1.20 (= costo x 1.5)
+    // Se aplica SOLO cuando el archivo no trae una columna "Precio Final" ya calculada
+    // (ej: su Excel propio con la formula puesta) — si la trae, esa tiene prioridad.
+    const MARKUP_VENTA = 1.25 * 1.20;
+
+    // El costo real es el de oferta si el proveedor tiene uno activo (es un costo temporal
+    // mas bajo, NO un precio de venta), sino el normal con IVA.
+    const resolveCosto = (row) => {
       const oferta = row.precioOferta;
       const iva    = row.precioIVA;
       if(oferta !== null && oferta !== undefined && !isNaN(oferta) && oferta > 0) return oferta;
@@ -7259,13 +7294,12 @@ function ExcelPanel({products,setProducts}) {
 
     preview.all.forEach(row=>{
       const idx = newProds.findIndex(p=>p.id===row.id);
-      const precioVenta = resolvePrice(row);  // oferta si existe, sino IVA
-      const precioCosto = row.precioIVA;      // costo = siempre precio IVA
+      const costo = resolveCosto(row);  // oferta si esta activa, sino IVA
       if(idx>=0){
         if(row.precioFinal!==null && row.precioFinal>0)
-                                   newProds[idx].salePrice = row.precioFinal;
-        else if(precioVenta!==null) newProds[idx].salePrice = precioVenta;
-        if(precioCosto!==null)     newProds[idx].costPrice = precioCosto;  // siempre IVA como costo
+                          newProds[idx].salePrice = row.precioFinal;
+        else if(costo!==null) newProds[idx].salePrice = Math.round(costo*MARKUP_VENTA*100)/100;
+        if(costo!==null)  newProds[idx].costPrice = costo;
         newProds[idx].multiploCompra = row.multiplo||1;
         if(row.barcode) newProds[idx].barcode = row.barcode;
         if(row.name) newProds[idx].name = row.name;
@@ -7278,12 +7312,11 @@ function ExcelPanel({products,setProducts}) {
     if(mode==="full") {
       preview.all.forEach(row=>{
         if(!newProds.find(p=>p.id===row.id)) {
-          const precio = resolvePrice(row);   // oferta si existe, sino IVA
-          const costo  = row.precioIVA;       // costo = siempre IVA
+          const costo = resolveCosto(row);
           newProds.push({
             id:row.id, name:row.name||row.id,
             costPrice:costo||0,
-            salePrice:(row.precioFinal&&row.precioFinal>0)?row.precioFinal:(precio||0),
+            salePrice:(row.precioFinal&&row.precioFinal>0)?row.precioFinal:Math.round((costo||0)*MARKUP_VENTA*100)/100,
             category:"Importado", stock:0, multiploCompra:row.multiplo||1, barcode:row.barcode||""
           });
         }
@@ -7316,6 +7349,19 @@ function ExcelPanel({products,setProducts}) {
   };
 
   return (
+    <div>
+      {rotos.length>0 && (
+        <div style={{background:"#fdecea",border:"1px solid #f1948a",borderRadius:12,padding:"14px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+          <div style={{flex:1,minWidth:220}}>
+            <div style={{fontWeight:800,fontSize:14,color:RED}}>⚠️ {rotos.length} producto{rotos.length!==1?"s":""} con precio de venta roto</div>
+            <div style={{fontSize:12,color:"#a33",marginTop:2}}>Quedaron con precio de venta igual o menor al costo, probablemente por un import anterior. Esto los recalcula como costo × 1,5 (tu fórmula habitual).</div>
+          </div>
+          <button onClick={corregirPrecios} disabled={fixing}
+            style={{padding:"9px 16px",borderRadius:9,border:"none",background:RED,color:"#fff",fontWeight:700,fontSize:13,cursor:fixing?"default":"pointer",opacity:fixing?0.7:1,whiteSpace:"nowrap"}}>
+            {fixing?"Corrigiendo...":`🔧 Corregir ${rotos.length} producto${rotos.length!==1?"s":""}`}
+          </button>
+        </div>
+      )}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,alignItems:"start"}}>
       <div style={{background:"#fff",borderRadius:12,padding:24,boxShadow:"0 1px 4px #0001"}}>
         <div style={{fontWeight:800,fontSize:16,marginBottom:6}}>📊 Importar Lista de Precios</div>
@@ -7406,6 +7452,7 @@ function ExcelPanel({products,setProducts}) {
             </div>
         }
       </div>
+    </div>
     </div>
   );
 }
