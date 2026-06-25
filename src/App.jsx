@@ -613,10 +613,10 @@ async function sendCrossNotif(db, setNotifs, {title, body, tag, para, de}) {
   const notif = {
     id: genId(),
     fecha: new Date().toLocaleString("es-AR"),
-    title, body,
+    titulo: title, cuerpo: body,
     tag: tag||"lm",
     para, de,
-    leida: false,
+    leida: [],  // lista de userIds que ya la leyeron (igual al resto de las notificaciones de la app)
   };
   // Guardar en lm_notifs para Realtime (cuando la app está abierta) — esto sí se espera, es lo que ve el admin en la app
   await db.addNotif(notif);
@@ -851,7 +851,62 @@ const NOTIF_TYPES = {
   PEDIDOS_PEND:   {label:"Pedidos pendientes",    icon:"⏰", color:"#e67e22", bg:"#fef9e7"},
 };
 
+// Para notificaciones creadas via sendCrossNotif (comprobantes, efectivo, ediciones, bajas, solicitudes
+// de compra) que no tienen un "tipo" de la lista de arriba — se deriva del prefijo del tag.
+// Tambien sirve como clave de agrupacion en el panel.
+const iconForTag = (tag="") => {
+  if(tag.startsWith("comp-ok"))     return {icon:"✅", color:"#1e8449", bg:"#eafaf1", cat:"Comprobantes confirmados"};
+  if(tag.startsWith("comp-no"))     return {icon:"❌", color:"#c0392b", bg:"#fdecea", cat:"Comprobantes rechazados"};
+  if(tag.startsWith("comp"))        return {icon:"📎", color:"#1a5276", bg:"#eaf2f8", cat:"Comprobantes nuevos"};
+  if(tag.startsWith("ef-pend"))     return {icon:"💵", color:"#b7770d", bg:"#fef9e7", cat:"Efectivo pendiente"};
+  if(tag.startsWith("ef-ok"))       return {icon:"✅", color:"#1e8449", bg:"#eafaf1", cat:"Efectivo confirmado"};
+  if(tag.startsWith("ef-no"))       return {icon:"❌", color:"#c0392b", bg:"#fdecea", cat:"Efectivo rechazado"};
+  if(tag.startsWith("edit-req"))    return {icon:"✏️", color:"#1a5276", bg:"#eaf2f8", cat:"Ediciones solicitadas"};
+  if(tag.startsWith("edit"))        return {icon:"✏️", color:"#6c3483", bg:"#f5eef8", cat:"Ediciones"};
+  if(tag.startsWith("del-client"))  return {icon:"👤", color:"#c0392b", bg:"#fdecea", cat:"Bajas de cliente"};
+  if(tag.startsWith("po-"))         return {icon:"📋", color:"#6c3483", bg:"#f5eef8", cat:"Solicitudes de compra"};
+  return {icon:"🔔", color:"#666", bg:"#f5f5f5", cat:"Otras"};
+};
+
 // ─── NOTIF PANEL ─────────────────────────────────────────────────────────────
+function NotifRow({n, isRead, cfg, onClick, onDelete}) {
+  return (
+    <div onClick={onClick} style={{padding:"12px 16px",borderBottom:"1px solid #f9f9f9",background:isRead?"#fff":"#fafbff",cursor:"pointer",display:"flex",gap:10,alignItems:"flex-start"}}>
+      <span style={{fontSize:20,flexShrink:0,marginTop:2}}>{cfg.icon}</span>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
+          <div style={{fontWeight:isRead?500:700,fontSize:13,color:"#1a1a1a",lineHeight:1.3}}>{n.titulo}</div>
+          {!isRead&&<span style={{width:8,height:8,borderRadius:"50%",background:RED,flexShrink:0,marginTop:4}}/>}
+        </div>
+        <div style={{fontSize:12,color:"#666",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.cuerpo}</div>
+        <div style={{fontSize:10,color:"#aaa",marginTop:4}}>{n.fecha}</div>
+      </div>
+      <button onClick={e=>{e.stopPropagation();onDelete();}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:16,flexShrink:0,padding:0,lineHeight:1}}>x</button>
+    </div>
+  );
+}
+function NotifGroup({items, cfg, cat, currentUser, markRead, delNotif}) {
+  const [open, setOpen] = useState(false);
+  const unreadN = items.filter(n=>!n.leida.includes(currentUser.id)).length;
+  return (
+    <div style={{borderBottom:"1px solid #f5f5f5"}}>
+      <div onClick={()=>setOpen(o=>!o)} style={{padding:"11px 16px",display:"flex",alignItems:"center",gap:10,cursor:"pointer",background:unreadN>0?"#fafbff":"#fff"}}>
+        <div style={{width:32,height:32,borderRadius:9,background:cfg.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:16}}>{cfg.icon}</div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontWeight:700,fontSize:13,color:"#1a1a1a"}}>{cat}</div>
+          <div style={{fontSize:11,color:"#888"}}>{items.length} notificaciones{unreadN>0?` · ${unreadN} sin leer`:""}</div>
+        </div>
+        <span style={{fontSize:11,color:"#bbb",transform:open?"rotate(180deg)":"none",transition:"transform .15s",flexShrink:0}}>▼</span>
+      </div>
+      {open && <div style={{background:"#fcfcfc"}}>
+        {items.map(n=>(
+          <NotifRow key={n.id} n={n} isRead={n.leida.includes(currentUser.id)} cfg={cfg}
+            onClick={()=>markRead(n.id)} onDelete={()=>delNotif(n.id)}/>
+        ))}
+      </div>}
+    </div>
+  );
+}
 function NotifPanel({notifs,setNotifs,currentUser,users,onClose,onMarkAllRead,pushNotif,orders}) {
   const myNotifs = notifs.filter(n =>
     n.para === "todos" || n.para === currentUser.role || n.para === currentUser.id
@@ -890,24 +945,25 @@ function NotifPanel({notifs,setNotifs,currentUser,users,onClose,onMarkAllRead,pu
         <div style={{overflowY:"auto",flex:1}}>
           {myNotifs.length===0
             ? <div style={{textAlign:"center",padding:40,color:"#aaa"}}><div style={{fontSize:36,marginBottom:8}}>🔕</div><div>No tenés notificaciones</div></div>
-            : myNotifs.map(n=>{
-                const cfg = NOTIF_TYPES[n.tipo]||{icon:"-",color:"#666",bg:"#f5f5f5"};
-                const isRead = n.leida.includes(currentUser.id);
-                return (
-                  <div key={n.id} onClick={()=>markRead(n.id)} style={{padding:"12px 16px",borderBottom:"1px solid #f9f9f9",background:isRead?"#fff":"#fafbff",cursor:"pointer",display:"flex",gap:10,alignItems:"flex-start"}}>
-                    <span style={{fontSize:20,flexShrink:0,marginTop:2}}>{cfg.icon}</span>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
-                        <div style={{fontWeight:isRead?500:700,fontSize:13,color:"#1a1a1a",lineHeight:1.3}}>{n.titulo}</div>
-                        {!isRead&&<span style={{width:8,height:8,borderRadius:"50%",background:RED,flexShrink:0,marginTop:4}}/>}
-                      </div>
-                      <div style={{fontSize:12,color:"#666",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.cuerpo}</div>
-                      <div style={{fontSize:10,color:"#aaa",marginTop:4}}>{n.fecha}</div>
-                    </div>
-                    <button onClick={e=>{e.stopPropagation();delNotif(n.id);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:16,flexShrink:0,padding:0,lineHeight:1}}>x</button>
-                  </div>
-                );
-              })
+            : (() => {
+                // Agrupa por categoria (tipo viejo si existe, sino la categoria derivada del tag).
+                // Si una categoria tiene 2+ notificaciones se muestra colapsada; si tiene 1 sola, suelta.
+                const groups = {}; const order = [];
+                myNotifs.forEach(n=>{
+                  const cat = NOTIF_TYPES[n.tipo]?.label || iconForTag(n.tag).cat;
+                  if(!groups[cat]) { groups[cat]=[]; order.push(cat); }
+                  groups[cat].push(n);
+                });
+                return order.map(cat=>{
+                  const items = groups[cat];
+                  const cfg = NOTIF_TYPES[items[0].tipo] || iconForTag(items[0].tag);
+                  if(items.length>1) {
+                    return <NotifGroup key={cat} items={items} cfg={cfg} cat={cat} currentUser={currentUser} markRead={markRead} delNotif={delNotif}/>;
+                  }
+                  const n = items[0];
+                  return <NotifRow key={n.id} n={n} isRead={n.leida.includes(currentUser.id)} cfg={cfg} onClick={()=>markRead(n.id)} onDelete={()=>delNotif(n.id)}/>;
+                });
+              })()
           }
         </div>
       </div>
@@ -4929,7 +4985,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
                         {already
                           ? <span style={{fontSize:11,color:"#1e8449",fontWeight:700,background:"#d5f5e3",borderRadius:6,padding:"3px 8px"}}>✓ Ya está (×{already.qty})</span>
                           : <button onClick={()=>{
-                              const newItems=[...po.items,{pid:p.id,id:p.id,name:p.name,qty:1,notas:""}];
+                              const newItems=[...po.items,{pid:p.id,id:p.id,name:p.name,qty:p.multiploCompra||1,notas:""}];
                               const updated={...po,items:newItems};
                               savePO(updated); setSelected(updated);
                               setAddSearch(""); setShowAddProduct(false);
