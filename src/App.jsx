@@ -135,7 +135,7 @@ const SUPA_SERVICE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const supabase = createClient(SUPA_URL, SUPA_ANON);
 const supaAdmin = supabase;
 
-const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock,multiploCompra:r.multiplo_compra||1});
+const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock,multiploCompra:r.multiplo_compra||1,barcode:r.barcode||""});
 const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||"",isTest:r.is_test||false,isSandbox:r.is_sandbox||false,internalNote:r.internal_note||"",editStatus:r.edit_status||"",editReason:r.edit_reason||"",editItems:r.edit_items||null,editRejectReason:r.edit_reject_reason||"",comprobanteUrl:r.comprobante_url||"",comprobanteNombre:r.comprobante_nombre||"",comprobanteFecha:r.comprobante_fecha||"",pagoTipo:r.pago_tipo||"",pagoEfectivoFecha:r.pago_efectivo_fecha||""});
 const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,date:r.date,items:r.items||[],validity:r.validity||"",docNum:r.doc_num||"",convertida:r.convertida||false,ordenId:r.orden_id||"",extendida:r.extendida||false,extendReason:r.extend_reason||"",extendDate:r.extend_date||"",globalDisc:r.global_disc||null,subtotal:r.subtotal||0});
 
@@ -237,8 +237,8 @@ const db = {
     }
     return all.map(mapProduct);
   },
-  upsertProduct: async (p) => { const {error} = await supaAdmin.from("lm_products").upsert({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0,multiplo_compra:p.multiploCompra||1}); if(error) throw error; },
-  upsertProducts: async (arr) => { const {error} = await supaAdmin.from("lm_products").upsert(arr.map(p=>({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0,multiplo_compra:p.multiploCompra||1}))); if(error) throw error; },
+  upsertProduct: async (p) => { const {error} = await supaAdmin.from("lm_products").upsert({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0,multiplo_compra:p.multiploCompra||1,barcode:p.barcode||""}); if(error) throw error; },
+  upsertProducts: async (arr) => { const {error} = await supaAdmin.from("lm_products").upsert(arr.map(p=>({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0,multiplo_compra:p.multiploCompra||1,barcode:p.barcode||""}))); if(error) throw error; },
   deleteProduct: async (id) => { const {error} = await supaAdmin.from("lm_products").delete().eq("id",id); if(error) throw error; },
 
   getOrders:    async () => { const {data,error} = await supabase.from("lm_orders").select("*").order("date",{ascending:false}); if(error) throw error; return (data||[]).map(mapOrder); },
@@ -1929,7 +1929,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
         {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} promos={promos}/>}
         {tab==="clientes"   && <ClientesPanel clients={clients} onSave={saveClient} onDelete={deleteClient} onRequestDelete={requestDeleteClient} onRejectDelete={rejectDeleteClient} currentUser={currentUser} isMobile={isMobile} orders={orders}/>}
         {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient}/>}
-        {tab==="precios"    && <Precios products={pricedProducts}/>}
+        {tab==="precios"    && <Precios products={pricedProducts} canScan={currentUser.role==="admin"||isTestOrder(currentUser.vendedor||currentUser.name)||currentUser.barcodeEnabled}/>}
         {tab==="stock"      && <>
               {isTestUser && (
                 <div style={{background:"#f5eef8",border:"1.5px solid #9b59b6",borderRadius:10,padding:"10px 16px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
@@ -3207,9 +3207,10 @@ function ClientesPanel({clients, onSave, onDelete, onRequestDelete, onRejectDele
   );
 }
 
-function Precios({products}) {
+function Precios({products,canScan}) {
   const [search,setSearch]=useState("");
   const [sortBy,setSortBy]=useState("name");
+  const [showScanner,setShowScanner]=useState(false);
   const shown=useMemo(()=>{
     const q=norm(search);
     return products
@@ -3217,10 +3218,21 @@ function Precios({products}) {
       .sort((a,b)=>sortBy==="name"?a.name.localeCompare(b.name):b.salePrice-a.salePrice)
       .slice(0,200);
   },[products,search,sortBy]);
+  const handleBarcode = (code) => {
+    setShowScanner(false);
+    const p = products.find(p=>(p.barcode&&p.barcode===code) || normSKU(p.id)===normSKU(code));
+    if(p) { setSearch(p.id); toast.success(`${p.name} — ${fARS(p.salePrice)}`); }
+    else toast.error(`Código "${code}" no encontrado en el catálogo`);
+  };
   return (
     <div>
+      {showScanner && <BarcodeScanner onDetected={handleBarcode} onClose={()=>setShowScanner(false)}/>}
       <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:14,boxShadow:"0 1px 4px #0001"}}>
         <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+          {canScan && <button onClick={()=>setShowScanner(true)}
+            style={{padding:"8px 14px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#1a5276,#2980b9)",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
+            📷 Escanear
+          </button>}
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar producto o código..."
             style={{flex:1,minWidth:160,padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none"}}/>
           <div style={{display:"flex",gap:6}}>
@@ -7084,7 +7096,7 @@ function ExcelPanel({products,setProducts}) {
         // FIX 2: cada columna se asigna solo si todavia no tiene match ("COL.x<0 &&"), asi la
         // PRIMERA columna que matchea gana siempre. Antes "CODIGO DE BARRAS" pisaba a "CODIGO"
         // porque ambas contienen la palabra CODIGO y el codigo se quedaba con la ultima.
-        const COL = { codigo:-1, descripcion:-1, precioIVA:-1, precioOferta:-1, precioFinal:-1, fecha:-1, unidad:-1 };
+        const COL = { codigo:-1, descripcion:-1, precioIVA:-1, precioOferta:-1, precioFinal:-1, fecha:-1, unidad:-1, barras:-1 };
         for(let c = range.s.c; c <= range.e.c; c++) {
           const h = norm(cellStr(headerRow, c));
           if(COL.codigo<0 && (h==="CODIGO" || h==="COD" || h==="ID")) COL.codigo = c;
@@ -7094,6 +7106,7 @@ function ExcelPanel({products,setProducts}) {
           else if(COL.precioFinal<0 && h.includes("FINAL")) COL.precioFinal = c;
           else if(COL.fecha<0 && (h.includes("FECHA") || h.includes("ULTIMA") || h.includes("ACT"))) COL.fecha = c;
           else if(COL.unidad<0 && h==="UNIDAD") COL.unidad = c;
+          else if(COL.barras<0 && h.includes("BARRAS")) COL.barras = c;
         }
 
         if(COL.codigo      < 0) COL.codigo      = 0;
@@ -7104,8 +7117,8 @@ function ExcelPanel({products,setProducts}) {
         // FIX 3: "Precio Final" NO tiene un fallback adivinado. Si la lista no trae esa columna
         // (como la de Papelera Bariloche), se deja sin mapear: mas abajo se ignora en vez de
         // leer por accidente la columna de fecha y guardar un numero de serie como si fuera precio.
-        // "Unidad" (multiplo obligatorio de compra al proveedor) tampoco tiene fallback adivinado:
-        // si no existe esa columna, se asume multiplo 1 (se puede pedir suelto).
+        // "Unidad" (multiplo obligatorio de compra al proveedor) y "Codigo de barras" tampoco
+        // tienen fallback adivinado: si la columna no existe, simplemente no se completan.
 
         const colLetter = c => c < 0 ? "-" : String.fromCharCode(65 + c);
         const detectedCols = {
@@ -7116,6 +7129,7 @@ function ExcelPanel({products,setProducts}) {
           "Fecha":         colLetter(COL.fecha),
           "Precio Final":  colLetter(COL.precioFinal),
           "Múltiplo (Unidad)": colLetter(COL.unidad),
+          "Código de Barras": colLetter(COL.barras),
         };
 
         const parsed = [];
@@ -7127,12 +7141,14 @@ function ExcelPanel({products,setProducts}) {
           const pFinal  = COL.precioFinal >= 0 ? cellNum(r, COL.precioFinal) : null;
           const unidadRaw = COL.unidad >= 0 ? cellNum(r, COL.unidad) : null;
           const multiplo = (unidadRaw && unidadRaw > 0) ? Math.round(unidadRaw) : 1;
+          const barcode = COL.barras >= 0 ? cellStr(r, COL.barras) : "";
           parsed.push({
             id,
             name:         cellStr(r, COL.descripcion),
             precioIVA:    pIVA,
             precioOferta: pOferta,
             multiplo,
+            barcode,
             precioFinal:  pFinal,
             fecha:        cellStr(r, COL.fecha),
           });
@@ -7172,6 +7188,7 @@ function ExcelPanel({products,setProducts}) {
         else if(precioVenta!==null) newProds[idx].salePrice = precioVenta;
         if(precioCosto!==null)     newProds[idx].costPrice = precioCosto;  // siempre IVA como costo
         newProds[idx].multiploCompra = row.multiplo||1;
+        if(row.barcode) newProds[idx].barcode = row.barcode;
         if(row.name) newProds[idx].name = row.name;
         updated.push(row.id);
       } else {
@@ -7188,7 +7205,7 @@ function ExcelPanel({products,setProducts}) {
             id:row.id, name:row.name||row.id,
             costPrice:costo||0,
             salePrice:(row.precioFinal&&row.precioFinal>0)?row.precioFinal:(precio||0),
-            category:"Importado", stock:0, multiploCompra:row.multiplo||1
+            category:"Importado", stock:0, multiploCompra:row.multiplo||1, barcode:row.barcode||""
           });
         }
       });
@@ -7225,7 +7242,7 @@ function ExcelPanel({products,setProducts}) {
         <div style={{fontWeight:800,fontSize:16,marginBottom:6}}>📊 Importar Lista de Precios</div>
         <div style={{fontSize:13,color:"#666",marginBottom:16,lineHeight:1.6}}>
           El sistema lee automáticamente las columnas:<br/>
-          <strong>CÓDIGO . DESCRIPCIÓN . PRECIO CON IVA . PRECIO OFERTA . FECHA ULTIMA ACTUALIZACIÓN . PRECIO FINAL . UNIDAD (múltiplo de compra)</strong>
+          <strong>CÓDIGO . DESCRIPCIÓN . PRECIO CON IVA . PRECIO OFERTA . FECHA ULTIMA ACTUALIZACIÓN . PRECIO FINAL . UNIDAD (múltiplo de compra) . CÓDIGO DE BARRAS</strong>
         </div>
         <div style={{marginBottom:14}}>
           <div style={{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}}>Modo de importación</div>
@@ -7289,7 +7306,7 @@ function ExcelPanel({products,setProducts}) {
           : <div style={{overflowX:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                 <thead><tr style={{background:"#f9f9f9"}}>
-                  {["Código","Descripción","P. IVA","P. Oferta","P. Final","Fecha","Múltiplo"].map(h=><th key={h} style={{padding:"7px 8px",textAlign:"left",fontWeight:700,color:"#888",whiteSpace:"nowrap"}}>{h}</th>)}
+                  {["Código","Descripción","P. IVA","P. Oferta","P. Final","Fecha","Múltiplo","Cód. Barras"].map(h=><th key={h} style={{padding:"7px 8px",textAlign:"left",fontWeight:700,color:"#888",whiteSpace:"nowrap"}}>{h}</th>)}
                 </tr></thead>
                 <tbody>
                   {preview.rows.map((r,i)=>(
@@ -7301,6 +7318,7 @@ function ExcelPanel({products,setProducts}) {
                       <td style={{padding:"6px 8px",fontWeight:700,color:RED}}>{r.precioFinal!=null?fARS(r.precioFinal):"-"}</td>
                       <td style={{padding:"6px 8px",color:"#aaa",fontSize:10}}>{r.fecha}</td>
                       <td style={{padding:"6px 8px",color:r.multiplo>1?"#b7770d":"#ccc",fontWeight:r.multiplo>1?700:400}}>{r.multiplo>1?`×${r.multiplo}`:"—"}</td>
+                      <td style={{padding:"6px 8px",color:"#aaa",fontSize:10,whiteSpace:"nowrap"}}>{r.barcode||"—"}</td>
                     </tr>
                   ))}
                 </tbody>
