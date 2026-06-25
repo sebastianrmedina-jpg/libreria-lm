@@ -41,6 +41,7 @@ const TrendDown = (p) => <Ico {...p}><polyline points="3 7 9 13 13 9 21 17"/><po
 const Home = (p) => <Ico {...p}><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></Ico>;
 const CreditCard = (p) => <Ico {...p}><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></Ico>;
 const Gift = (p) => <Ico {...p}><rect x="3" y="9" width="18" height="11" rx="1"/><path d="M12 9v11"/><path d="M8 9c-2 0-3-1.5-3-3s2-3 4 0c2-3 4-3 4 0s-1 3-3 3"/></Ico>;
+const Tag = (p) => <Ico {...p}><path d="M3 11l9-8 9 8-9 8z"/><circle cx="9" cy="9" r="1.3" fill={p.color||"currentColor"} stroke="none"/></Ico>;
 const Beaker = (p) => <Ico {...p}><path d="M9 3h6"/><path d="M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/></Ico>;
 const Lock = (p) => <Ico {...p}><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></Ico>;
 const BarChart = (p) => <Ico {...p}><line x1="5" y1="20" x2="5" y2="11"/><line x1="12" y1="20" x2="12" y2="5"/><line x1="19" y1="20" x2="19" y2="14"/></Ico>;
@@ -3417,10 +3418,13 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
   return (
     <div>
       <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px #0001"}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar por nombre o código..." style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",marginBottom:10,boxSizing:"border-box"}}/>
+        <div style={{position:"relative",marginBottom:10}}>
+          <Search size={14} color="#aaa" strokeWidth={2.3} style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)"}}/>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar por nombre o código..." style={{width:"100%",padding:"8px 12px 8px 32px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+        </div>
         <div style={{position:"relative"}}>
           <button onClick={()=>setCatOpen(o=>!o)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"8px 12px",borderRadius:8,border:`1.5px solid ${catOpen?RED:"#e5e5e5"}`,background:cat!=="todos"?"#fdecea":"#fff",color:cat!=="todos"?RED:"#666",cursor:"pointer",fontSize:13,fontWeight:600}}>
-            <span>🏷️ {cat==="todos"?"Todas las categorías":cat}</span><span style={{fontSize:10,marginLeft:6}}>{catOpen?"▲":"▼"}</span>
+            <span style={{display:"flex",alignItems:"center",gap:6}}><Tag size={13} strokeWidth={2.2}/> {cat==="todos"?"Todas las categorías":cat}</span><span style={{fontSize:10,marginLeft:6}}>{catOpen?"▲":"▼"}</span>
           </button>
           {catOpen&&(<div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#fff",borderRadius:10,border:"1.5px solid #e5e5e5",boxShadow:"0 8px 24px #0002",zIndex:50,padding:8,display:"flex",flexWrap:"wrap",gap:5,maxHeight:220,overflowY:"auto"}}>
             {CATS.map(c=><button key={c} onClick={()=>{setCat(c);setCatOpen(false);}} style={{padding:"4px 11px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:cat===c?RED:"#e5e5e5",background:cat===c?"#fdecea":"#fff",color:cat===c?RED:"#666"}}>{c==="todos"?"Todos":c}</button>)}
@@ -3434,7 +3438,7 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
             background:soloStock?"#eafaf1":"#fff",
             color:soloStock?"#1e8449":"#888",
             display:"flex",alignItems:"center",gap:6}}>
-          📦 {soloStock?"Solo con stock ✓":"Mostrar solo con stock"}
+          <Package size={13} strokeWidth={2.2}/> {soloStock?"Solo con stock":"Mostrar solo con stock"}{soloStock&&<CheckCircle size={12} strokeWidth={2.4}/>}
         </button>
       </div>
       {isMobile
@@ -3442,7 +3446,7 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
             {shownCombos.map(promo=>{const cq=comboQtyOf(promo); return (
               <div key={promo.id} style={{background:"#fffdf8",borderRadius:10,padding:"12px 14px",display:"flex",alignItems:"center",gap:10,boxShadow:"0 1px 4px #0001",border:cq>0?`2px solid ${RED}`:"2px solid #c9a96a"}}>
                 <div style={{flex:1,minWidth:0}}>
-                  <span style={{background:"#7b1a1a",color:"#fff",fontSize:10,fontWeight:800,borderRadius:6,padding:"2px 7px"}}>🎁 COMBO</span>
+                  <span style={{background:"#7b1a1a",color:"#fff",fontSize:10,fontWeight:800,borderRadius:6,padding:"2px 7px",display:"inline-flex",alignItems:"center",gap:4}}><Gift size={10} strokeWidth={2.6}/> COMBO</span>
                   <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",lineHeight:1.3,margin:"4px 0 2px"}}>{promo.nombre}</div>
                   <div style={{fontSize:11,color:"#666"}}>{(promo.data?.componentes||[]).map(c=>products.find(x=>x.id===c.pid)?.name).filter(Boolean).join(" + ")}</div>
                   <span style={{fontSize:15,fontWeight:800,color:RED,marginTop:4,display:"block"}}>{fARS(promo.data?.precioFijo||0)}</span>
@@ -3465,7 +3469,7 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
               return (
               <div key={p.id} style={{background:"#fff",borderRadius:10,padding:"12px 14px",display:"flex",alignItems:"center",gap:10,boxShadow:"0 1px 4px #0001",border:ic?`2px solid ${RED}`:promo?"2px solid #f3d98a":"2px solid transparent"}}>
                 <div style={{flex:1,minWidth:0}}>
-                  {promo && <span style={{fontSize:10,fontWeight:800,borderRadius:6,padding:"1px 6px",marginBottom:3,display:"inline-block",background:promo.tipo==="3x2"?"#fef9e7":"#fdecea",color:promo.tipo==="3x2"?"#b7770d":"#c0392b",border:promo.tipo==="3x2"?"1px solid #f3d98a":"1px solid #f5b7b1"}}>{promo.tipo==="3x2"?`🏷️ ${promo.data.comprar}×${promo.data.pagar}`:`🔻 -${promo.data.valor}${promo.data.tipoValor==="%"?"%":""}`}</span>}
+                  {promo && <span style={{fontSize:10,fontWeight:800,borderRadius:6,padding:"1px 6px",marginBottom:3,display:"inline-block",background:promo.tipo==="3x2"?"#fef9e7":"#fdecea",color:promo.tipo==="3x2"?"#b7770d":"#c0392b",border:promo.tipo==="3x2"?"1px solid #f3d98a":"1px solid #f5b7b1"}}><span style={{display:"inline-flex",alignItems:"center",gap:3}}>{promo.tipo==="3x2"?<Tag size={10} strokeWidth={2.6}/>:<TrendDown size={10} strokeWidth={2.6}/>} {promo.tipo==="3x2"?`${promo.data.comprar}×${promo.data.pagar}`:`-${promo.data.valor}${promo.data.tipoValor==="%"?"%":""}`}</span></span>}
                   <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",lineHeight:1.3,marginBottom:2}}>{p.name}</div>
                   <div style={{fontSize:11,color:"#666"}}>{p.id} · {p.category}</div>
                   {loteMode && p.multiploCompra>1 && <span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"1.5px 8px",fontSize:10,fontWeight:700,marginTop:3}}><BoxIcon size={10} strokeWidth={2.4}/>Caja de {p.multiploCompra}</span>}
@@ -3489,7 +3493,7 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
         : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(195px,1fr))",gap:10}}>
             {shownCombos.map(promo=>{const cq=comboQtyOf(promo); return (
               <div key={promo.id} style={{background:"#fffdf8",borderRadius:10,padding:14,border:cq>0?`2px solid ${RED}`:"2px solid #c9a96a",boxShadow:"0 1px 4px #0001"}}>
-                <div style={{marginBottom:6}}><span style={{background:"#7b1a1a",color:"#fff",fontSize:10,fontWeight:800,borderRadius:6,padding:"2px 7px"}}>🎁 COMBO</span></div>
+                <div style={{marginBottom:6}}><span style={{background:"#7b1a1a",color:"#fff",fontSize:10,fontWeight:800,borderRadius:6,padding:"2px 7px",display:"inline-flex",alignItems:"center",gap:4}}><Gift size={10} strokeWidth={2.6}/> COMBO</span></div>
                 <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",marginBottom:3,lineHeight:1.3}}>{promo.nombre}</div>
                 <div style={{fontSize:11,color:"#666",marginBottom:7}}>{(promo.data?.componentes||[]).map(c=>products.find(x=>x.id===c.pid)?.name).filter(Boolean).join(" + ")}</div>
                 <div style={{marginBottom:10}}><span style={{fontSize:17,fontWeight:800,color:RED}}>{fARS(promo.data?.precioFijo||0)}</span></div>
@@ -3507,7 +3511,7 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
               const isDesc=promo?.tipo==="descuento";
               const finalPrice=isDesc?Math.max(0,promo.data?.tipoValor==="%"?p.salePrice*(1-(promo.data?.valor||0)/100):p.salePrice-(promo.data?.valor||0)):p.salePrice;
               return <div key={p.id} style={{background:"#fff",borderRadius:10,padding:14,border:ic?`2px solid ${RED}`:promo?"2px solid #f3d98a":"2px solid transparent",boxShadow:"0 1px 4px #0001"}}>
-              {promo && <div style={{marginBottom:5}}><span style={{fontSize:10,fontWeight:800,borderRadius:6,padding:"2px 7px",display:"inline-block",background:promo.tipo==="3x2"?"#fef9e7":"#fdecea",color:promo.tipo==="3x2"?"#b7770d":"#c0392b",border:promo.tipo==="3x2"?"1px solid #f3d98a":"1px solid #f5b7b1"}}>{promo.tipo==="3x2"?`🏷️ ${promo.data.comprar}×${promo.data.pagar}`:`🔻 -${promo.data.valor}${promo.data.tipoValor==="%"?"%":""}`}</span></div>}
+              {promo && <div style={{marginBottom:5}}><span style={{fontSize:10,fontWeight:800,borderRadius:6,padding:"2px 7px",display:"inline-block",background:promo.tipo==="3x2"?"#fef9e7":"#fdecea",color:promo.tipo==="3x2"?"#b7770d":"#c0392b",border:promo.tipo==="3x2"?"1px solid #f3d98a":"1px solid #f5b7b1"}}><span style={{display:"inline-flex",alignItems:"center",gap:3}}>{promo.tipo==="3x2"?<Tag size={10} strokeWidth={2.6}/>:<TrendDown size={10} strokeWidth={2.6}/>} {promo.tipo==="3x2"?`${promo.data.comprar}×${promo.data.pagar}`:`-${promo.data.valor}${promo.data.tipoValor==="%"?"%":""}`}</span></span></div>}
               <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",marginBottom:3,lineHeight:1.3}}>{p.name}</div>
               <div style={{fontSize:12,color:"#666",marginBottom:7,fontWeight:500}}>{p.id} · {p.category}</div>
               {loteMode && p.multiploCompra>1 && <div style={{marginBottom:7}}><span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"1.5px 8px",fontSize:10,fontWeight:700}}><BoxIcon size={10} strokeWidth={2.4}/>Caja de {p.multiploCompra}</span></div>}
