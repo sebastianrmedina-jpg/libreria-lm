@@ -38,6 +38,7 @@ const Pencil = (p) => <Ico {...p}><path d="M4 20l1-4 11-11 3 3-11 11-4 1Z"/><pat
 const Truck = (p) => <Ico {...p}><rect x="1" y="7" width="13" height="9" rx="1"/><path d="M14 10h4l3 3v3h-7z"/><circle cx="6" cy="18.5" r="1.6"/><circle cx="17" cy="18.5" r="1.6"/></Ico>;
 const UserMinus = (p) => <Ico {...p}><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6"/><line x1="16" y1="10" x2="22" y2="10"/></Ico>;
 const ArrowLeftIcon = (p) => <Ico {...p}><line x1="20" y1="12" x2="4" y2="12"/><polyline points="11 5 4 12 11 19"/></Ico>;
+const ArrowRightIcon = (p) => <Ico {...p}><line x1="4" y1="12" x2="20" y2="12"/><polyline points="13 5 20 12 13 19"/></Ico>;
 const Eye = (p) => <Ico {...p}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></Ico>;
 const BoxIcon = (p) => <Ico {...p}><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></Ico>;
 
@@ -1607,6 +1608,9 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
 
   // ── BANDEJA DE APROBACIONES — deep-link a solicitudes de compra desde Central ──
   const [deepLinkPOId, setDeepLinkPOId] = useState(null);
+  // Deep-link a una seccion puntual de Admin (ej: "Ver en Pagos" desde un pedido bloqueado)
+  const [deepLinkAdminSection, setDeepLinkAdminSection] = useState(null);
+  const [deepLinkOfertaProductId, setDeepLinkOfertaProductId] = useState(null);
   const quickReviewPO = async (id) => {
     const po = purchaseOrders.find(p=>p.id===id);
     if(!po) return;
@@ -1925,6 +1929,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
           clients={clients} purchaseOrders={purchaseOrders}
           onDeleteClient={deleteClient} onRejectDeleteClient={rejectDeleteClient}
           onQuickReviewPO={quickReviewPO} onViewPO={(id)=>{setDeepLinkPOId(id);setTab("solicitud");}}
+          onGoToPagos={()=>{setDeepLinkAdminSection("pagos");setTab("admin");}}
           currentUser={currentUser} isMobile={isMobile}/>}
         {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} promos={promos}/>}
         {tab==="clientes"   && <ClientesPanel clients={clients} onSave={saveClient} onDelete={deleteClient} onRequestDelete={requestDeleteClient} onRejectDelete={rejectDeleteClient} currentUser={currentUser} isMobile={isMobile} orders={orders}/>}
@@ -1943,7 +1948,8 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                   </button>
                 </div>
               )}
-              <Stock products={pricedProducts} onUpd={updProd} onDel={pid=>setProducts(p=>p.filter(x=>x.id!==pid))} onAdjust={(pid,qty)=>setProducts(p=>p.map(x=>x.id===pid?{...x,stock:x.stock+qty}:x))} isAdmin={isAdmin} addLog={addLog} stockLog={stockLog} setStockLog={setStockLog} isMobile={isMobile}/>
+              <Stock products={pricedProducts} onUpd={updProd} onDel={pid=>setProducts(p=>p.filter(x=>x.id!==pid))} onAdjust={(pid,qty)=>setProducts(p=>p.map(x=>x.id===pid?{...x,stock:x.stock+qty}:x))} isAdmin={isAdmin} addLog={addLog} stockLog={stockLog} setStockLog={setStockLog} isMobile={isMobile}
+                onCrearOferta={(pid)=>{setDeepLinkOfertaProductId(pid);setDeepLinkAdminSection("ofertas");setTab("admin");}}/>
             </>}
         {tab==="compras"    && <Compras products={products} onStock={addStock} isMobile={isMobile} canScan={currentUser.role==="admin"||isTestOrder(currentUser.vendedor||currentUser.name)||currentUser.barcodeEnabled}/>}
         {tab==="solicitud"  && <SolicitudCompra products={products} currentUser={currentUser} isAdmin={isAdmin} purchaseOrders={purchaseOrders} setPurchaseOrders={setPurchaseOrders} isMobile={isMobile} onStockExternal={addStock} addLog={addLog}
@@ -1958,7 +1964,9 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
             });
           }}
         />}
-        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile} sandboxStock={sandboxStock} setSandboxStock={setSandboxStock} updateSandboxStock={updateSandboxStock} promos={promos} setPromos={setPromos} settings={settings} onToggleExigirPago={toggleExigirPago} onConfirmarComprobante={confirmarComprobante} onRechazarComprobante={rechazarComprobante} onConfirmarEfectivo={confirmarEfectivo} onRechazarEfectivo={rechazarEfectivo}/>}
+        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile} sandboxStock={sandboxStock} setSandboxStock={setSandboxStock} updateSandboxStock={updateSandboxStock} promos={promos} setPromos={setPromos} settings={settings} onToggleExigirPago={toggleExigirPago} onConfirmarComprobante={confirmarComprobante} onRechazarComprobante={rechazarComprobante} onConfirmarEfectivo={confirmarEfectivo} onRechazarEfectivo={rechazarEfectivo}
+          autoSection={deepLinkAdminSection} onConsumedAutoSection={()=>setDeepLinkAdminSection(null)}
+          prefillProductId={deepLinkOfertaProductId} onConsumedPrefill={()=>setDeepLinkOfertaProductId(null)}/>}
       </div>
     </div>
   );
@@ -2239,7 +2247,7 @@ function ConsolaAprobaciones({orders,clients,purchaseOrders,onApproveEditRequest
 }
 
 // ─── CENTRAL ──────────────────────────────────────────────────────────────────
-function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,onConfirmarComprobante,onRechazarComprobante,onMarcarEfectivo,onConfirmarEfectivo,onRechazarEfectivo,exigirPagoConfirmado,clients,purchaseOrders,onDeleteClient,onRejectDeleteClient,onQuickReviewPO,onViewPO,currentUser,isMobile}) {
+function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,onConfirmarComprobante,onRechazarComprobante,onMarcarEfectivo,onConfirmarEfectivo,onRechazarEfectivo,exigirPagoConfirmado,clients,purchaseOrders,onDeleteClient,onRejectDeleteClient,onQuickReviewPO,onViewPO,onGoToPagos,currentUser,isMobile}) {
   const isAdmin = currentUser?.role === "admin";
   const [fStage,setFStage]=useState("todos");
   const [fVendedor,setFVendedor]=useState("todos");
@@ -2315,7 +2323,7 @@ function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onAppro
       </div>
       {filtered.length===0
         ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{fontSize:48}}>📭</div><div style={{marginTop:8}}>No hay pedidos. !Creá uno desde "Nuevo Pedido"!</div></div>
-        : filtered.map(o=><OCard key={o.id} o={o} exp={expanded===o.id} toggle={()=>setExpanded(expanded===o.id?null:o.id)} getP={getP} onStage={onStage} onDel={onDel} onSaveNote={onSaveNote} onRequestEdit={onRequestEdit} onApproveEditRequest={onApproveEditRequest} onRejectEditRequest={onRejectEditRequest} onSubmitEdit={onSubmitEdit} onApproveEdit={onApproveEdit} onRejectEdit={onRejectEdit} onUploadComprobante={onUploadComprobante} onConfirmarComprobante={onConfirmarComprobante} onRechazarComprobante={onRechazarComprobante} onMarcarEfectivo={onMarcarEfectivo} onConfirmarEfectivo={onConfirmarEfectivo} onRechazarEfectivo={onRechazarEfectivo} exigirPagoConfirmado={exigirPagoConfirmado} currentUser={currentUser} products={products}/>)
+        : filtered.map(o=><OCard key={o.id} o={o} exp={expanded===o.id} toggle={()=>setExpanded(expanded===o.id?null:o.id)} getP={getP} onStage={onStage} onDel={onDel} onSaveNote={onSaveNote} onRequestEdit={onRequestEdit} onApproveEditRequest={onApproveEditRequest} onRejectEditRequest={onRejectEditRequest} onSubmitEdit={onSubmitEdit} onApproveEdit={onApproveEdit} onRejectEdit={onRejectEdit} onUploadComprobante={onUploadComprobante} onConfirmarComprobante={onConfirmarComprobante} onRechazarComprobante={onRechazarComprobante} onMarcarEfectivo={onMarcarEfectivo} onConfirmarEfectivo={onConfirmarEfectivo} onRechazarEfectivo={onRechazarEfectivo} exigirPagoConfirmado={exigirPagoConfirmado} onGoToPagos={onGoToPagos} currentUser={currentUser} products={products}/>)
       }
     </div>
   );
@@ -2333,7 +2341,7 @@ function DelBtn({onConfirm}) {
   return <button onClick={()=>setConfirm(true)} style={{marginLeft:"auto",padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>🗑 Eliminar</button>;
 }
 
-function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,onConfirmarComprobante,onRechazarComprobante,onMarcarEfectivo,onConfirmarEfectivo,onRechazarEfectivo,exigirPagoConfirmado,currentUser,products}) {
+function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,onConfirmarComprobante,onRechazarComprobante,onMarcarEfectivo,onConfirmarEfectivo,onRechazarEfectivo,exigirPagoConfirmado,onGoToPagos,currentUser,products}) {
   const isAdmin = currentUser?.role === "admin";
   const idx=STAGES.indexOf(o.stage), next=STAGES[idx+1];
   const pt = normPagoTipo(o.pagoTipo); // normaliza valores viejos ("comprobante"/"efectivo" sin sufijo)
@@ -2845,6 +2853,11 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                 <div style={{fontSize:11.5,color:"#b7770d",marginTop:5}}>
                   ⚠️ Esperando confirmación de pago para habilitar la entrega
                 </div>
+                {isAdmin && onGoToPagos && (
+                  <button onClick={onGoToPagos} style={{marginTop:7,display:"flex",alignItems:"center",gap:5,background:"none",border:"none",color:"#1a5276",fontWeight:700,fontSize:12,cursor:"pointer",padding:0}}>
+                    Ver en Pagos <ArrowRightIcon size={12} strokeWidth={2.3}/>
+                  </button>
+                )}
               </div>
             ) : (
               next&&!es&&<button onClick={()=>onStage(o.id,next)} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",background:SCFG[next].color,color:"#fff",fontWeight:700,fontSize:13}}>{SCFG[next].icon} Pasar a {SCFG[next].label}</button>
@@ -4292,7 +4305,7 @@ function BajaConfirm({onConfirm,disabled}) {
   );
 }
 
-function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLog,isMobile}) {
+function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLog,isMobile,onCrearOferta}) {
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("todos");
   const [editing,setEditing]=useState(null);
@@ -4409,12 +4422,18 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
                         {esRojo?"🔴":"🟡"} {dias}d sin mov.
                       </span>
                     ) : null;
+                    const crearOfertaBtn = isAdmin && (esRojo||esAmarillo) && onCrearOferta ? (
+                      <button onClick={()=>onCrearOferta(p.id)} style={{display:"inline-flex",alignItems:"center",gap:4,marginLeft:4,padding:"1px 8px",borderRadius:20,border:"1px solid #6c348355",background:"#f5eef8",color:"#6c3483",fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+                        🎁 Crear oferta
+                      </button>
+                    ) : null;
                     return isMobile ? (
                       <tr key={p.id} style={{borderTop:"1px solid #f5f5f5"}}>
                         <td style={{padding:"10px 12px"}}>
                           <div style={{fontWeight:600,fontSize:13}}>{p.name}{staleBadge}</div>
                           <div style={{fontSize:10,color:"#aaa",marginTop:2}}>{p.id} · {p.category}</div>
                           {isAdmin&&<button onClick={()=>setEditing(p)} style={{padding:"3px 8px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11,fontWeight:600,marginTop:4}}>✏️ Editar</button>}
+                          {crearOfertaBtn && <span style={{marginTop:4,display:"inline-block"}}>{crearOfertaBtn}</span>}
                         </td>
                         <td style={{padding:"10px 12px",textAlign:"right"}}><SPill n={p.stock}/></td>
                         <td style={{padding:"10px 12px",fontWeight:700,color:RED,textAlign:"right",whiteSpace:"nowrap"}}>{fARS(p.salePrice)}</td>
@@ -4426,6 +4445,7 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
                         <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
                           <span>{p.name}</span>
                           {staleBadge}
+                          {crearOfertaBtn}
                         </div>
                       </td>
                       <td style={{padding:"9px 12px",color:"#aaa",fontSize:11}}>{p.category}</td>
@@ -5794,8 +5814,14 @@ function PagosPanel({orders, onConfirmarComprobante, onRechazarComprobante, onCo
   );
 }
 
-function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,priceLists,setPriceLists,isMobile,sandboxStock,setSandboxStock,updateSandboxStock,promos,setPromos,settings,onToggleExigirPago,onConfirmarComprobante,onRechazarComprobante,onConfirmarEfectivo,onRechazarEfectivo}) {
+function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,priceLists,setPriceLists,isMobile,sandboxStock,setSandboxStock,updateSandboxStock,promos,setPromos,settings,onToggleExigirPago,onConfirmarComprobante,onRechazarComprobante,onConfirmarEfectivo,onRechazarEfectivo,autoSection,onConsumedAutoSection,prefillProductId,onConsumedPrefill}) {
   const [section, setSection] = useState("home");
+  // Deep-link desde otras pantallas (ej: "Ver en Pagos" desde un pedido bloqueado)
+  useEffect(() => {
+    if(!autoSection) return;
+    setSection(autoSection);
+    onConsumedAutoSection && onConsumedAutoSection();
+  }, [autoSection]);
 
   const pagosPendientes = orders.filter(o=>o.pagoTipo==="comprobante_pendiente"||o.pagoTipo==="efectivo_pendiente").length;
 
@@ -5890,7 +5916,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
           onConfirmarEfectivo={onConfirmarEfectivo} onRechazarEfectivo={onRechazarEfectivo}
           settings={settings} onToggleExigirPago={onToggleExigirPago}/>
       )}
-      {section==="ofertas"     && <OfertasPanel   promos={promos} setPromos={setPromos} products={products} isMobile={isMobile}/>}
+      {section==="ofertas"     && <OfertasPanel   promos={promos} setPromos={setPromos} products={products} isMobile={isMobile} prefillProductId={prefillProductId} onConsumedPrefill={onConsumedPrefill}/>}
       {section==="sandboxstock" && (
         <div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10,marginBottom:16}}>
@@ -6158,9 +6184,17 @@ function PromoEstado({promo, vigente, dias}) {
   return <span style={{fontSize:11,fontWeight:700,borderRadius:10,padding:"3px 9px",background:bg,color,whiteSpace:"nowrap"}}>{label}</span>;
 }
 
-function OfertasPanel({promos, setPromos, products, isMobile}) {
+function OfertasPanel({promos, setPromos, products, isMobile, prefillProductId, onConsumedPrefill}) {
   const [view, setView] = useState("vigentes"); // vigentes | historial | elegir | combo | 3x2 | descuento
   const [editing, setEditing] = useState(null);
+
+  // Deep-link desde la alerta de stock sin rotacion: "Crear oferta con este producto"
+  useEffect(() => {
+    if(!prefillProductId) return;
+    setEditing(null);
+    setView("descuento");
+    onConsumedPrefill && onConsumedPrefill();
+  }, [prefillProductId]);
 
   const fDate = (iso) => { if(!iso) return ""; const [y,m,d]=iso.split("-"); return `${d}/${m}/${y}`; };
   const diasRestantes = (iso) => { if(!iso) return null; return Math.ceil((new Date(iso)-new Date(todayISO()))/86400000); };
@@ -6193,7 +6227,7 @@ function OfertasPanel({promos, setPromos, products, isMobile}) {
 
   if(view==="combo")     return <ComboForm products={products} editing={editing} nextSku={nextPromoSku(promos)} onSave={savePromo} onCancel={cancelForm}/>;
   if(view==="3x2")       return <TresPorDosForm products={products} editing={editing} nextSku={nextPromoSku(promos)} onSave={savePromo} onCancel={cancelForm}/>;
-  if(view==="descuento") return <DescuentoForm products={products} editing={editing} onSave={savePromo} onCancel={cancelForm}/>;
+  if(view==="descuento") return <DescuentoForm products={products} editing={editing} prefillProductId={prefillProductId} onSave={savePromo} onCancel={cancelForm}/>;
 
   if(view==="elegir") {
     const TIPOS = [
@@ -6491,10 +6525,10 @@ function TresPorDosForm({products, editing, nextSku, onSave, onCancel}) {
   );
 }
 
-function DescuentoForm({products, editing, onSave, onCancel}) {
+function DescuentoForm({products, editing, prefillProductId, onSave, onCancel}) {
   const isEdit = !!editing;
   const [search, setSearch] = useState("");
-  const [producto, setProducto] = useState(()=> editing?.data?.productoId ? (products.find(p=>p.id===editing.data.productoId)||null) : null);
+  const [producto, setProducto] = useState(()=> editing?.data?.productoId ? (products.find(p=>p.id===editing.data.productoId)||null) : (prefillProductId ? (products.find(p=>p.id===prefillProductId)||null) : null));
   const [tipoValor, setTipoValor] = useState(editing?.data?.tipoValor || "%");
   const [valor, setValor] = useState(editing?.data?.valor!=null ? String(editing.data.valor) : "");
   const [vigDesde, setVigDesde] = useState(editing?.vigenciaDesde || "");
