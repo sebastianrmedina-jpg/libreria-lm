@@ -36,6 +36,8 @@ const AlertTriangle = (p) => <Ico {...p}><path d="M12 3l9.5 17H2.5z"/><line x1="
 const XIcon = (p) => <Ico {...p}><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></Ico>;
 const Pencil = (p) => <Ico {...p}><path d="M4 20l1-4 11-11 3 3-11 11-4 1Z"/><path d="M14 6l3 3"/></Ico>;
 const Truck = (p) => <Ico {...p}><rect x="1" y="7" width="13" height="9" rx="1"/><path d="M14 10h4l3 3v3h-7z"/><circle cx="6" cy="18.5" r="1.6"/><circle cx="17" cy="18.5" r="1.6"/></Ico>;
+const TrendUp = (p) => <Ico {...p}><polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/></Ico>;
+const TrendDown = (p) => <Ico {...p}><polyline points="3 7 9 13 13 9 21 17"/><polyline points="14 17 21 17 21 10"/></Ico>;
 const UserMinus = (p) => <Ico {...p}><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6"/><line x1="16" y1="10" x2="22" y2="10"/></Ico>;
 const ArrowLeftIcon = (p) => <Ico {...p}><line x1="20" y1="12" x2="4" y2="12"/><polyline points="11 5 4 12 11 19"/></Ico>;
 const ArrowRightIcon = (p) => <Ico {...p}><line x1="4" y1="12" x2="20" y2="12"/><polyline points="13 5 20 12 13 19"/></Ico>;
@@ -136,7 +138,7 @@ const SUPA_SERVICE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const supabase = createClient(SUPA_URL, SUPA_ANON);
 const supaAdmin = supabase;
 
-const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock,multiploCompra:r.multiplo_compra||1,barcode:r.barcode||""});
+const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock,multiploCompra:r.multiplo_compra||1,barcode:r.barcode||"",costPriceAnterior:r.cost_price_anterior||0});
 const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||"",isTest:r.is_test||false,isSandbox:r.is_sandbox||false,internalNote:r.internal_note||"",editStatus:r.edit_status||"",editReason:r.edit_reason||"",editItems:r.edit_items||null,editRejectReason:r.edit_reject_reason||"",comprobanteUrl:r.comprobante_url||"",comprobanteNombre:r.comprobante_nombre||"",comprobanteFecha:r.comprobante_fecha||"",pagoTipo:r.pago_tipo||"",pagoEfectivoFecha:r.pago_efectivo_fecha||""});
 const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,date:r.date,items:r.items||[],validity:r.validity||"",docNum:r.doc_num||"",convertida:r.convertida||false,ordenId:r.orden_id||"",extendida:r.extendida||false,extendReason:r.extend_reason||"",extendDate:r.extend_date||"",globalDisc:r.global_disc||null,subtotal:r.subtotal||0});
 
@@ -238,8 +240,8 @@ const db = {
     }
     return all.map(mapProduct);
   },
-  upsertProduct: async (p) => { const {error} = await supaAdmin.from("lm_products").upsert({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0,multiplo_compra:p.multiploCompra||1,barcode:p.barcode||""}); if(error) throw error; },
-  upsertProducts: async (arr) => { const {error} = await supaAdmin.from("lm_products").upsert(arr.map(p=>({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0,multiplo_compra:p.multiploCompra||1,barcode:p.barcode||""}))); if(error) throw error; },
+  upsertProduct: async (p) => { const {error} = await supaAdmin.from("lm_products").upsert({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0,multiplo_compra:p.multiploCompra||1,barcode:p.barcode||"",cost_price_anterior:p.costPriceAnterior||0}); if(error) throw error; },
+  upsertProducts: async (arr) => { const {error} = await supaAdmin.from("lm_products").upsert(arr.map(p=>({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0,multiplo_compra:p.multiploCompra||1,barcode:p.barcode||"",cost_price_anterior:p.costPriceAnterior||0}))); if(error) throw error; },
   deleteProduct: async (id) => { const {error} = await supaAdmin.from("lm_products").delete().eq("id",id); if(error) throw error; },
 
   getOrders:    async () => { const {data,error} = await supabase.from("lm_orders").select("*").order("date",{ascending:false}); if(error) throw error; return (data||[]).map(mapOrder); },
@@ -280,8 +282,8 @@ const db = {
   deletePriceList: async (id) => { const {error} = await supaAdmin.from("lm_pricelists").delete().eq("id",id); if(error) throw error; },
   // Purchase orders (solicitudes de compra)
   // SQL: CREATE TABLE lm_purchase_orders (id TEXT PRIMARY KEY, fecha TEXT, vendedor TEXT, estado TEXT DEFAULT 'abierta', items JSONB DEFAULT '[]', notas TEXT DEFAULT '', fecha_cierre TEXT DEFAULT '');
-  getPurchaseOrders: async () => { const {data,error} = await supabase.from("lm_purchase_orders").select("*").order("fecha",{ascending:false}); if(error) throw error; return data||[]; },
-  savePurchaseOrder: async (po) => { const {error} = await supaAdmin.from("lm_purchase_orders").upsert({id:po.id,fecha:po.fecha,vendedor:po.vendedor,estado:po.estado,items:po.items,notas:po.notas||"",fecha_cierre:po.fechaCierre||""}); if(error) throw error; },
+  getPurchaseOrders: async () => { const {data,error} = await supabase.from("lm_purchase_orders").select("*").order("fecha",{ascending:false}); if(error) throw error; return (data||[]).map(po=>({...po, fechaCierre:po.fecha_cierre||"", fechaRecibido:po.fecha_recibido||""})); },
+  savePurchaseOrder: async (po) => { const {error} = await supaAdmin.from("lm_purchase_orders").upsert({id:po.id,fecha:po.fecha,vendedor:po.vendedor,estado:po.estado,items:po.items,notas:po.notas||"",fecha_cierre:po.fechaCierre||"",fecha_recibido:po.fechaRecibido||""}); if(error) throw error; },
   deletePurchaseOrder: async (id) => { const {error} = await supaAdmin.from("lm_purchase_orders").delete().eq("id",id); if(error) throw error; },
   // Activity log
   // SQL: CREATE TABLE lm_activity (id TEXT PRIMARY KEY, fecha TEXT, usuario TEXT, rol TEXT, accion TEXT, detalle TEXT, ref_id TEXT, ref_tipo TEXT);
@@ -1685,14 +1687,14 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       })
       .on("postgres_changes", {event:"INSERT", schema:"public", table:"lm_purchase_orders"}, (payload) => {
         const po = payload.new;
-        setPurchaseOrders(prev => prev.find(x=>x.id===po.id) ? prev : [{...po, fechaCierre:po.fecha_cierre},...prev]);
+        setPurchaseOrders(prev => prev.find(x=>x.id===po.id) ? prev : [{...po, fechaCierre:po.fecha_cierre, fechaRecibido:po.fecha_recibido},...prev]);
         if(po.vendedor !== currentUser.vendedor && po.vendedor !== currentUser.name) {
           sendLocalNotif("📋 Nueva solicitud de compra", `${po.vendedor} creó una solicitud`, `po-${po.id}`);
         }
       })
       .on("postgres_changes", {event:"UPDATE", schema:"public", table:"lm_purchase_orders"}, (payload) => {
         const po = payload.new;
-        setPurchaseOrders(prev => prev.map(x => x.id===po.id ? {...po, fechaCierre:po.fecha_cierre} : x));
+        setPurchaseOrders(prev => prev.map(x => x.id===po.id ? {...po, fechaCierre:po.fecha_cierre, fechaRecibido:po.fecha_recibido} : x));
       })
       .on("postgres_changes", {event:"DELETE", schema:"public", table:"lm_purchase_orders"}, (payload) => {
         setPurchaseOrders(prev => prev.filter(x => x.id !== payload.old.id));
@@ -1968,7 +1970,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
             });
           }}
         />}
-        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile} sandboxStock={sandboxStock} setSandboxStock={setSandboxStock} updateSandboxStock={updateSandboxStock} promos={promos} setPromos={setPromos} settings={settings} onToggleExigirPago={toggleExigirPago} onConfirmarComprobante={confirmarComprobante} onRechazarComprobante={rechazarComprobante} onConfirmarEfectivo={confirmarEfectivo} onRechazarEfectivo={rechazarEfectivo}
+        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} purchaseOrders={purchaseOrders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile} sandboxStock={sandboxStock} setSandboxStock={setSandboxStock} updateSandboxStock={updateSandboxStock} promos={promos} setPromos={setPromos} settings={settings} onToggleExigirPago={toggleExigirPago} onConfirmarComprobante={confirmarComprobante} onRechazarComprobante={rechazarComprobante} onConfirmarEfectivo={confirmarEfectivo} onRechazarEfectivo={rechazarEfectivo}
           autoSection={deepLinkAdminSection} onConsumedAutoSection={()=>setDeepLinkAdminSection(null)}
           prefillProductId={deepLinkOfertaProductId} onConsumedPrefill={()=>setDeepLinkOfertaProductId(null)}/>}
       </div>
@@ -4555,7 +4557,7 @@ function EditModal({p,onSave,onClose}) {
 }
 
 // ─── INGRESAR STOCK DESDE SOLICITUD ──────────────────────────────────────────
-function IngresarDesdeSolicitud({po, products, onStock, onDone}) {
+function IngresarDesdeSolicitud({po, products, onStock, onDone, onArrived}) {
   const [items, setItems] = useState(
     po.items.map(i => ({
       ...i,
@@ -4577,6 +4579,7 @@ function IngresarDesdeSolicitud({po, products, onStock, onDone}) {
     for(const it of toIngresar) {
       await onStock(it.pid, +it.qtyRecibida, +it.cost);
     }
+    if(onArrived) { try { await onArrived(); } catch(e) { console.warn(e); } }
     setOk(true);
     setSaving(false);
     setTimeout(()=>onDone(), 1500);
@@ -5034,7 +5037,13 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
             <div style={{fontSize:12,color:"#1e8449",marginBottom:12,lineHeight:1.5}}>
               Podés ingresar el stock recibido directamente desde esta solicitud. Ajustá las cantidades si recibiste diferente a lo pedido.
             </div>
-            <IngresarDesdeSolicitud po={po} products={products} onStock={onStockExternal} onDone={()=>setView("lista")}/>
+            <IngresarDesdeSolicitud po={po} products={products} onStock={onStockExternal} onDone={()=>setView("lista")}
+              onArrived={async()=>{
+                const updated = {...po, fechaRecibido: today()};
+                setPurchaseOrders(prev=>prev.map(x=>x.id===po.id?updated:x));
+                setSelected(updated);
+                await db.savePurchaseOrder(updated);
+              }}/>
           </div>
         )}
       </div>
@@ -5859,7 +5868,138 @@ function PagosPanel({orders, onConfirmarComprobante, onRechazarComprobante, onCo
   );
 }
 
-function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,priceLists,setPriceLists,isMobile,sandboxStock,setSandboxStock,updateSandboxStock,promos,setPromos,settings,onToggleExigirPago,onConfirmarComprobante,onRechazarComprobante,onConfirmarEfectivo,onRechazarEfectivo,autoSection,onConsumedAutoSection,prefillProductId,onConsumedPrefill}) {
+// ─── ANÁLISIS DE COMPRAS Y COSTOS — cambios de costo del proveedor + trazabilidad ──
+function AnalisisComprasPanel({products, purchaseOrders}) {
+  const [tab, setTab] = useState("costos");
+
+  const cambios = useMemo(()=>products
+    .filter(p=>p.costPriceAnterior>0 && p.costPriceAnterior!==p.costPrice)
+    .map(p=>{
+      const pct = (p.costPrice - p.costPriceAnterior) / p.costPriceAnterior * 100;
+      return {...p, pct, negativo: p.costPrice >= p.salePrice};
+    })
+    .sort((a,b)=>b.pct-a.pct), [products]);
+  const negativos = cambios.filter(c=>c.negativo);
+  const subieronFuerte = cambios.filter(c=>!c.negativo && c.pct>=15);
+
+  const entregas = useMemo(()=>(purchaseOrders||[])
+    .filter(po=>po.fechaCierre && po.fechaRecibido)
+    .map(po=>{
+      const d1 = parseFechaLog(po.fechaCierre), d2 = parseFechaLog(po.fechaRecibido);
+      const dias = (d1&&d2) ? Math.round((d2-d1)/86400000) : null;
+      return {...po, dias};
+    })
+    .filter(po=>po.dias!==null)
+    .sort((a,b)=>parseFechaLog(b.fechaRecibido)-parseFechaLog(a.fechaRecibido)), [purchaseOrders]);
+  const promedio = entregas.length ? (entregas.reduce((s,e)=>s+e.dias,0)/entregas.length).toFixed(1) : null;
+  const masLenta = entregas.length ? [...entregas].sort((a,b)=>b.dias-a.dias)[0] : null;
+
+  return (
+    <div>
+      <div style={{display:"flex",gap:8,marginBottom:18,maxWidth:640}}>
+        <button onClick={()=>setTab("costos")} style={{flex:1,padding:"9px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,fontSize:12.5,background:tab==="costos"?"#1a1a1a":"#fff",color:tab==="costos"?"#fff":"#666",boxShadow:"0 1px 4px #0001"}}>
+          🔺 Cambios de Costo {cambios.length>0&&`(${cambios.length})`}
+        </button>
+        <button onClick={()=>setTab("entregas")} style={{flex:1,padding:"9px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,fontSize:12.5,background:tab==="entregas"?"#1a1a1a":"#fff",color:tab==="entregas"?"#fff":"#666",boxShadow:"0 1px 4px #0001"}}>
+          🚚 Trazabilidad de Entregas
+        </button>
+      </div>
+
+      <div style={{maxWidth:640}}>
+        {tab==="costos" ? (
+          cambios.length===0 ? (
+            <div style={{textAlign:"center",padding:40,background:"#fff",borderRadius:12,color:"#aaa"}}>
+              <div style={{fontSize:36,marginBottom:6}}>📭</div>
+              <div style={{fontWeight:600,fontSize:13}}>Todavía no hay cambios de costo registrados</div>
+              <div style={{fontSize:11.5,marginTop:4}}>Aparecen acá la próxima vez que reimportes la lista de precios y algún costo cambie.</div>
+            </div>
+          ) : (
+            <>
+              <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+                <div style={{flex:1,minWidth:140,background:"#fff",borderRadius:12,padding:"14px 16px",borderLeft:"3px solid #c0392b",boxShadow:"0 1px 4px #0001"}}>
+                  <div style={{fontFamily:SERIF,fontSize:24,fontWeight:700,color:"#c0392b"}}>{negativos.length}</div>
+                  <div style={{fontSize:11.5,color:"#888",marginTop:2,fontWeight:600}}>Margen negativo</div>
+                </div>
+                <div style={{flex:1,minWidth:140,background:"#fff",borderRadius:12,padding:"14px 16px",borderLeft:"3px solid #b7770d",boxShadow:"0 1px 4px #0001"}}>
+                  <div style={{fontFamily:SERIF,fontSize:24,fontWeight:700,color:"#b7770d"}}>{subieronFuerte.length}</div>
+                  <div style={{fontSize:11.5,color:"#888",marginTop:2,fontWeight:600}}>Subieron +15%</div>
+                </div>
+                <div style={{flex:1,minWidth:140,background:"#fff",borderRadius:12,padding:"14px 16px",borderLeft:"3px solid #1a5276",boxShadow:"0 1px 4px #0001"}}>
+                  <div style={{fontFamily:SERIF,fontSize:24,fontWeight:700,color:"#1a5276"}}>{cambios.length}</div>
+                  <div style={{fontSize:11.5,color:"#888",marginTop:2,fontWeight:600}}>Productos con cambio</div>
+                </div>
+              </div>
+
+              <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 4px #0001",overflow:"hidden"}}>
+                <div style={{padding:"12px 16px",borderBottom:"1px solid #f0f0f0",fontWeight:800,fontSize:13.5}}>Cambios del último import</div>
+                {cambios.map(c=>(
+                  <div key={c.id} style={{padding:"11px 16px",borderBottom:"1px solid #f5f5f5",display:"flex",alignItems:"center",gap:10,background:c.negativo?"#fff8f8":"transparent",flexWrap:"wrap"}}>
+                    <div style={{flex:1,minWidth:160}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                        <span style={{fontWeight:700,fontSize:12.5,color:"#1a1a1a"}}>{c.name}</span>
+                        {c.negativo && <span style={{background:"#fdecea",color:"#c0392b",borderRadius:20,padding:"2px 9px",fontSize:10.5,fontWeight:700}}>🔴 Margen negativo</span>}
+                      </div>
+                      <div style={{fontSize:11,color:"#999",marginTop:2}}>{c.id} · venta actual {fARS(c.salePrice)}</div>
+                    </div>
+                    <div style={{textAlign:"right",flexShrink:0}}>
+                      <div style={{fontSize:11,color:"#aaa"}}>{fARS(c.costPriceAnterior)} → <strong style={{color:"#555"}}>{fARS(c.costPrice)}</strong></div>
+                      <div style={{display:"flex",alignItems:"center",gap:3,justifyContent:"flex-end",marginTop:2}}>
+                        {c.pct>0?<TrendUp size={11} color={c.pct>=15?"#c0392b":"#b7770d"} strokeWidth={2.5}/>:<TrendDown size={11} color="#1e8449" strokeWidth={2.5}/>}
+                        <span style={{fontSize:12,fontWeight:800,color:c.pct>=15?"#c0392b":c.pct>0?"#b7770d":"#1e8449"}}>{c.pct>0?"+":""}{c.pct.toFixed(1)}%</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )
+        ) : (
+          entregas.length===0 ? (
+            <div style={{textAlign:"center",padding:40,background:"#fff",borderRadius:12,color:"#aaa"}}>
+              <div style={{fontSize:36,marginBottom:6}}>📭</div>
+              <div style={{fontWeight:600,fontSize:13}}>Todavía no hay entregas registradas</div>
+              <div style={{fontSize:11.5,marginTop:4}}>Aparecen acá cada vez que confirmes "Ingresar mercadería" en una solicitud cerrada.</div>
+            </div>
+          ) : (
+            <>
+              <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+                <div style={{flex:1,minWidth:160,background:"#fff",borderRadius:12,padding:"14px 16px",borderLeft:"3px solid #6c3483",boxShadow:"0 1px 4px #0001"}}>
+                  <div style={{fontFamily:SERIF,fontSize:24,fontWeight:700,color:"#6c3483"}}>{promedio}<span style={{fontSize:13}}> días</span></div>
+                  <div style={{fontSize:11.5,color:"#888",marginTop:2,fontWeight:600}}>Tiempo de entrega promedio</div>
+                </div>
+                {masLenta && <div style={{flex:1,minWidth:160,background:"#fff",borderRadius:12,padding:"14px 16px",borderLeft:"3px solid #b7770d",boxShadow:"0 1px 4px #0001"}}>
+                  <div style={{fontFamily:SERIF,fontSize:24,fontWeight:700,color:"#b7770d"}}>{masLenta.dias}<span style={{fontSize:13}}> días</span></div>
+                  <div style={{fontSize:11.5,color:"#888",marginTop:2,fontWeight:600}}>Entrega más lenta</div>
+                </div>}
+              </div>
+
+              <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 4px #0001",overflow:"hidden"}}>
+                <div style={{padding:"12px 16px",borderBottom:"1px solid #f0f0f0",fontWeight:800,fontSize:13.5}}>Últimas entregas recibidas</div>
+                {entregas.map(e=>(
+                  <div key={e.id} style={{padding:"11px 16px",borderBottom:"1px solid #f5f5f5",display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{width:30,height:30,borderRadius:9,background:"#f5eef8",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <Truck size={14} color="#6c3483" strokeWidth={2.2}/>
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontWeight:700,fontSize:12.5,color:"#1a1a1a"}}>{e.items?.length||0} productos</div>
+                      <div style={{fontSize:11,color:"#999"}}>👤 {e.vendedor} · cerrada {e.fechaCierre} → recibida {e.fechaRecibido}</div>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:5,flexShrink:0}}>
+                      <Clock size={12} color={e.dias>7?"#c0392b":e.dias>4?"#b7770d":"#1e8449"} strokeWidth={2.3}/>
+                      <span style={{fontWeight:800,fontSize:14,color:e.dias>7?"#c0392b":e.dias>4?"#b7770d":"#1e8449"}}>{e.dias}d</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,purchaseOrders,priceLists,setPriceLists,isMobile,sandboxStock,setSandboxStock,updateSandboxStock,promos,setPromos,settings,onToggleExigirPago,onConfirmarComprobante,onRechazarComprobante,onConfirmarEfectivo,onRechazarEfectivo,autoSection,onConsumedAutoSection,prefillProductId,onConsumedPrefill}) {
   const [section, setSection] = useState("home");
   // Deep-link desde otras pantallas (ej: "Ver en Pagos" desde un pedido bloqueado)
   useEffect(() => {
@@ -5869,6 +6009,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
   }, [autoSection]);
 
   const pagosPendientes = orders.filter(o=>o.pagoTipo==="comprobante_pendiente"||o.pagoTipo==="efectivo_pendiente").length;
+  const negativosCount = products.filter(p=>p.costPrice>0 && p.costPrice>=p.salePrice).length;
 
   const SECTIONS = [
     {k:"home",        label:"Administración",   icon:"🏠"},
@@ -5882,6 +6023,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
     {k:"users",       label:"Usuarios",         icon:"🔐"},
     {k:"pricelists",  label:"Listas de Precio", icon:"💲"},
     {k:"excel",       label:"Importar Precios", icon:"📊"},
+    {k:"compras",     label:negativosCount?`Análisis Compras (${negativosCount})`:"Análisis Compras", icon:"💹"},
     {k:"notifcfg",    label:"Notificaciones",   icon:"🔔"},
   ];
 
@@ -6001,6 +6143,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
       {section==="users"       && <UsersPanel     users={users} setUsers={setUsers} vendors={vendors} priceLists={priceLists}/>}
       {section==="pricelists"  && <PriceListsPanel priceLists={priceLists} setPriceLists={setPriceLists}/>}
       {section==="excel"       && <ExcelPanel     products={products} setProducts={setProducts}/>}
+      {section==="compras"     && <AnalisisComprasPanel products={products} purchaseOrders={purchaseOrders}/>}
       {section==="notifcfg"    && <NotifConfig    users={users} setUsers={setUsers} notifs={notifs} setNotifs={setNotifs}/>}
     </div>
   );
@@ -7299,7 +7442,11 @@ function ExcelPanel({products,setProducts}) {
         if(row.precioFinal!==null && row.precioFinal>0)
                           newProds[idx].salePrice = row.precioFinal;
         else if(costo!==null) newProds[idx].salePrice = Math.round(costo*MARKUP_VENTA*100)/100;
-        if(costo!==null)  newProds[idx].costPrice = costo;
+        if(costo!==null) {
+          // Guarda el costo previo ANTES de pisarlo, para poder mostrar el cambio en el dashboard
+          if(costo !== newProds[idx].costPrice) newProds[idx].costPriceAnterior = newProds[idx].costPrice;
+          newProds[idx].costPrice = costo;
+        }
         newProds[idx].multiploCompra = row.multiplo||1;
         if(row.barcode) newProds[idx].barcode = row.barcode;
         if(row.name) newProds[idx].name = row.name;
