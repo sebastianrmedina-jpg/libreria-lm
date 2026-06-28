@@ -46,6 +46,7 @@ const Beaker = (p) => <Ico {...p}><path d="M9 3h6"/><path d="M10 3v6l-5 9a2 2 0 
 const Lock = (p) => <Ico {...p}><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></Ico>;
 const BarChart = (p) => <Ico {...p}><line x1="5" y1="20" x2="5" y2="11"/><line x1="12" y1="20" x2="12" y2="5"/><line x1="19" y1="20" x2="19" y2="14"/></Ico>;
 const Bell = (p) => <Ico {...p}><path d="M6 9a6 6 0 1 1 12 0c0 3 1 5 2 6H4c1-1 2-3 2-6Z"/><path d="M10 19a2 2 0 0 0 4 0"/></Ico>;
+const ChevronDown = (p) => <Ico {...p}><polyline points="6 9 12 15 18 9"/></Ico>;
 const UserMinus = (p) => <Ico {...p}><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6"/><line x1="16" y1="10" x2="22" y2="10"/></Ico>;
 const ArrowLeftIcon = (p) => <Ico {...p}><line x1="20" y1="12" x2="4" y2="12"/><polyline points="11 5 4 12 11 19"/></Ico>;
 const ArrowRightIcon = (p) => <Ico {...p}><line x1="4" y1="12" x2="20" y2="12"/><polyline points="13 5 20 12 13 19"/></Ico>;
