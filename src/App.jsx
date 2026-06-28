@@ -355,6 +355,9 @@ const parseFechaLog = (s) => {
 // Pedidos viejos (de versiones anteriores de esta funcionalidad) pueden tener pagoTipo="comprobante"
 // o "efectivo" sin sufijo. Los normalizamos a su equivalente confirmado para que sigan funcionando.
 const normPagoTipo = (tipo) => tipo==="comprobante" ? "comprobante_confirmado" : tipo==="efectivo" ? "efectivo_confirmado" : (tipo||"");
+// Notificaciones viejas (de antes de este arreglo) pueden tener leida:false en vez de una lista.
+// Esto evita que romper toda la app con un .includes() sobre ese dato viejo.
+const leidaArr = (n) => Array.isArray(n?.leida) ? n.leida : [];
 function isPromoVigente(p) {
   if(!p || !p.activa) return false;
   const t = todayISO();
@@ -895,7 +898,7 @@ function NotifRow({n, isRead, cfg, onClick, onDelete}) {
 }
 function NotifGroup({items, cfg, cat, currentUser, markRead, delNotif}) {
   const [open, setOpen] = useState(false);
-  const unreadN = items.filter(n=>!n.leida.includes(currentUser.id)).length;
+  const unreadN = items.filter(n=>!leidaArr(n).includes(currentUser.id)).length;
   return (
     <div style={{borderBottom:"1px solid #f5f5f5"}}>
       <div onClick={()=>setOpen(o=>!o)} style={{padding:"11px 16px",display:"flex",alignItems:"center",gap:10,cursor:"pointer",background:unreadN>0?"#fafbff":"#fff"}}>
@@ -908,7 +911,7 @@ function NotifGroup({items, cfg, cat, currentUser, markRead, delNotif}) {
       </div>
       {open && <div style={{background:"#fcfcfc"}}>
         {items.map(n=>(
-          <NotifRow key={n.id} n={n} isRead={n.leida.includes(currentUser.id)} cfg={cfg}
+          <NotifRow key={n.id} n={n} isRead={leidaArr(n).includes(currentUser.id)} cfg={cfg}
             onClick={()=>markRead(n.id)} onDelete={()=>delNotif(n.id)}/>
         ))}
       </div>}
@@ -919,11 +922,11 @@ function NotifPanel({notifs,setNotifs,currentUser,users,onClose,onMarkAllRead,pu
   const myNotifs = notifs.filter(n =>
     n.para === "todos" || n.para === currentUser.role || n.para === currentUser.id
   );
-  const unread = myNotifs.filter(n => !n.leida.includes(currentUser.id));
+  const unread = myNotifs.filter(n => !leidaArr(n).includes(currentUser.id));
   const markRead = async (id) => {
     const n = notifs.find(x=>x.id===id);
-    if(!n||n.leida.includes(currentUser.id)) return;
-    const updated = [...n.leida, currentUser.id];
+    if(!n||leidaArr(n).includes(currentUser.id)) return;
+    const updated = [...leidaArr(n), currentUser.id];
     setNotifs(ns=>ns.map(x=>x.id===id?{...x,leida:updated}:x));
     await db.updateNotif(id, {leida:updated});
   };
@@ -969,7 +972,7 @@ function NotifPanel({notifs,setNotifs,currentUser,users,onClose,onMarkAllRead,pu
                     return <NotifGroup key={cat} items={items} cfg={cfg} cat={cat} currentUser={currentUser} markRead={markRead} delNotif={delNotif}/>;
                   }
                   const n = items[0];
-                  return <NotifRow key={n.id} n={n} isRead={n.leida.includes(currentUser.id)} cfg={cfg} onClick={()=>markRead(n.id)} onDelete={()=>delNotif(n.id)}/>;
+                  return <NotifRow key={n.id} n={n} isRead={leidaArr(n).includes(currentUser.id)} cfg={cfg} onClick={()=>markRead(n.id)} onDelete={()=>delNotif(n.id)}/>;
                 });
               })()
           }
@@ -1239,13 +1242,13 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     setNotifs(n=>[full,...n]); await db.addNotif(full);
   };
   const unreadCount = notifs.filter(n =>
-    !n.leida.includes(currentUser.id) &&
+    !leidaArr(n).includes(currentUser.id) &&
     (n.para==="todos"||n.para===currentUser.role||n.para===currentUser.id)
   ).length;
   const markAllRead = async () => {
-    const toUpdate = notifs.filter(n=>!n.leida.includes(currentUser.id)&&(n.para==="todos"||n.para===currentUser.role||n.para===currentUser.id));
-    for(const n of toUpdate) await db.updateNotif(n.id,{leida:[...n.leida,currentUser.id]});
-    setNotifs(ns=>ns.map(n=>n.leida.includes(currentUser.id)?n:{...n,leida:[...n.leida,currentUser.id]}));
+    const toUpdate = notifs.filter(n=>!leidaArr(n).includes(currentUser.id)&&(n.para==="todos"||n.para===currentUser.role||n.para===currentUser.id));
+    for(const n of toUpdate) await db.updateNotif(n.id,{leida:[...leidaArr(n),currentUser.id]});
+    setNotifs(ns=>ns.map(n=>leidaArr(n).includes(currentUser.id)?n:{...n,leida:[...leidaArr(n),currentUser.id]}));
   };
   // ── PRICE LIST ──
   // Admin can preview any list; other users use their assigned list
@@ -1745,7 +1748,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
         const dirigidaAMi = n.para === currentUser.username || n.para === currentUser.name || n.para === currentUser.vendedor;
         const dirigidaAAdmin = n.para === "admin" && esAdmin;
         if((dirigidaAMi || dirigidaAAdmin) && n.de !== currentUser.name && n.de !== currentUser.vendedor) {
-          sendLocalNotif(n.title, n.body, n.tag);
+          sendLocalNotif(n.titulo, n.cuerpo, n.tag);
           setNotifs(prev => prev.find(x=>x.id===n.id) ? prev : [n,...prev]);
         }
       })
