@@ -1210,16 +1210,45 @@ function AppInner() {
   />;
 }
 
+// ─── RED DE SEGURIDAD: si algo se rompe, mostrar el error en pantalla ────────
+// en vez de dejar la app en blanco. Permite mandar una foto del error directo
+// desde el celular, sin necesitar conectar a una computadora.
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) { console.error("ErrorBoundary atrapó:", error, info); }
+  render() {
+    if(!this.state.error) return this.props.children;
+    return (
+      <div style={{minHeight:"100vh",background:"#fdecea",padding:20,fontFamily:"system-ui,-apple-system,sans-serif",boxSizing:"border-box"}}>
+        <div style={{background:"#fff",borderRadius:14,padding:20,boxShadow:"0 1px 6px #0001",maxWidth:480,margin:"30px auto"}}>
+          <div style={{fontSize:32,marginBottom:8,textAlign:"center"}}>⚠️</div>
+          <div style={{fontWeight:800,fontSize:16,color:"#c0392b",marginBottom:8,textAlign:"center"}}>Algo se rompió</div>
+          <div style={{fontSize:13,color:"#666",marginBottom:14,textAlign:"center"}}>Mandale una foto de esto a Claude para que lo arregle.</div>
+          <div style={{background:"#1a1a1a",color:"#f5b7b1",borderRadius:8,padding:12,fontSize:12,fontFamily:"monospace",overflowX:"auto",marginBottom:14,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>
+            {String(this.state.error?.message || this.state.error)}
+            {this.state.error?.stack && <div style={{color:"#aaa",fontSize:10,marginTop:8}}>{this.state.error.stack.split("\n").slice(0,4).join("\n")}</div>}
+          </div>
+          <button onClick={()=>{this.setState({error:null});window.location.reload();}}
+            style={{width:"100%",padding:11,borderRadius:9,border:"none",background:"#c0392b",color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer"}}>
+            Recargar
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
+
 // ─── Wrapper raiz: monta los hosts de toasts/confirmacion una sola vez, ──────
 // sin importar el estado de auth (loading/error/login/app), y sin necesitar
 // pasar props a traves de toda la app (toast.success(...) y confirmDialog(...) funcionan desde cualquier componente)
 export default function App() {
   return (
-    <>
+    <ErrorBoundary>
       <AppInner/>
       <ToastHost/>
       <ConfirmHost/>
-    </>
+    </ErrorBoundary>
   );
 }
 
