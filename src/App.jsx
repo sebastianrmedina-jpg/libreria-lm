@@ -47,6 +47,16 @@ const Lock = (p) => <Ico {...p}><rect x="5" y="10" width="14" height="10" rx="2"
 const BarChart = (p) => <Ico {...p}><line x1="5" y1="20" x2="5" y2="11"/><line x1="12" y1="20" x2="12" y2="5"/><line x1="19" y1="20" x2="19" y2="14"/></Ico>;
 const Bell = (p) => <Ico {...p}><path d="M6 9a6 6 0 1 1 12 0c0 3 1 5 2 6H4c1-1 2-3 2-6Z"/><path d="M10 19a2 2 0 0 0 4 0"/></Ico>;
 const ChevronDown = (p) => <Ico {...p}><polyline points="6 9 12 15 18 9"/></Ico>;
+const MessageCircle = (p) => <Ico {...p}><path d="M21 11.5a8.5 8.5 0 1 1-3.8-7.1"/><path d="M3 21l1.9-4.7A8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 8.5 8.5c0 1.6-.4 3-1.1 4.3"/></Ico>;
+const Printer = (p) => <Ico {...p}><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="8" rx="1.5"/><path d="M6 17v4h12v-4"/></Ico>;
+const RefreshCw = (p) => <Ico {...p}><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></Ico>;
+const Save = (p) => <Ico {...p}><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4"/><path d="M8 14h8v6H8z"/></Ico>;
+const Send = (p) => <Ico {...p}><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></Ico>;
+const Camera = (p) => <Ico {...p}><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="14" r="3.5"/></Ico>;
+const Trash = (p) => <Ico {...p}><polyline points="4 7 20 7"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/></Ico>;
+const LogOut = (p) => <Ico {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></Ico>;
+const Key = (p) => <Ico {...p}><circle cx="8" cy="15" r="4"/><path d="M10.5 12.5L20 3"/><path d="M16 7l2.5 2.5"/><path d="M13 4l2.5 2.5"/></Ico>;
+const Menu = (p) => <Ico {...p}><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></Ico>;
 const UserMinus = (p) => <Ico {...p}><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6"/><line x1="16" y1="10" x2="22" y2="10"/></Ico>;
 const ArrowLeftIcon = (p) => <Ico {...p}><line x1="20" y1="12" x2="4" y2="12"/><polyline points="11 5 4 12 11 19"/></Ico>;
 const ArrowRightIcon = (p) => <Ico {...p}><line x1="4" y1="12" x2="20" y2="12"/><polyline points="13 5 20 12 13 19"/></Ico>;
@@ -937,8 +947,8 @@ function NotifPanel({notifs,setNotifs,currentUser,users,onClose,onMarkAllRead,pu
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:998}} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} style={{position:"fixed",top:70,right:16,width:380,maxHeight:"80vh",background:"#fff",borderRadius:16,boxShadow:"0 12px 40px #0003",border:"1px solid #f0f0f0",display:"flex",flexDirection:"column",zIndex:999,overflow:"hidden"}}>
         <div style={{padding:"14px 18px",borderBottom:"1px solid #f5f5f5",display:"flex",alignItems:"center",justifyContent:"space-between",background:`linear-gradient(135deg,${REDD},${RED})`,borderRadius:"16px 16px 0 0"}}>
-          <div style={{color:"#fff",fontWeight:800,fontSize:15}}>
-            🔔 Notificaciones {unread.length>0&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:10,fontSize:11,padding:"1px 6px",marginLeft:6,fontWeight:800}}>{unread.length}</span>}
+          <div style={{color:"#fff",fontWeight:800,fontSize:15,display:"flex",alignItems:"center",gap:7}}>
+            <Bell size={15} strokeWidth={2.2}/>Notificaciones {unread.length>0&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:10,fontSize:11,padding:"1px 6px",marginLeft:0,fontWeight:800}}>{unread.length}</span>}
           </div>
           <div style={{display:"flex",gap:6}}>
             {unread.length>0&&<button onClick={onMarkAllRead} style={{padding:"4px 10px",borderRadius:6,border:"none",background:"#ffffff33",color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}}>Marcar todas leídas</button>}
@@ -1867,14 +1877,14 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
               <img src={LOGO} alt="LM" style={{width:38,height:38,borderRadius:"50%",objectFit:"cover",border:"2px solid #ffffff44",flexShrink:0}}/>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{color:"#fff",fontWeight:800,fontSize:15,fontFamily:"Georgia,serif"}}>Libreria Madrid</div>
-                <div style={{color:"#ffcccc",fontSize:11}}>👤 {currentUser.name}{activeList.discount>0&&<span style={{marginLeft:6,background:"#f1c40f",color:"#1a1a1a",borderRadius:4,padding:"1px 5px",fontSize:10,fontWeight:800}}>{activeList.name}</span>}</div>
+                <div style={{color:"#ffcccc",fontSize:11,display:"flex",alignItems:"center",gap:4}}><Users size={10} strokeWidth={2.5}/>{currentUser.name}{activeList.discount>0&&<span style={{marginLeft:6,background:"#f1c40f",color:"#1a1a1a",borderRadius:4,padding:"1px 5px",fontSize:10,fontWeight:800}}>{activeList.name}</span>}</div>
               </div>
               <div style={{display:"flex",gap:6,flexShrink:0}}>
                 <button onClick={()=>setShowNotifs(s=>!s)} style={{width:34,height:34,borderRadius:9,background:"#ffffff1a",border:"1px solid #ffffff2a",color:"#fff",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative"}}>
-                  🔔{unreadCount>0&&<span style={{position:"absolute",top:-3,right:-3,background:"#f1c40f",color:"#1a1a1a",borderRadius:"50%",width:15,height:15,fontSize:8,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center"}}>{unreadCount}</span>}
+                  <Bell size={16} strokeWidth={2.1}/>{unreadCount>0&&<span style={{position:"absolute",top:-3,right:-3,background:"#f1c40f",color:"#1a1a1a",borderRadius:"50%",width:15,height:15,fontSize:8,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center"}}>{unreadCount}</span>}
                   {notifPermission==="default"&&<span style={{position:"absolute",top:-3,right:-3,background:"#e67e22",borderRadius:"50%",width:10,height:10}}/>}
                 </button>
-                <button onClick={()=>setMobileMenu(o=>!o)} style={{width:34,height:34,borderRadius:9,background:"#ffffff1a",border:"1px solid #ffffff2a",color:"#fff",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>☰</button>
+                <button onClick={()=>setMobileMenu(o=>!o)} style={{width:34,height:34,borderRadius:9,background:"#ffffff1a",border:"1px solid #ffffff2a",color:"#fff",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><Menu size={17} strokeWidth={2.3}/></button>
               </div>
             </div>
             <div style={{display:"flex",overflowX:"auto",gap:1,padding:"0 10px",scrollbarWidth:"none",alignItems:"center"}}>
@@ -1885,8 +1895,8 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                 </button>
               ))}
               <button onClick={async()=>{if(await confirmDialog("¿Seguro que querés salir?","Vas a cerrar tu sesión.")) onLogout();}}
-                style={{padding:"5px 10px",border:"1px solid #ffffff33",cursor:"pointer",fontSize:11,color:"#ffbbbb",fontWeight:600,borderRadius:7,background:"transparent",whiteSpace:"nowrap",flexShrink:0,marginLeft:6}}>
-                🚪 Salir
+                style={{padding:"5px 10px",border:"1px solid #ffffff33",cursor:"pointer",fontSize:11,color:"#ffbbbb",fontWeight:600,borderRadius:7,background:"transparent",whiteSpace:"nowrap",flexShrink:0,marginLeft:6,display:"inline-flex",alignItems:"center",gap:4}}>
+                <LogOut size={11} strokeWidth={2.4}/> Salir
               </button>
             </div>
           </div>
@@ -1917,17 +1927,17 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                 )}
                 <button onClick={()=>setShowChangePass(true)}
                   style={{background:"#ffffff18",border:"1px solid #ffffff40",color:"#fff",borderRadius:6,padding:"6px 10px",cursor:"pointer",fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:5}}>
-                  👤 {currentUser.name}
+                  <Users size={11} strokeWidth={2.5}/> {currentUser.name}
                   {activeList.discount>0&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:4,padding:"1px 5px",fontSize:10,fontWeight:800,marginLeft:3}}>{activeList.name}</span>}
-                  <span style={{fontSize:10,opacity:.7}}>🔑</span>
+                  <Key size={11} strokeWidth={2.4} style={{opacity:.7}}/>
                 </button>
                 <div style={{position:"relative"}}>
-                  <button onClick={()=>setShowNotifs(s=>!s)} style={{background:"#ffffff18",border:"1px solid #ffffff40",color:"#fff",borderRadius:6,padding:"6px 9px",cursor:"pointer",fontSize:16,lineHeight:1,position:"relative"}}>
-                    🔔
+                  <button onClick={()=>setShowNotifs(s=>!s)} style={{background:"#ffffff18",border:"1px solid #ffffff40",color:"#fff",borderRadius:6,padding:"6px 9px",cursor:"pointer",fontSize:16,lineHeight:1,position:"relative",display:"flex",alignItems:"center"}}>
+                    <Bell size={15} strokeWidth={2.1}/>
                     {unreadCount>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#f1c40f",color:"#1a1a1a",borderRadius:10,fontSize:9,padding:"1px 4px",fontWeight:800,minWidth:14,textAlign:"center"}}>{unreadCount}</span>}
                   </button>
                 </div>
-                <button onClick={onLogout} style={{background:"transparent",border:"1.5px solid #ffffff55",color:"#ffe5e5",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:13,fontWeight:700}}>🚪 Salir</button>
+                <button onClick={onLogout} style={{background:"transparent",border:"1.5px solid #ffffff55",color:"#ffe5e5",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:13,fontWeight:700,display:"inline-flex",alignItems:"center",gap:5}}><LogOut size={12} strokeWidth={2.4}/> Salir</button>
               </div>
               {showNotifs&&<NotifPanel notifs={notifs} setNotifs={setNotifs} currentUser={currentUser} users={users} onClose={()=>setShowNotifs(false)} onMarkAllRead={markAllRead} pushNotif={pushNotif} orders={orders}/>}
             </div>
@@ -1977,8 +1987,8 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                 color:notifPermission==="granted"?"#1e8449":notifPermission==="denied"?"#aaa":"#e67e22",
                 cursor:"pointer",
                 background:notifPermission==="granted"?"#eafaf1":"transparent"}}>
-                <span style={{fontSize:20,width:28,textAlign:"center"}}>
-                  {notifPermission==="granted"?"🔔":"🔕"}
+                <span style={{width:28,display:"flex",justifyContent:"center"}}>
+                  <Bell size={18} strokeWidth={2.1} color={notifPermission==="granted"?"#1e8449":notifPermission==="denied"?"#aaa":"#e67e22"}/>
                 </span>
                 {notifPermission==="granted"
                   ? "Notificaciones activas ✓"
@@ -1988,10 +1998,10 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                 }
               </div>
               <div onClick={async()=>{if(await confirmDialog("¿Seguro que querés salir?","Vas a cerrar la sesión y volver a la pantalla de inicio.")) onLogout();}} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:RED,cursor:"pointer",background:"#fdecea"}}>
-                <span style={{fontSize:20,width:28,textAlign:"center"}}>🚪</span>Salir
+                <span style={{width:28,display:"flex",justifyContent:"center"}}><LogOut size={18} strokeWidth={2.1}/></span>Salir
               </div>
               <div onClick={()=>{setShowChangePass(true);setMobileMenu(false);}} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 20px",fontSize:14,fontWeight:600,color:"#333",cursor:"pointer"}}>
-                <span style={{fontSize:20,width:28,textAlign:"center"}}>🔑</span>Cambiar contraseña
+                <span style={{width:28,display:"flex",justifyContent:"center"}}><Key size={18} strokeWidth={2.1}/></span>Cambiar contraseña
               </div>
               {isAdmin && priceLists.length>1 && (
                 <div style={{padding:"8px 20px"}}>
@@ -2040,12 +2050,12 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
               {isTestUser && (
                 <div style={{background:"#f5eef8",border:"1.5px solid #9b59b6",borderRadius:10,padding:"10px 16px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
                   <div>
-                    <span style={{fontWeight:800,color:"#6c3483",fontSize:13}}>🧪 Modo Sandbox activo</span>
+                    <span style={{fontWeight:800,color:"#6c3483",fontSize:13,display:"inline-flex",alignItems:"center",gap:5}}><Beaker size={13} strokeWidth={2.4}/>Modo Sandbox activo</span>
                     <span style={{color:"#888",fontSize:12,marginLeft:8}}>El stock que ves es una copia paralela. No afecta el stock real.</span>
                   </div>
                   <button onClick={()=>{const sb={};products.forEach(p=>{sb[p.id]=p.stock;});updateSandboxStock(sb);}}
-                    style={{padding:"6px 14px",borderRadius:8,border:"1.5px solid #9b59b6",background:"#fff",color:"#6c3483",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-                    🔄 Reiniciar sandbox
+                    style={{padding:"6px 14px",borderRadius:8,border:"1.5px solid #9b59b6",background:"#fff",color:"#6c3483",fontWeight:700,fontSize:12,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
+                    <RefreshCw size={12} strokeWidth={2.4}/> Reiniciar sandbox
                   </button>
                 </div>
               )}
@@ -2441,7 +2451,7 @@ function DelBtn({onConfirm}) {
       <button onClick={()=>setConfirm(false)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12}}>No</button>
     </div>
   );
-  return <button onClick={()=>setConfirm(true)} style={{marginLeft:"auto",padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>🗑 Eliminar</button>;
+  return <button onClick={()=>setConfirm(true)} style={{marginLeft:"auto",padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13,display:"inline-flex",alignItems:"center",gap:5}}><Trash size={12} strokeWidth={2.4}/> Eliminar</button>;
 }
 
 function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,onConfirmarComprobante,onRechazarComprobante,onMarcarEfectivo,onConfirmarEfectivo,onRechazarEfectivo,exigirPagoConfirmado,onGoToPagos,currentUser,products}) {
@@ -2477,14 +2487,14 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
   const EditBdg = () => {
     if(!es) return null;
     const cfg = {
-      "solicitada":        {bg:"#fef9e7",color:"#b7770d",border:"#f0d080",label:"✏️ Edición solicitada"},
-      "aprobada":          {bg:"#eafaf1",color:"#1e8449",border:"#a9dfbf",label:"✅ Podés editar"},
-      "rechazada":         {bg:"#fdecea",color:"#c0392b",border:"#f1948a",label:"❌ Edición rechazada"},
-      "en revisión":       {bg:"#eaf4fc",color:"#1a5276",border:"#aed6f1",label:"👀 Cambios en revisión"},
-      "cambios rechazados":{bg:"#fdecea",color:"#c0392b",border:"#f1948a",label:"❌ Cambios rechazados"},
+      "solicitada":        {bg:"#fef9e7",color:"#b7770d",border:"#f0d080",label:"Edición solicitada",Icon:Pencil},
+      "aprobada":          {bg:"#eafaf1",color:"#1e8449",border:"#a9dfbf",label:"Podés editar",Icon:CheckCircle},
+      "rechazada":         {bg:"#fdecea",color:"#c0392b",border:"#f1948a",label:"Edición rechazada",Icon:XCircle},
+      "en revisión":       {bg:"#eaf4fc",color:"#1a5276",border:"#aed6f1",label:"Cambios en revisión",Icon:Eye},
+      "cambios rechazados":{bg:"#fdecea",color:"#c0392b",border:"#f1948a",label:"Cambios rechazados",Icon:XCircle},
     };
     const c = cfg[es]; if(!c) return null;
-    return <span style={{background:c.bg,color:c.color,border:`1px solid ${c.border}`,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>{c.label}</span>;
+    return <span style={{display:"inline-flex",alignItems:"center",gap:4,background:c.bg,color:c.color,border:`1px solid ${c.border}`,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}><c.Icon size={11} strokeWidth={2.5}/>{c.label}</span>;
   };
 
   const handleCompFile = async (e) => {
@@ -2527,12 +2537,12 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
           <div style={{fontWeight:700,fontSize:14,color:"#1a1a1a",letterSpacing:-0.1}}>{o.client}</div>
           <div style={{fontSize:11,color:"#999",display:"flex",gap:7,flexWrap:"wrap",alignItems:"center",marginTop:3}}>
             {o.isTest&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:800}}>TEST</span>}
-            {o.isSandbox&&<span style={{background:"#9b59b6",color:"#fff",borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:800}}>🧪 SANDBOX</span>}
+            {o.isSandbox&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:"#9b59b6",color:"#fff",borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:800}}><Beaker size={9} strokeWidth={2.6}/>SANDBOX</span>}
             {o.docNum&&!o.isTest&&<span style={{fontWeight:700,color:RED,fontFamily:SERIF}}>{o.docNum}</span>}
             {o.compNum&&!o.isTest&&<span style={{fontWeight:700,color:"#1a5276",fontFamily:SERIF}}>{o.compNum}</span>}
             <span>{o.date}</span>
             {o.vendedor&&<><Dot/><span>{o.vendedor}</span></>}
-            {o.internalNote&&<><Dot/><span style={{color:"#e67e22"}}>📝 Nota</span></>}
+            {o.internalNote&&<><Dot/><span style={{display:"inline-flex",alignItems:"center",gap:3,color:"#e67e22"}}><Pencil size={10} strokeWidth={2.5}/>Nota</span></>}
             {/* Pago — badge inline */}
             {pt==="comprobante_pendiente"  && <span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#eaf2f8",color:"#1a5276",border:"1px solid #aed6f1",borderRadius:20,padding:"2.5px 9px 2.5px 7px",fontSize:10.5,fontWeight:700}}><Paperclip size={10} strokeWidth={2.5}/>Comprobante · pendiente</span>}
             {pt==="efectivo_pendiente"     && <span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"2.5px 9px 2.5px 7px",fontSize:10.5,fontWeight:700}}><Banknote size={10} strokeWidth={2.5}/>Efectivo · pendiente</span>}
@@ -2560,16 +2570,16 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
           {/* Admin: solicitud pendiente */}
           {isAdmin && es==="solicitada" && (
             <div style={{background:"#fef9e7",border:"1.5px solid #f0d080",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
-              <div style={{fontWeight:800,fontSize:13,color:"#b7770d",marginBottom:4}}>✏️ Solicitud de edición</div>
+              <div style={{fontWeight:800,fontSize:13,color:"#b7770d",marginBottom:4,display:"flex",alignItems:"center",gap:6}}><Pencil size={13} strokeWidth={2.4}/>Solicitud de edición</div>
               <div style={{fontSize:12,color:"#7d6608",marginBottom:10}}>Motivo: "{o.editReason}"</div>
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                 <button onClick={async()=>{setSaving(true);try{await onApproveEditRequest(o.id);}catch(e){console.warn(e);toast.error("No se pudo aprobar. Probá de nuevo.");}finally{setSaving(false);}}}
                   style={{padding:"7px 14px",borderRadius:8,border:"none",background:"#1e8449",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-                  ✅ Aprobar solicitud
+                  <CheckCircle size={12} strokeWidth={2.4}/> Aprobar solicitud
                 </button>
                 {!showRejectForm && <button onClick={()=>setShowRejectForm(true)}
                   style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #f1948a",background:"#fff",color:"#c0392b",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-                  ❌ Rechazar
+                  <XCircle size={12} strokeWidth={2.4}/> Rechazar
                 </button>}
               </div>
               {showRejectForm && (
@@ -2601,7 +2611,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
           {/* Vendedor: solicitud rechazada */}
           {!isAdmin && es==="rechazada" && (
             <div style={{background:"#fdecea",border:"1.5px solid #f1948a",borderRadius:10,padding:"10px 14px",marginBottom:14}}>
-              <div style={{fontWeight:800,fontSize:13,color:"#c0392b",marginBottom:3}}>❌ Solicitud rechazada</div>
+              <div style={{fontWeight:800,fontSize:13,color:"#c0392b",marginBottom:3,display:"flex",alignItems:"center",gap:6}}><XCircle size={13} strokeWidth={2.4}/>Solicitud rechazada</div>
               <div style={{fontSize:12,color:"#922b21"}}>Motivo: "{o.editRejectReason}"</div>
               <button
                 style={{marginTop:8,padding:"5px 12px",borderRadius:7,border:"1px solid #f1948a",background:"#fff",color:"#c0392b",fontSize:11,fontWeight:600,cursor:"pointer"}}
@@ -2615,12 +2625,12 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
           {!isAdmin && es==="aprobada" && !showEditMode && (
             <div style={{background:"#eafaf1",border:"1.5px solid #a9dfbf",borderRadius:10,padding:"10px 14px",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
               <div>
-                <div style={{fontWeight:800,fontSize:13,color:"#1e8449"}}>✅ Edición aprobada</div>
+                <div style={{fontWeight:800,fontSize:13,color:"#1e8449",display:"flex",alignItems:"center",gap:6}}><CheckCircle size={13} strokeWidth={2.4}/>Edición aprobada</div>
                 <div style={{fontSize:12,color:"#1a5276",marginTop:2}}>El admin autorizó la edición. Hacé tus cambios y enviá para revisión final.</div>
               </div>
               <button onClick={startEditMode}
                 style={{padding:"8px 16px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#1a5276,#2980b9)",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>
-                ✏️ Editar pedido
+                <Pencil size={12} strokeWidth={2.4}/> Editar pedido
               </button>
             </div>
           )}
@@ -2628,7 +2638,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
           {/* EDIT MODE — formulario de edición */}
           {!isAdmin && es==="aprobada" && showEditMode && (
             <div style={{background:"#eaf4fc",border:"1.5px solid #aed6f1",borderRadius:10,padding:"14px",marginBottom:14}} onClick={e=>e.stopPropagation()}>
-              <div style={{fontWeight:800,fontSize:13,color:"#1a5276",marginBottom:10}}>✏️ Editando pedido</div>
+              <div style={{fontWeight:800,fontSize:13,color:"#1a5276",marginBottom:10,display:"flex",alignItems:"center",gap:6}}><Pencil size={13} strokeWidth={2.4}/>Editando pedido</div>
               {editItems.map((it)=>{
                 const p = getP(it.pid);
                 return (
@@ -2650,9 +2660,10 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
               })}
               {/* Agregar producto nuevo */}
               <div style={{position:"relative",marginBottom:10}}>
+                <Search size={13} color="#aaa" strokeWidth={2.3} style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)"}}/>
                 <input value={editSearch} onChange={e=>setEditSearch(e.target.value)}
-                  placeholder="🔍 Buscar producto para agregar..."
-                  style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #aed6f1",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+                  placeholder="Buscar producto para agregar..."
+                  style={{width:"100%",padding:"8px 12px 8px 32px",borderRadius:8,border:"1.5px solid #aed6f1",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
                 {editSearch.trim() && (
                   <div style={{background:"#fff",borderRadius:8,border:"1.5px solid #d6eaf8",marginTop:4,maxHeight:220,overflowY:"auto"}}>
                     {editSearchResults.length===0
@@ -2679,7 +2690,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
               <button onClick={async()=>{if(!editItems.length)return;setSaving(true);try{await onSubmitEdit(o.id,editItems,editTotal);setShowEditMode(false);}catch(e){console.warn(e);toast.error("No se pudo enviar la edición. Probá de nuevo.");}finally{setSaving(false);}}}
                 disabled={!editItems.length||saving}
                 style={{width:"100%",padding:"10px",borderRadius:9,border:"none",background:editItems.length?"linear-gradient(135deg,#1a5276,#2980b9)":"#e5e5e5",color:editItems.length?"#fff":"#aaa",fontWeight:800,fontSize:14,cursor:editItems.length?"pointer":"not-allowed",marginBottom:8}}>
-                {saving?"Enviando...":"📤 Enviar para revisión"}
+                {saving?"Enviando...":<><Send size={12} strokeWidth={2.4}/> Enviar para revisión</>}
               </button>
               <button onClick={()=>setShowEditMode(false)}
                 style={{width:"100%",padding:"9px",borderRadius:9,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontSize:13,cursor:"pointer"}}>Cancelar</button>
@@ -2689,7 +2700,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
           {/* Admin: cambios en revisión — lista separada para mobile */}
           {isAdmin && es==="en revisión" && (
             <div style={{background:"#eaf4fc",border:"1.5px solid #aed6f1",borderRadius:10,padding:"14px",marginBottom:14}}>
-              <div style={{fontWeight:800,fontSize:13,color:"#1a5276",marginBottom:12}}>👀 Revisión de cambios — {o.vendedor}</div>
+              <div style={{fontWeight:800,fontSize:13,color:"#1a5276",marginBottom:12,display:"flex",alignItems:"center",gap:6}}><Eye size={13} strokeWidth={2.4}/>Revisión de cambios — {o.vendedor}</div>
               {/* Original */}
               <div style={{marginBottom:10}}>
                 <div style={{fontSize:10,fontWeight:800,color:"#888",letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>Original</div>
@@ -2698,23 +2709,23 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
               </div>
               {/* Nuevo */}
               <div style={{background:"#fff",borderRadius:8,padding:"10px 12px",border:"1.5px solid #aed6f1",marginBottom:12}}>
-                <div style={{fontSize:10,fontWeight:800,color:"#1a5276",letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>Nuevo ✏️</div>
+                <div style={{fontSize:10,fontWeight:800,color:"#1a5276",letterSpacing:1,textTransform:"uppercase",marginBottom:6,display:"flex",alignItems:"center",gap:5}}>Nuevo <Pencil size={10} strokeWidth={2.5}/></div>
                 {(o.editItems||[]).map((it,i)=>{
                   const p=getP(it.pid);
                   const orig=o.items.find(x=>x.pid===it.pid);
                   const changed=!orig||orig.qty!==it.qty;
-                  return <div key={i} style={{fontSize:12,color:changed?"#1a5276":"#555",fontWeight:changed?700:400,padding:"4px 0",borderBottom:"1px solid #f0f0f0",display:"flex",justifyContent:"space-between"}}><span>{p?.name||it.name} × {it.qty}{changed?" ✏️":""}</span><span>{fARS(it.price*it.qty)}</span></div>;
+                  return <div key={i} style={{fontSize:12,color:changed?"#1a5276":"#555",fontWeight:changed?700:400,padding:"4px 0",borderBottom:"1px solid #f0f0f0",display:"flex",justifyContent:"space-between"}}><span>{p?.name||it.name} × {it.qty}{changed&&<Pencil size={9} strokeWidth={2.6} style={{display:"inline",marginLeft:4,verticalAlign:"-1px"}}/>}</span><span>{fARS(it.price*it.qty)}</span></div>;
                 })}
                 <div style={{fontWeight:800,fontSize:13,color:RED,marginTop:6,textAlign:"right"}}>{fARS((o.editItems||[]).reduce((s,it)=>s+it.price*it.qty,0))}</div>
               </div>
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                 <button onClick={async()=>{setSaving(true);try{await onApproveEdit(o.id);}catch(e){console.warn(e);toast.error("No se pudo aprobar. Probá de nuevo.");}finally{setSaving(false);}}}
                   style={{padding:"8px 16px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#1a5e20,#1e8449)",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>
-                  ✅ Aprobar cambios
+                  <CheckCircle size={12} strokeWidth={2.4}/> Aprobar cambios
                 </button>
                 {!showFinalReject && <button onClick={()=>setShowFinalReject(true)}
                   style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #f1948a",background:"#fff",color:"#c0392b",fontWeight:700,fontSize:13,cursor:"pointer"}}>
-                  ❌ Rechazar cambios
+                  <XCircle size={12} strokeWidth={2.4}/> Rechazar cambios
                 </button>}
               </div>
               {showFinalReject && (
@@ -2739,14 +2750,14 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
           {/* Vendedor: cambios en revisión */}
           {!isAdmin && es==="en revisión" && (
             <div style={{background:"#eaf4fc",border:"1.5px solid #aed6f1",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#1a5276",fontWeight:600}}>
-              👀 Tus cambios fueron enviados. El admin está revisando la edición final.
+              <Eye size={12} strokeWidth={2.4} style={{display:"inline",verticalAlign:"-2px"}}/> Tus cambios fueron enviados. El admin está revisando la edición final.
             </div>
           )}
 
           {/* Vendedor: cambios rechazados en revisión final */}
           {!isAdmin && es==="cambios rechazados" && (
             <div style={{background:"#fdecea",border:"1.5px solid #f1948a",borderRadius:10,padding:"10px 14px",marginBottom:14}}>
-              <div style={{fontWeight:800,fontSize:13,color:"#c0392b",marginBottom:3}}>❌ Cambios rechazados por el admin</div>
+              <div style={{fontWeight:800,fontSize:13,color:"#c0392b",marginBottom:3,display:"flex",alignItems:"center",gap:6}}><XCircle size={13} strokeWidth={2.4}/>Cambios rechazados por el admin</div>
               <div style={{fontSize:12,color:"#922b21"}}>Motivo: "{o.editRejectReason}"</div>
               <div style={{fontSize:11,color:"#888",marginTop:4}}>El pedido quedó con los datos originales.</div>
             </div>
@@ -2755,15 +2766,15 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
           {/* ITEMS LIST */}
           {o.items.map((it,i)=>{const p=getP(it.pid);return <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f9f9f9",fontSize:13}}><span style={{color:"#444"}}>{p?.name||it.name} x {it.qty}</span><span style={{fontWeight:600}}>{fARS(it.price*it.qty)}</span></div>;})}
           <div style={{display:"flex",justifyContent:"flex-end",fontWeight:800,fontSize:16,color:RED,margin:"8px 0 12px"}}>{fARS(o.total)}</div>
-          {o.notes&&<div style={{background:"#f9f9f9",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#555",marginBottom:12}}>💬 {o.notes}</div>}
+          {o.notes&&<div style={{background:"#f9f9f9",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#555",marginBottom:12}}> {o.notes}</div>}
 
           {/* NOTA INTERNA */}
           <div style={{background:"#fffbf0",border:"1.5px solid #f0d080",borderRadius:10,padding:"10px 14px",marginBottom:14}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-              <span style={{fontSize:12,fontWeight:700,color:"#b7770d"}}>📝 Nota interna (solo admin)</span>
+              <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700,color:"#b7770d"}}><Pencil size={11} strokeWidth={2.4}/>Nota interna (solo admin)</span>
               {!editNote&&<button onClick={(e)=>{e.stopPropagation();setEditNote(true);setNoteVal(o.internalNote||"");}}
                 style={{padding:"3px 10px",borderRadius:6,border:"1px solid #f0d080",background:"#fff",color:"#b7770d",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                {o.internalNote?"✏️ Editar":"+ Agregar"}
+                {o.internalNote?<><Pencil size={11} strokeWidth={2.4}/> Editar</>:"+ Agregar"}
               </button>}
             </div>
             {editNote ? (
@@ -2772,7 +2783,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                   style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #f0d080",fontSize:13,resize:"vertical",minHeight:64,outline:"none",boxSizing:"border-box",background:"#fff"}}/>
                 <div style={{display:"flex",gap:8,marginTop:6}}>
                   <button onClick={async(e)=>{e.stopPropagation();await onSaveNote(o.id,noteVal);setEditNote(false);}}
-                    style={{padding:"6px 14px",borderRadius:7,border:"none",background:"#b7770d",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer"}}>💾 Guardar</button>
+                    style={{padding:"6px 14px",borderRadius:7,border:"none",background:"#b7770d",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer"}}> Guardar</button>
                   <button onClick={(e)=>{e.stopPropagation();setEditNote(false);setNoteVal(o.internalNote||"");}}
                     style={{padding:"6px 12px",borderRadius:7,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:12,cursor:"pointer"}}>Cancelar</button>
                 </div>
@@ -2784,7 +2795,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
 
           {/* ── PAGO (comprobante digital + efectivo, ambos con aval del admin) ── */}
           <div style={{background:"#f8fffe",border:"1.5px solid #a9dfbf",borderRadius:10,padding:"10px 14px",marginBottom:14}} onClick={e=>e.stopPropagation()}>
-            <div style={{fontSize:12,fontWeight:700,color:"#1e8449",marginBottom:8}}>💳 Pago</div>
+            <div style={{fontSize:12,fontWeight:700,color:"#1e8449",marginBottom:8,display:"flex",alignItems:"center",gap:5}}><CreditCard size={13} strokeWidth={2.4}/>Pago</div>
 
             {/* ── Sin pago registrado: dos opciones ── */}
             {!pt && (
@@ -2793,17 +2804,17 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                   <input ref={compFileRef} type="file" accept="image/*" onChange={handleCompFile} style={{display:"none"}}/>
                   {uploadingComp
                     ? <><div style={{width:14,height:14,borderRadius:"50%",border:"2px solid #a9dfbf",borderTop:"2px solid #1e8449",animation:"lm-spin 0.8s linear infinite",flexShrink:0}}/><style>{`@keyframes lm-spin{to{transform:rotate(360deg)}}`}</style>Subiendo...</>
-                    : <>📷 Foto del comprobante</>
+                    : <><Camera size={12} strokeWidth={2.4}/> Foto del comprobante</>
                   }
                 </label>
                 <label style={{display:"flex",alignItems:"center",gap:8,padding:"11px 14px",borderRadius:9,border:"1px solid #a9dfbf",background:"#fff",color:"#1e8449",fontSize:13,fontWeight:700,cursor:"pointer"}}>
                   <input ref={compFileRefDoc} type="file" accept="application/pdf,.pdf" onChange={handleCompFile} style={{display:"none"}}/>
-                  📄 Subir PDF
+                  <FileText size={12} strokeWidth={2.4}/> Subir PDF
                 </label>
                 <button disabled={savingEfectivo}
                   onClick={async()=>{setSavingEfectivo(true);try{await onMarcarEfectivo(o.id);}catch(e){console.warn(e);toast.error("No se pudo registrar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
                   style={{display:"flex",alignItems:"center",gap:8,padding:"11px 14px",borderRadius:9,border:"1px solid #f0d080",background:"#fff",color:"#b7770d",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                  💵 Pago en efectivo
+                  <Banknote size={12} strokeWidth={2.4}/> Pago en efectivo
                 </button>
               </div>
             )}
@@ -2814,14 +2825,14 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                 <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
                   {/\.(jpe?g|png|gif|webp)$/i.test(o.comprobanteUrl)
                     ? <img src={o.comprobanteUrl} alt="comprobante" style={{width:48,height:48,borderRadius:8,objectFit:"cover",border:"1.5px solid #aed6f1",flexShrink:0}}/>
-                    : <div style={{width:48,height:48,borderRadius:8,border:"1.5px solid #aed6f1",background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📄</div>}
+                    : <div style={{width:48,height:48,borderRadius:8,border:"1.5px solid #aed6f1",background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><FileText size={20} color="#1a5276" strokeWidth={2}/></div>}
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:12,color:"#1a5276",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.comprobanteNombre||"Comprobante"}</div>
                     <div style={{fontSize:11,color:"#888"}}>{o.comprobanteFecha&&`Subido el ${o.comprobanteFecha}`} · monto del pedido: <strong>{fARS(o.total)}</strong></div>
                   </div>
                   <a href={o.comprobanteUrl} target="_blank" rel="noopener noreferrer"
                     style={{padding:"5px 10px",borderRadius:6,border:"1px solid #aed6f1",background:"#fff",color:"#1a5276",fontSize:11,fontWeight:700,textDecoration:"none",flexShrink:0}}>
-                    👁️ Ver
+                    <Eye size={11} strokeWidth={2.4}/> Ver
                   </a>
                 </div>
 
@@ -2830,20 +2841,20 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                     <button disabled={savingEfectivo}
                       onClick={async()=>{setSavingEfectivo(true);try{await onConfirmarComprobante(o.id);}catch(e){console.warn(e);toast.error("No se pudo confirmar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
                       style={{padding:"11px 14px",borderRadius:9,border:"none",background:"#1e8449",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                      {savingEfectivo?"Guardando...":"✅ Confirmar — el pago es correcto"}
+                      {savingEfectivo?"Guardando...":<><CheckCircle size={12} strokeWidth={2.4}/> Confirmar — el pago es correcto</>}
                     </button>
                     <button onClick={()=>setShowRejectComp(true)}
                       style={{padding:"11px 14px",borderRadius:9,border:"1.5px solid #f1948a",background:"#fff",color:"#c0392b",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                      ❌ Rechazar
+                      <XCircle size={12} strokeWidth={2.4}/> Rechazar
                     </button>
                     <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
                       <label style={{display:"flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:7,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:11,fontWeight:600,cursor:"pointer"}}>
                         <input ref={compFileRef} type="file" accept="image/*" onChange={handleCompFile} style={{display:"none"}}/>
-                        🔄📷 Reemplazar (foto)
+                        <RefreshCw size={10} strokeWidth={2.5}/> Reemplazar (foto)
                       </label>
                       <label style={{display:"flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:7,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:11,fontWeight:600,cursor:"pointer"}}>
                         <input ref={compFileRefDoc} type="file" accept="application/pdf,.pdf" onChange={handleCompFile} style={{display:"none"}}/>
-                        🔄📄 Reemplazar (PDF)
+                        <RefreshCw size={10} strokeWidth={2.5}/> Reemplazar (PDF)
                       </label>
                     </div>
                   </div>
@@ -2867,7 +2878,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                   </div>
                 )) : (
                   <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#eaf2f8",border:"1px solid #aed6f1",borderRadius:8}}>
-                    <span style={{fontSize:18}}>📎</span>
+                    <Paperclip size={17} strokeWidth={2.2}/>
                     <div>
                       <div style={{fontSize:12,fontWeight:700,color:"#1a5276"}}>Comprobante en revisión</div>
                       <div style={{fontSize:11,color:"#888"}}>Esperando confirmación del admin</div>
@@ -2883,24 +2894,24 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                 {isAdmin ? (
                   <div>
                     <div style={{fontSize:13,color:"#b7770d",marginBottom:10}}>
-                      💵 <strong>{o.vendedor}</strong> registró pago en efectivo{o.pagoEfectivoFecha&&` el ${o.pagoEfectivoFecha}`} por <strong>{fARS(o.total)}</strong>. ¿Confirmás?
+                      <Banknote size={12} strokeWidth={2.4} style={{display:"inline",verticalAlign:"-2px"}}/> <strong>{o.vendedor}</strong> registró pago en efectivo{o.pagoEfectivoFecha&&` el ${o.pagoEfectivoFecha}`} por <strong>{fARS(o.total)}</strong>. ¿Confirmás?
                     </div>
                     <div style={{display:"flex",flexDirection:"column",gap:7}}>
                       <button disabled={savingEfectivo}
                         onClick={async()=>{setSavingEfectivo(true);try{await onConfirmarEfectivo(o.id);}catch(e){console.warn(e);toast.error("No se pudo confirmar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
                         style={{padding:"11px 14px",borderRadius:9,border:"none",background:"#1e8449",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                        {savingEfectivo?"Guardando...":"✅ Confirmar efectivo"}
+                        {savingEfectivo?"Guardando...":<><CheckCircle size={12} strokeWidth={2.4}/> Confirmar efectivo</>}
                       </button>
                       <button disabled={savingEfectivo}
                         onClick={async()=>{setSavingEfectivo(true);try{await onRechazarEfectivo(o.id);}catch(e){console.warn(e);toast.error("No se pudo rechazar. Probá de nuevo.");}finally{setSavingEfectivo(false);}}}
                         style={{padding:"11px 14px",borderRadius:9,border:"1.5px solid #f1948a",background:"#fff",color:"#c0392b",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                        ❌ No confirmar
+                        <XCircle size={12} strokeWidth={2.4}/> No confirmar
                       </button>
                     </div>
                   </div>
                 ) : (
                   <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 10px",background:"#fef9e7",border:"1px solid #f0d080",borderRadius:8}}>
-                    <span style={{fontSize:18}}>💵</span>
+                    <Banknote size={17} strokeWidth={2.2}/>
                     <div>
                       <div style={{fontSize:12,fontWeight:700,color:"#b7770d"}}>Pago en efectivo registrado</div>
                       <div style={{fontSize:11,color:"#888"}}>Esperando confirmación del admin{o.pagoEfectivoFecha&&` · ${o.pagoEfectivoFecha}`}</div>
@@ -2915,9 +2926,9 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
               <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 10px",background:"#eafaf1",border:"1px solid #a9dfbf",borderRadius:8,flexWrap:"wrap"}}>
                 {pt==="comprobante_confirmado" && /\.(jpe?g|png|gif|webp)$/i.test(o.comprobanteUrl)
                   ? <img src={o.comprobanteUrl} alt="comprobante" style={{width:36,height:36,borderRadius:7,objectFit:"cover",border:"1.5px solid #a9dfbf",flexShrink:0}}/>
-                  : <span style={{fontSize:18}}>✅</span>}
+                  : <CheckCircle size={17} strokeWidth={2.2}/>}
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:12.5,fontWeight:800,color:"#1e8449"}}>Pagado {pt==="comprobante_confirmado"?"· 📎 Comprobante":"· 💵 Efectivo"}</div>
+                  <div style={{fontSize:12.5,fontWeight:800,color:"#1e8449",display:"flex",alignItems:"center",gap:4}}>Pagado · {pt==="comprobante_confirmado"?<><Paperclip size={11} strokeWidth={2.4}/>Comprobante</>:<><Banknote size={11} strokeWidth={2.4}/>Efectivo</>}</div>
                   <div style={{fontSize:11,color:"#888"}}>
                     {pt==="comprobante_confirmado"
                       ? (o.comprobanteFecha && `Confirmado · subido el ${o.comprobanteFecha}`)
@@ -2927,7 +2938,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                 {pt==="comprobante_confirmado" && o.comprobanteUrl && (
                   <a href={o.comprobanteUrl} target="_blank" rel="noopener noreferrer"
                     style={{padding:"5px 10px",borderRadius:6,border:"1px solid #a9dfbf",background:"#fff",color:"#1e8449",fontSize:11,fontWeight:700,textDecoration:"none",flexShrink:0}}>
-                    👁️ Ver
+                    <Eye size={11} strokeWidth={2.4}/> Ver
                   </a>
                 )}
                 {isAdmin && (
@@ -2951,10 +2962,10 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
             {next && !es && entregaBloqueada ? (
               <div style={{width:"100%"}}>
                 <button disabled style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"not-allowed",background:"#e8e8e8",color:"#aaa",fontWeight:700,fontSize:13}}>
-                  🔒 {SCFG[next].label} (bloqueado)
+                  <Lock size={12} strokeWidth={2.4}/> {SCFG[next].label} (bloqueado)
                 </button>
                 <div style={{fontSize:11.5,color:"#b7770d",marginTop:5}}>
-                  ⚠️ Esperando confirmación de pago para habilitar la entrega
+                  <AlertTriangle size={11} strokeWidth={2.4} style={{display:"inline",verticalAlign:"-2px"}}/> Esperando confirmación de pago para habilitar la entrega
                 </div>
                 {isAdmin && onGoToPagos && (
                   <button onClick={onGoToPagos} style={{marginTop:7,display:"flex",alignItems:"center",gap:5,background:"none",border:"none",color:"#1a5276",fontWeight:700,fontSize:12,cursor:"pointer",padding:0}}>
@@ -2965,20 +2976,20 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
             ) : (
               next&&!es&&<button onClick={()=>onStage(o.id,next)} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",background:SCFG[next].color,color:"#fff",fontWeight:700,fontSize:13}}>{SCFG[next].icon} Pasar a {SCFG[next].label}</button>
             )}
-            {idx>0&&o.stage!=="entregado"&&!es&&<button onClick={()=>onStage(o.id,STAGES[idx-1])} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",cursor:"pointer",background:"#fff",color:"#666",fontWeight:600,fontSize:13}}>← Retroceder</button>}
+            {idx>0&&o.stage!=="entregado"&&!es&&<button onClick={()=>onStage(o.id,STAGES[idx-1])} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",cursor:"pointer",background:"#fff",color:"#666",fontWeight:600,fontSize:13,display:"inline-flex",alignItems:"center",gap:5}}><ArrowLeftIcon size={12} strokeWidth={2.4}/> Retroceder</button>}
             <button onClick={()=>printDoc(o, o.stage==="reserva"?"reserva":"confirmado")} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #d6eaf8",cursor:"pointer",background:"#fff",color:"#1a5276",fontWeight:600,fontSize:13}}>
-              🖨️ {o.stage==="reserva"?(o.docNum||"Imprimir"):(o.compNum||"Imprimir")}
+              <Printer size={12} strokeWidth={2.4} style={{display:"inline",verticalAlign:"-2px"}}/> {o.stage==="reserva"?(o.docNum||"Imprimir"):(o.compNum||"Imprimir")}
             </button>
             <button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(buildWAOrder(o))}`, "_blank")}
               style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #d5f5e3",cursor:"pointer",background:"#25D366",color:"#fff",fontWeight:700,fontSize:13,display:"flex",alignItems:"center",gap:5}}>
-              <span style={{fontSize:15}}>💬</span> Enviar por WhatsApp
+              <MessageCircle size={14} strokeWidth={2.3}/> Enviar por WhatsApp
             </button>
             {/* Solicitar edición — solo vendedor, solo si no hay edición en curso */}
             {!isAdmin && !es && o.stage!=="entregado" && (
               !showReqForm
                 ? <button onClick={(e)=>{e.stopPropagation();setShowReqForm(true);}}
                     style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #aed6f1",background:"#fff",color:"#1a5276",fontWeight:600,fontSize:13,cursor:"pointer"}}>
-                    ✏️ Solicitar edición
+                    <Pencil size={12} strokeWidth={2.4}/> Solicitar edición
                   </button>
                 : <div style={{width:"100%",marginTop:8}} onClick={e=>e.stopPropagation()}>
                     <textarea value={reqReason} onChange={e=>setReqReason(e.target.value)}
@@ -2988,7 +2999,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                       <button onClick={async()=>{if(!reqReason.trim())return;setSaving(true);try{await onRequestEdit(o.id,reqReason);setShowReqForm(false);setReqReason("");}catch(e){console.warn(e);toast.error("No se pudo enviar la solicitud. Probá de nuevo.");}finally{setSaving(false);}}}
                         disabled={!reqReason.trim()||saving}
                         style={{padding:"6px 14px",borderRadius:7,border:"none",background:reqReason.trim()?"#1a5276":"#e5e5e5",color:reqReason.trim()?"#fff":"#aaa",fontWeight:700,fontSize:12,cursor:reqReason.trim()?"pointer":"not-allowed"}}>
-                        {saving?"Enviando...":"📤 Enviar solicitud"}
+                        {saving?"Enviando...":<><Send size={12} strokeWidth={2.4}/> Enviar solicitud</>}
                       </button>
                       <button onClick={()=>{setShowReqForm(false);setReqReason("");}}
                         style={{padding:"6px 12px",borderRadius:7,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:12,cursor:"pointer"}}>Cancelar</button>
