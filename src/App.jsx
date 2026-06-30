@@ -69,6 +69,7 @@ const Crown = (p) => <Ico {...p}><path d="M3 17h18l-1.5-8-4 3-2.5-6-2.5 6-4-3z"/
 const EyeOff = (p) => <Ico {...p}><path d="M2 12s3.5-7 10-7c2 0 3.7.6 5.1 1.4M22 12s-1.2 2.4-3.3 4.2M9.5 9.7a3 3 0 0 0 4.2 4.2"/><line x1="3" y1="3" x2="21" y2="21"/></Ico>;
 const Wrench = (p) => <Ico {...p}><path d="M14.7 6.3a4 4 0 1 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2z"/></Ico>;
 const Folder = (p) => <Ico {...p}><path d="M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></Ico>;
+const ImageIcon = (p) => <Ico {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></Ico>;
 const UserMinus = (p) => <Ico {...p}><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6"/><line x1="16" y1="10" x2="22" y2="10"/></Ico>;
 const ArrowLeftIcon = (p) => <Ico {...p}><line x1="20" y1="12" x2="4" y2="12"/><polyline points="11 5 4 12 11 19"/></Ico>;
 const ArrowRightIcon = (p) => <Ico {...p}><line x1="4" y1="12" x2="20" y2="12"/><polyline points="13 5 20 12 13 19"/></Ico>;
@@ -169,7 +170,7 @@ const SUPA_SERVICE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const supabase = createClient(SUPA_URL, SUPA_ANON);
 const supaAdmin = supabase;
 
-const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock,multiploCompra:r.multiplo_compra||1,barcode:r.barcode||"",costPriceAnterior:r.cost_price_anterior||0});
+const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock,multiploCompra:r.multiplo_compra||1,barcode:r.barcode||"",costPriceAnterior:r.cost_price_anterior||0,imageUrl:r.image_url||""});
 const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||"",isTest:r.is_test||false,isSandbox:r.is_sandbox||false,internalNote:r.internal_note||"",editStatus:r.edit_status||"",editReason:r.edit_reason||"",editItems:r.edit_items||null,editRejectReason:r.edit_reject_reason||"",comprobanteUrl:r.comprobante_url||"",comprobanteNombre:r.comprobante_nombre||"",comprobanteFecha:r.comprobante_fecha||"",pagoTipo:r.pago_tipo||"",pagoEfectivoFecha:r.pago_efectivo_fecha||""});
 const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,date:r.date,items:r.items||[],validity:r.validity||"",docNum:r.doc_num||"",convertida:r.convertida||false,ordenId:r.orden_id||"",extendida:r.extendida||false,extendReason:r.extend_reason||"",extendDate:r.extend_date||"",globalDisc:r.global_disc||null,subtotal:r.subtotal||0});
 
@@ -229,6 +230,19 @@ async function uploadComprobanteFile(orderId, file) {
   return { url: data.publicUrl, nombre: file.name };
 }
 
+// ─── FOTOS DE PRODUCTO — Supabase Storage ─────────────────────────────────────
+// Bucket: "productos" (público). Comprimidas mas chico que los comprobantes (800px)
+// porque son miniaturas para el selector, no documentos a leer en detalle.
+async function uploadProductImage(productId, file) {
+  const processed = await compressImage(file, 800, 0.8);
+  const ext = (processed.name.split(".").pop() || "jpg").toLowerCase();
+  const path = `${productId}-${Date.now()}.${ext}`;
+  const { error } = await supabase.storage.from("productos").upload(path, processed, { cacheControl: "3600", upsert: false });
+  if(error) throw error;
+  const { data } = supabase.storage.from("productos").getPublicUrl(path);
+  return data.publicUrl;
+}
+
 const db = {
   getUsers:     async () => { const {data,error} = await supabase.from("lm_users").select("*").order("name"); if(error) throw error; return (data||[]).map(u=>({...u,priceList:u.price_list||"default",vendedor:u.vendedor||"",canSeeAll:u.can_see_all!==false,phone:u.phone||"",cargo:u.cargo||"",avatar:u.avatar||"",barcodeEnabled:u.barcode_enabled||false})); },
   saveUser:     async (u) => {
@@ -271,8 +285,8 @@ const db = {
     }
     return all.map(mapProduct);
   },
-  upsertProduct: async (p) => { const {error} = await supaAdmin.from("lm_products").upsert({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0,multiplo_compra:p.multiploCompra||1,barcode:p.barcode||"",cost_price_anterior:p.costPriceAnterior||0}); if(error) throw error; },
-  upsertProducts: async (arr) => { const {error} = await supaAdmin.from("lm_products").upsert(arr.map(p=>({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0,multiplo_compra:p.multiploCompra||1,barcode:p.barcode||"",cost_price_anterior:p.costPriceAnterior||0}))); if(error) throw error; },
+  upsertProduct: async (p) => { const {error} = await supaAdmin.from("lm_products").upsert({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0,multiplo_compra:p.multiploCompra||1,barcode:p.barcode||"",cost_price_anterior:p.costPriceAnterior||0,image_url:p.imageUrl||""}); if(error) throw error; },
+  upsertProducts: async (arr) => { const {error} = await supaAdmin.from("lm_products").upsert(arr.map(p=>({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0,multiplo_compra:p.multiploCompra||1,barcode:p.barcode||"",cost_price_anterior:p.costPriceAnterior||0,image_url:p.imageUrl||""}))); if(error) throw error; },
   deleteProduct: async (id) => { const {error} = await supaAdmin.from("lm_products").delete().eq("id",id); if(error) throw error; },
 
   getOrders:    async () => { const {data,error} = await supabase.from("lm_orders").select("*").order("date",{ascending:false}); if(error) throw error; return (data||[]).map(mapOrder); },
@@ -3546,6 +3560,9 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
               const finalPrice=isDesc?Math.max(0,promo.data?.tipoValor==="%"?p.salePrice*(1-(promo.data?.valor||0)/100):p.salePrice-(promo.data?.valor||0)):p.salePrice;
               return (
               <div key={p.id} style={{background:"#fff",borderRadius:10,padding:"12px 14px",display:"flex",alignItems:"center",gap:10,boxShadow:"0 1px 4px #0001",border:ic?`2px solid ${RED}`:promo?"2px solid #f3d98a":"2px solid transparent"}}>
+                <div style={{width:46,height:46,borderRadius:8,background:p.imageUrl?"transparent":"#f4f6f9",overflow:"hidden",flexShrink:0,border:"1px solid #f0f0f0",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {p.imageUrl ? <img src={p.imageUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <ImageIcon size={18} color="#ddd" strokeWidth={1.6}/>}
+                </div>
                 <div style={{flex:1,minWidth:0}}>
                   {promo && <span style={{fontSize:10,fontWeight:800,borderRadius:6,padding:"1px 6px",marginBottom:3,display:"inline-block",background:promo.tipo==="3x2"?"#fef9e7":"#fdecea",color:promo.tipo==="3x2"?"#b7770d":"#c0392b",border:promo.tipo==="3x2"?"1px solid #f3d98a":"1px solid #f5b7b1"}}><span style={{display:"inline-flex",alignItems:"center",gap:3}}>{promo.tipo==="3x2"?<Tag size={10} strokeWidth={2.6}/>:<TrendDown size={10} strokeWidth={2.6}/>} {promo.tipo==="3x2"?`${promo.data.comprar}×${promo.data.pagar}`:`-${promo.data.valor}${promo.data.tipoValor==="%"?"%":""}`}</span></span>}
                   <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",lineHeight:1.3,marginBottom:2}}>{p.name}</div>
@@ -3589,6 +3606,9 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
               const isDesc=promo?.tipo==="descuento";
               const finalPrice=isDesc?Math.max(0,promo.data?.tipoValor==="%"?p.salePrice*(1-(promo.data?.valor||0)/100):p.salePrice-(promo.data?.valor||0)):p.salePrice;
               return <div key={p.id} style={{background:"#fff",borderRadius:10,padding:14,border:ic?`2px solid ${RED}`:promo?"2px solid #f3d98a":"2px solid transparent",boxShadow:"0 1px 4px #0001"}}>
+              <div style={{width:"100%",height:110,borderRadius:8,background:p.imageUrl?"transparent":"#f4f6f9",overflow:"hidden",marginBottom:9,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {p.imageUrl ? <img src={p.imageUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <ImageIcon size={26} color="#ddd" strokeWidth={1.5}/>}
+              </div>
               {promo && <div style={{marginBottom:5}}><span style={{fontSize:10,fontWeight:800,borderRadius:6,padding:"2px 7px",display:"inline-block",background:promo.tipo==="3x2"?"#fef9e7":"#fdecea",color:promo.tipo==="3x2"?"#b7770d":"#c0392b",border:promo.tipo==="3x2"?"1px solid #f3d98a":"1px solid #f5b7b1"}}><span style={{display:"inline-flex",alignItems:"center",gap:3}}>{promo.tipo==="3x2"?<Tag size={10} strokeWidth={2.6}/>:<TrendDown size={10} strokeWidth={2.6}/>} {promo.tipo==="3x2"?`${promo.data.comprar}×${promo.data.pagar}`:`-${promo.data.valor}${promo.data.tipoValor==="%"?"%":""}`}</span></span></div>}
               <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",marginBottom:3,lineHeight:1.3}}>{p.name}</div>
               <div style={{fontSize:12,color:"#666",marginBottom:7,fontWeight:500}}>{p.id} · {p.category}</div>
@@ -4678,7 +4698,26 @@ function EditModal({p,onSave,onClose}) {
   const [cost,setCost]=useState(p.costPrice);
   const [sale,setSale]=useState(p.salePrice);
   const [stock,setStock]=useState(p.stock);
+  const [imageUrl,setImageUrl]=useState(p.imageUrl||"");
+  const [uploadingImg,setUploadingImg]=useState(false);
   const m=cost>0?((sale-cost)/cost*100).toFixed(1):"-";
+
+  const handleImage = async (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    setUploadingImg(true);
+    try {
+      const url = await uploadProductImage(p.id, file);
+      setImageUrl(url);
+    } catch(err) {
+      console.warn(err);
+      toast.error("No se pudo subir la foto. Probá de nuevo.");
+    } finally {
+      setUploadingImg(false);
+      e.target.value = "";
+    }
+  };
+
   return (
     <div style={{position:"fixed",inset:0,background:"#0007",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}}>
       <div style={{background:"#fff",borderRadius:16,padding:24,width:"100%",maxWidth:440,boxShadow:"0 20px 60px #0003"}}>
@@ -4686,6 +4725,23 @@ function EditModal({p,onSave,onClose}) {
           <div style={{fontWeight:800,fontSize:14,color:"#1a1a1a",flex:1,marginRight:8,lineHeight:1.3}}>{p.name}</div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:22,color:"#aaa"}}>x</button>
         </div>
+
+        <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:18}}>
+          <div style={{width:64,height:64,borderRadius:12,background:imageUrl?"transparent":"#f4f6f9",overflow:"hidden",flexShrink:0,border:"1.5px solid #f0f0f0",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {uploadingImg
+              ? <RefreshCw size={20} color="#aaa" strokeWidth={2}/>
+              : imageUrl ? <img src={imageUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <ImageIcon size={24} color="#ccc" strokeWidth={1.6}/>}
+          </div>
+          <div>
+            <label style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",fontSize:11.5,fontWeight:600,cursor:uploadingImg?"default":"pointer",color:"#555",opacity:uploadingImg?0.6:1}}>
+              <Camera size={12} strokeWidth={2.3}/> {imageUrl?"Cambiar foto":"Subir foto"}
+              <input type="file" accept="image/*" onChange={handleImage} disabled={uploadingImg} style={{display:"none"}}/>
+            </label>
+            {imageUrl&&!uploadingImg&&<button onClick={()=>setImageUrl("")} style={{marginLeft:6,padding:"7px 10px",borderRadius:8,border:"none",background:"#fdecea",color:RED,fontSize:11,cursor:"pointer",fontWeight:600,display:"inline-flex",alignItems:"center",gap:4}}><XIcon size={9} strokeWidth={2.6}/>Quitar</button>}
+            <div style={{fontSize:10,color:"#aaa",marginTop:5}}>Opcional. Se ve al elegir el producto.</div>
+          </div>
+        </div>
+
         {[["Precio Costo ($)",cost,setCost],["Precio Venta ($)",sale,setSale],["Stock",stock,setStock]].map(([lbl,val,set])=>(
           <div key={lbl} style={{marginBottom:12}}>
             <label style={{fontSize:12,fontWeight:600,color:"#666",display:"block",marginBottom:4}}>{lbl}</label>
@@ -4697,7 +4753,7 @@ function EditModal({p,onSave,onClose}) {
         </div>
         <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
           <button onClick={onClose} style={{padding:"8px 14px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontWeight:600,color:"#666"}}>Cancelar</button>
-          <button onClick={()=>onSave({...p,costPrice:cost,salePrice:sale,stock})} style={{padding:"8px 14px",borderRadius:8,border:"none",background:RED,color:"#fff",cursor:"pointer",fontWeight:700}}>Guardar</button>
+          <button onClick={()=>onSave({...p,costPrice:cost,salePrice:sale,stock,imageUrl})} style={{padding:"8px 14px",borderRadius:8,border:"none",background:RED,color:"#fff",cursor:"pointer",fontWeight:700}}>Guardar</button>
         </div>
       </div>
     </div>
