@@ -68,6 +68,7 @@ const Lightbulb = (p) => <Ico {...p}><path d="M9 18h6"/><path d="M10 21h4"/><pat
 const Crown = (p) => <Ico {...p}><path d="M3 17h18l-1.5-8-4 3-2.5-6-2.5 6-4-3z"/><path d="M5 20h14"/></Ico>;
 const EyeOff = (p) => <Ico {...p}><path d="M2 12s3.5-7 10-7c2 0 3.7.6 5.1 1.4M22 12s-1.2 2.4-3.3 4.2M9.5 9.7a3 3 0 0 0 4.2 4.2"/><line x1="3" y1="3" x2="21" y2="21"/></Ico>;
 const Wrench = (p) => <Ico {...p}><path d="M14.7 6.3a4 4 0 1 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2z"/></Ico>;
+const Flame = (p) => <Ico {...p}><path d="M12 2c1 4-3 5-3 9a3 3 0 0 0 6 0c0-1.5-1-2-1-3.5 1.5 1 3 3 3 6a5 5 0 0 1-10 0c0-5 5-6 5-11.5z"/></Ico>;
 const Folder = (p) => <Ico {...p}><path d="M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></Ico>;
 const ImageIcon = (p) => <Ico {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></Ico>;
 const ZoomIn = (p) => <Ico {...p}><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></Ico>;
@@ -2175,9 +2176,9 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
           onQuickReviewPO={quickReviewPO} onViewPO={(id)=>{setDeepLinkPOId(id);setTab("solicitud");}}
           onGoToPagos={()=>{setDeepLinkAdminSection("pagos");setTab("admin");}}
           currentUser={currentUser} isMobile={isMobile}/>}
-        {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} promos={promos}/>}
+        {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} promos={promos} orders={orders}/>}
         {tab==="clientes"   && <ClientesPanel clients={clients} onSave={saveClient} onDelete={deleteClient} onRequestDelete={requestDeleteClient} onRejectDelete={rejectDeleteClient} currentUser={currentUser} isMobile={isMobile} orders={orders}/>}
-        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient}/>}
+        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} orders={orders}/>}
         {tab==="precios"    && <Precios products={pricedProducts} canScan={currentUser.role==="admin"||isTestOrder(currentUser.vendedor||currentUser.name)||currentUser.barcodeEnabled}/>}
         {tab==="stock"      && <>
               {isTestUser && (
@@ -3533,22 +3534,53 @@ function Precios({products,canScan}) {
 }
 
 // ─── NUEVO PEDIDO ─────────────────────────────────────────────────────────────
-function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=false}) {
+function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=false,orders=[],sortByPopularity=false}) {
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("todos");
   const [catOpen,setCatOpen]=useState(false);
   const [soloStock,setSoloStock]=useState(false);
   const [lightboxImg,setLightboxImg]=useState(null);
+  const [page,setPage]=useState(0);
+  const PAGE_SIZE=60;
   const CATS=useMemo(()=>["todos",...new Set(products.map(p=>p.category))].sort(),[products]);
-  const shown=useMemo(()=>{
+
+  // Cuántas unidades se vendieron de cada producto en total (historial completo de pedidos).
+  // Solo se calcula si sortByPopularity está activo (Nuevo Pedido / Cotizaciones), no en
+  // Solicitud de Compra, donde lo que importa es otra cosa (qué le comprás vos al proveedor).
+  const salesCount = useMemo(()=>{
+    if(!sortByPopularity) return null;
+    const counts = {};
+    for(const o of orders) {
+      for(const it of (o.items||[])) {
+        counts[it.pid] = (counts[it.pid]||0) + (it.qty||0);
+      }
+    }
+    return counts;
+  },[orders,sortByPopularity]);
+
+  const filtered=useMemo(()=>{
     const q=search.toLowerCase();
-    return products.filter(p=>{
+    let arr = products.filter(p=>{
       if(cat!=="todos"&&p.category!==cat)return false;
       if(soloStock&&p.stock<=0)return false;
       if(q)return norm(p.name).includes(norm(q))||normSKU(p.id).includes(normSKU(q));
       return true;
-    }).slice(0,80);
-  },[products,search,cat,soloStock]);
+    });
+    // Sin búsqueda activa: ordenar por más vendidos primero (si está habilitado),
+    // así lo que más se pide aparece arriba en vez de un orden arbitrario de carga.
+    if(salesCount && !q) {
+      arr = [...arr].sort((a,b)=>(salesCount[b.id]||0)-(salesCount[a.id]||0));
+    }
+    return arr;
+  },[products,search,cat,soloStock,salesCount]);
+
+  // Volver a la primera página cada vez que cambia el filtro (sino podrías quedar
+  // en una pagina 5 que ya no existe para el nuevo resultado)
+  useEffect(()=>{ setPage(0); },[search,cat,soloStock]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length/PAGE_SIZE));
+  const shown = useMemo(()=>filtered.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE),[filtered,page]);
+  const showingPopularidad = !!salesCount && !search.trim();
 
   const combos = useMemo(()=>getVigentCombos(promos),[promos]);
   const shownCombos = search.trim() ? combos.filter(c=>norm(c.nombre).includes(norm(search))) : combos;
@@ -3617,7 +3649,10 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
             {CATS.map(c=><button key={c} onClick={()=>{setCat(c);setCatOpen(false);}} style={{padding:"4px 11px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:cat===c?RED:"#e5e5e5",background:cat===c?"#fdecea":"#fff",color:cat===c?RED:"#666"}}>{c==="todos"?"Todos":c}</button>)}
           </div>)}
         </div>
-        {search&&<div style={{fontSize:11,color:"#aaa",marginTop:6}}>{shown.length} resultados</div>}
+        <div style={{fontSize:11,color:"#aaa",marginTop:6,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+          <span>{filtered.length} resultado{filtered.length!==1?"s":""}</span>
+          {showingPopularidad && <span style={{display:"inline-flex",alignItems:"center",gap:3,background:"#fef3e8",color:"#d35400",borderRadius:20,padding:"1px 8px",fontWeight:700,fontSize:10}}><Flame size={9} strokeWidth={2.6}/>Ordenado por más vendidos</span>}
+        </div>
         {/* Filtro solo con stock */}
         <button onClick={()=>setSoloStock(s=>!s)}
           style={{marginTop:8,padding:"7px 14px",borderRadius:8,border:"1.5px solid",cursor:"pointer",fontSize:12,fontWeight:700,
@@ -3727,6 +3762,19 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
             </div>;})}
           </div>
       }
+      {totalPages>1 && (
+        <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:10,marginTop:12,marginBottom:4}}>
+          <button onClick={()=>setPage(p=>Math.max(0,p-1))} disabled={page===0}
+            style={{padding:"6px 12px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:page===0?"not-allowed":"pointer",color:page===0?"#ccc":"#555",fontSize:12,fontWeight:600,display:"inline-flex",alignItems:"center",gap:5}}>
+            <ArrowLeftIcon size={11} strokeWidth={2.4}/> Anterior
+          </button>
+          <span style={{fontSize:12,color:"#888"}}>Página {page+1} de {totalPages}</span>
+          <button onClick={()=>setPage(p=>Math.min(totalPages-1,p+1))} disabled={page>=totalPages-1}
+            style={{padding:"6px 12px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:page>=totalPages-1?"not-allowed":"pointer",color:page>=totalPages-1?"#ccc":"#555",fontSize:12,fontWeight:600,display:"inline-flex",alignItems:"center",gap:5}}>
+            Siguiente <ArrowRightIcon size={11} strokeWidth={2.4}/>
+          </button>
+        </div>
+      )}
       {lightboxImg && <ImageLightbox src={lightboxImg} onClose={()=>setLightboxImg(null)}/>}
     </div>
   );
@@ -3766,7 +3814,7 @@ function CartSummaryLines({cart}) {
   );
 }
 
-function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSaveClient,promos}) {
+function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSaveClient,promos,orders}) {
   const [selectedClient, setSelectedClient] = useState(null);
   const [notes,setNotes]=useState("");
   const [vendedor,setVendedor]=useState(currentUser.role==="vendedor"?(currentUser.vendedor||currentUser.name):"");
@@ -3832,7 +3880,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
 
         {mStep===2 && (
           <div style={{flex:1,overflow:"auto",paddingBottom:cart.length>0?72:0}}>
-            <ProductSelector products={products} cart={cart} setCart={setCart} isMobile={true} promos={promos}/>
+            <ProductSelector products={products} cart={cart} setCart={setCart} isMobile={true} promos={promos} orders={orders} sortByPopularity={true}/>
           </div>
         )}
         {mStep===2 && cart.length>0&&(
@@ -3869,7 +3917,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
     <div style={{display:"grid",gridTemplateColumns:"1fr 330px",gap:18,alignItems:"start"}}>
       <div>
         <div style={{fontWeight:800,fontSize:15,marginBottom:12,display:"flex",alignItems:"center",gap:7}}><ShoppingCart size={15} strokeWidth={2.3}/>Nuevo Pedido — Seleccioná productos</div>
-        <ProductSelector products={products} cart={cart} setCart={setCart} promos={promos}/>
+        <ProductSelector products={products} cart={cart} setCart={setCart} promos={promos} orders={orders} sortByPopularity={true}/>
       </div>
       <div style={{position:"sticky",top:16}}>
         <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 2px 12px #0002"}}>
@@ -3917,7 +3965,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
   );
 }
 
-function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,onTabChange,currentUser,isMobile,clients,onSaveClient}) {
+function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,onTabChange,currentUser,isMobile,clients,onSaveClient,orders}) {
   const [view,setView]=useState("lista");
   const [expanded,setExpanded]=useState(null);
   const getP=id=>products.find(p=>p.id===id);
@@ -3927,7 +3975,7 @@ function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,on
         <button onClick={()=>setView("lista")} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="lista"?`linear-gradient(135deg,${REDD},${RED})`:"transparent",color:view==="lista"?"#fff":"#555",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}><FileText size={13} strokeWidth={2.3}/>Lista de Cotizaciones ({quotes.filter(q=>!q.convertida).length})</button>
         <button onClick={()=>setView("nueva")} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="nueva"?`linear-gradient(135deg,${REDD},${RED})`:"transparent",color:view==="nueva"?"#fff":"#555",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}><Plus size={13} strokeWidth={2.4}/>Nueva Cotización</button>
       </div>
-      {view==="nueva" && <NuevaCotizacion products={products} vendors={vendors} onAdd={async(q)=>{await onAdd(q);setView("lista");}} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={onSaveClient}/>}
+      {view==="nueva" && <NuevaCotizacion products={products} vendors={vendors} onAdd={async(q)=>{await onAdd(q);setView("lista");}} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={onSaveClient} orders={orders}/>}
       {view==="lista" && (quotes.length===0
         ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{display:"flex",justifyContent:"center"}}><FileText size={42} color="#ddd" strokeWidth={1.7}/></div><div style={{marginTop:8}}>No hay cotizaciones aún</div></div>
         : quotes.map(q=><QuoteCard key={q.id} q={q} exp={expanded===q.id} toggle={()=>setExpanded(expanded===q.id?null:q.id)} getP={getP} onDel={onDel} onConvert={async(qt)=>{await onConvert(qt);onTabChange("central");}} onExtend={onExtend}/>)
@@ -4072,7 +4120,7 @@ function QuoteDelBtn({onConfirm}) {
   return <button onClick={()=>setC(true)} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>🗑 Eliminar</button>;
 }
 
-function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,onSaveClient}) {
+function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,onSaveClient,orders}) {
   const PURPLE="#6c3483"; const PURPLEG="linear-gradient(135deg,#6c3483,#9b59b6)";
   const [selectedClient,setSelectedClient]=useState(null);
   const [notes,setNotes]=useState("");
@@ -4147,7 +4195,7 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,on
       {/* Paso 2 — Productos */}
       {mStep===2 && (
         <div style={{flex:1,overflow:"auto",paddingBottom:cart.length>0?72:0}}>
-          <ProductSelector products={products} cart={cart} setCart={setCart} isMobile={true}/>
+          <ProductSelector products={products} cart={cart} setCart={setCart} isMobile={true} orders={orders} sortByPopularity={true}/>
         </div>
       )}
       {mStep===2 && cart.length>0 && (
@@ -4209,7 +4257,7 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,on
     <div style={{display:"grid",gridTemplateColumns:"1fr 330px",gap:18,alignItems:"start"}}>
       <div>
         <div style={{fontWeight:800,fontSize:15,marginBottom:12,display:"flex",alignItems:"center",gap:7}}><FileText size={15} strokeWidth={2.3}/>Nueva Cotización - Seleccioná productos</div>
-        <ProductSelector products={products} cart={cart} setCart={setCart}/>
+        <ProductSelector products={products} cart={cart} setCart={setCart} orders={orders} sortByPopularity={true}/>
       </div>
       <div style={{position:"sticky",top:16}}>
         <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 2px 12px #0002",border:"2px solid #e8daef"}}>
