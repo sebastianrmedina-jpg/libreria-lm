@@ -957,7 +957,7 @@ function NotifPanel({notifs,setNotifs,currentUser,users,onClose,onMarkAllRead,pu
   const pendingOrders = orders.filter(o=>o.stage!=="entregado");
   return (
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:998}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{position:"fixed",top:70,right:16,width:380,maxHeight:"80vh",background:"#fff",borderRadius:16,boxShadow:"0 12px 40px #0003",border:"1px solid #f0f0f0",display:"flex",flexDirection:"column",zIndex:999,overflow:"hidden"}}>
+      <div onClick={e=>e.stopPropagation()} style={{position:"fixed",top:70,left:12,right:12,maxWidth:380,marginLeft:"auto",maxHeight:"80vh",background:"#fff",borderRadius:16,boxShadow:"0 12px 40px #0003",border:"1px solid #f0f0f0",display:"flex",flexDirection:"column",zIndex:999,overflow:"hidden"}}>
         <div style={{padding:"14px 18px",borderBottom:"1px solid #f5f5f5",display:"flex",alignItems:"center",justifyContent:"space-between",background:`linear-gradient(135deg,${REDD},${RED})`,borderRadius:"16px 16px 0 0"}}>
           <div style={{color:"#fff",fontWeight:800,fontSize:15,display:"flex",alignItems:"center",gap:7}}>
             <Bell size={15} strokeWidth={2.2}/>Notificaciones {unread.length>0&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:10,fontSize:11,padding:"1px 6px",marginLeft:0,fontWeight:800}}>{unread.length}</span>}
