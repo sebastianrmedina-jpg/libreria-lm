@@ -55,7 +55,7 @@ const Send = (p) => <Ico {...p}><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-
 const Camera = (p) => <Ico {...p}><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="14" r="3.5"/></Ico>;
 const Trash = (p) => <Ico {...p}><polyline points="4 7 20 7"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/></Ico>;
 const LogOut = (p) => <Ico {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></Ico>;
-const Key = (p) => <Ico {...p}><circle cx="8" cy="15" r="4"/><path d="M10.5 12.5L20 3"/><path d="M16 7l2.5 2.5"/><path d="M13 4l2.5 2.5"/></Ico>;
+const Key = (p) => <Ico {...p}><circle cx="7" cy="12" r="4"/><line x1="11" y1="12" x2="21" y2="12"/><line x1="21" y1="12" x2="21" y2="16"/><line x1="17" y1="12" x2="17" y2="15"/></Ico>;
 const Menu = (p) => <Ico {...p}><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></Ico>;
 const Scale = (p) => <Ico {...p}><path d="M12 3v18"/><path d="M5 7h14"/><path d="M5 7l-3 7a3.5 3.5 0 0 0 7 0z"/><path d="M19 7l-3 7a3.5 3.5 0 0 0 7 0z"/></Ico>;
 const Phone = (p) => <Ico {...p}><path d="M5 4h3l1.5 4.5L7 10.5a11 11 0 0 0 6.5 6.5l1.5-2.5L19.5 16v3a1.5 1.5 0 0 1-1.6 1.5C10.5 20 4 13.5 3.5 6.1A1.5 1.5 0 0 1 5 4z"/></Ico>;
@@ -3389,10 +3389,13 @@ function Precios({products,canScan}) {
         <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
           {canScan && <button onClick={()=>setShowScanner(true)}
             style={{padding:"8px 14px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#1a5276,#2980b9)",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
-            📷 Escanear
+            <Camera size={13} strokeWidth={2.3}/> Escanear
           </button>}
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar producto o código..."
-            style={{flex:1,minWidth:160,padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none"}}/>
+          <div style={{position:"relative",flex:1,minWidth:160}}>
+            <Search size={13} color="#aaa" strokeWidth={2.3} style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)"}}/>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar producto o código..."
+              style={{width:"100%",padding:"8px 12px 8px 32px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+          </div>
           <div style={{display:"flex",gap:6}}>
             {[{v:"name",l:"A-Z"},{v:"price",l:"Precio"}].map(opt=>(
               <button key={opt.v} onClick={()=>setSortBy(opt.v)} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid",cursor:"pointer",fontSize:12,fontWeight:600,borderColor:sortBy===opt.v?RED:"#e5e5e5",background:sortBy===opt.v?"#fdecea":"#fff",color:sortBy===opt.v?RED:"#666"}}>{opt.l}</button>
@@ -3402,7 +3405,7 @@ function Precios({products,canScan}) {
         </div>
       </div>
       {shown.length===0
-        ? <div style={{textAlign:"center",padding:60,color:"#aaa",background:"#fff",borderRadius:12}}><div style={{fontSize:48,marginBottom:8}}>🔍</div><div>No se encontraron productos</div></div>
+        ? <div style={{textAlign:"center",padding:60,color:"#aaa",background:"#fff",borderRadius:12}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><Search size={40} color="#ddd" strokeWidth={1.7}/></div><div>No se encontraron productos</div></div>
         : <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 4px #0001",overflow:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
               <thead><tr style={{background:"#f9f9f9",position:"sticky",top:0}}>{["Código","Descripción","Categoría","Precio"].map(h=>(<th key={h} style={{padding:"11px 14px",textAlign:"left",fontWeight:700,color:"#888",fontSize:11,textTransform:"uppercase",letterSpacing:.5,whiteSpace:"nowrap"}}>{h}</th>))}</tr></thead>
@@ -5469,12 +5472,12 @@ function Compras({products,onStock,isMobile,canScan}) {
     if(p) {
       if(!items.find(i=>i.pid===p.id)) {
         setItems(x=>[...x,{pid:p.id,name:p.name,qty:1,cost:p.costPrice}]);
-        setScanMsg(`✅ ${p.name} agregado`);
+        setScanMsg({tipo:"ok", texto:`${p.name} agregado`});
       } else {
-        setScanMsg(`ℹ️ ${p.name} ya está en la lista`);
+        setScanMsg({tipo:"info", texto:`${p.name} ya está en la lista`});
       }
     } else {
-      setScanMsg(`⚠️ Código "${code}" no encontrado en el catálogo`);
+      setScanMsg({tipo:"warn", texto:`Código "${code}" no encontrado en el catálogo`});
     }
     setTimeout(()=>setScanMsg(""),3000);
   }; // mobile: 1=buscar, 2=detalle
@@ -5537,43 +5540,47 @@ function Compras({products,onStock,isMobile,canScan}) {
       </div>
 
       {/* Scan message */}
-      {scanMsg && <div style={{background:scanMsg.startsWith("✅")?"#eafaf1":scanMsg.startsWith("ℹ️")?"#eaf4fc":"#fef9e7",border:"1.5px solid",borderColor:scanMsg.startsWith("✅")?"#a9dfbf":scanMsg.startsWith("ℹ️")?"#aed6f1":"#f0d080",borderRadius:10,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:scanMsg.startsWith("✅")?"#1e8449":scanMsg.startsWith("ℹ️")?"#1a5276":"#b7770d"}}>
-        {scanMsg}
+      {scanMsg && <div style={{display:"flex",alignItems:"center",gap:7,background:scanMsg.tipo==="ok"?"#eafaf1":scanMsg.tipo==="info"?"#eaf4fc":"#fef9e7",border:"1.5px solid",borderColor:scanMsg.tipo==="ok"?"#a9dfbf":scanMsg.tipo==="info"?"#aed6f1":"#f0d080",borderRadius:10,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:scanMsg.tipo==="ok"?"#1e8449":scanMsg.tipo==="info"?"#1a5276":"#b7770d"}}>
+        {scanMsg.tipo==="ok"?<CheckCircle size={14} strokeWidth={2.4}/>:scanMsg.tipo==="info"?<Info size={14} strokeWidth={2.2}/>:<AlertTriangle size={14} strokeWidth={2.3}/>}
+        {scanMsg.texto}
       </div>}
 
       {/* Paso 1 — Buscar */}
       {mStep===1 && <>
         <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px #0001"}}>
-          <div style={{fontWeight:800,fontSize:14,marginBottom:10,color:"#1a1a1a"}}>📥 Buscá los productos recibidos</div>
+          <div style={{fontWeight:800,fontSize:14,marginBottom:10,color:"#1a1a1a",display:"flex",alignItems:"center",gap:6}}><Package size={14} strokeWidth={2.3}/>Buscá los productos recibidos</div>
 
           {/* Scanner button — only for admin/enabled users */}
           {canScan && <button onClick={()=>setShowScanner(true)}
             style={{width:"100%",padding:"12px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#1a5276,#2980b9)",color:"#fff",fontWeight:800,fontSize:14,cursor:"pointer",marginBottom:10,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-            📷 Escanear código de barras
+            <Camera size={15} strokeWidth={2.3}/> Escanear código de barras
           </button>}
 
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 O buscá por nombre o código SKU..."
-            style={{width:"100%",padding:"10px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:14,outline:"none",boxSizing:"border-box"}}/>
+          <div style={{position:"relative"}}>
+            <Search size={14} color="#aaa" strokeWidth={2.3} style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)"}}/>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="O buscá por nombre o código SKU..."
+              style={{width:"100%",padding:"10px 12px 10px 32px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:14,outline:"none",boxSizing:"border-box"}}/>
+          </div>
           {search&&<div style={{fontSize:11,color:"#aaa",marginTop:6}}>{found.length} resultados</div>}
 
           {/* Producto manual */}
           <div style={{marginTop:12,borderTop:"1px solid #f0f0f0",paddingTop:12}}>
             <button onClick={()=>{setShowManual(s=>!s);setManualError("");}}
-              style={{width:"100%",padding:"9px",borderRadius:8,border:"1.5px solid #e67e22",background:showManual?"#fef9e7":"#fff",color:"#e67e22",fontWeight:700,fontSize:13,cursor:"pointer"}}>
-              {showManual?"✕ Cancelar":"➕ Producto no está en el catálogo"}
+              style={{width:"100%",padding:"9px",borderRadius:8,border:"1.5px solid #e67e22",background:showManual?"#fef9e7":"#fff",color:"#e67e22",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+              {showManual?<><XIcon size={12} strokeWidth={2.6}/> Cancelar</>:<><Plus size={13} strokeWidth={2.4}/> Producto no está en el catálogo</>}
             </button>
             {showManual && (
               <div style={{background:"#fef9e7",border:"1.5px solid #e67e22",borderRadius:10,padding:14,marginTop:10}}>
-                <div style={{fontWeight:700,fontSize:13,color:"#e67e22",marginBottom:6}}>⚠️ Producto nuevo (excepcional)</div>
+                <div style={{fontWeight:700,fontSize:13,color:"#e67e22",marginBottom:6,display:"flex",alignItems:"center",gap:5}}><AlertTriangle size={13} strokeWidth={2.3}/>Producto nuevo (excepcional)</div>
                 <Field label="SKU *"><input value={manualForm.sku} onChange={e=>setManualForm(f=>({...f,sku:e.target.value.toUpperCase()}))} placeholder="Ej: PROD-001" style={inputStyle}/></Field>
                 <Field label="Detalle *"><input value={manualForm.name} onChange={e=>setManualForm(f=>({...f,name:e.target.value}))} placeholder="Nombre completo del producto" style={inputStyle}/></Field>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                   <Field label="Cantidad"><input type="number" min={1} value={manualForm.qty} onChange={e=>setManualForm(f=>({...f,qty:e.target.value}))} style={inputStyle}/></Field>
                   <Field label="Costo ($)"><input type="number" min={0} value={manualForm.cost} onChange={e=>setManualForm(f=>({...f,cost:e.target.value}))} style={inputStyle}/></Field>
                 </div>
-                {manualError && <div style={{color:"#c0392b",fontSize:12,margin:"6px 0",fontWeight:600}}>⚠️ {manualError}</div>}
-                <button onClick={addManual} style={{width:"100%",padding:"10px",borderRadius:8,border:"none",background:"#e67e22",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",marginTop:4}}>
-                  ➕ Agregar a la compra
+                {manualError && <div style={{display:"flex",alignItems:"center",gap:5,color:"#c0392b",fontSize:12,margin:"6px 0",fontWeight:600}}><AlertTriangle size={11} strokeWidth={2.4}/>{manualError}</div>}
+                <button onClick={addManual} style={{width:"100%",padding:"10px",borderRadius:8,border:"none",background:"#e67e22",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",marginTop:4,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                  <Plus size={13} strokeWidth={2.4}/> Agregar a la compra
                 </button>
               </div>
             )}
@@ -5593,8 +5600,8 @@ function Compras({products,onStock,isMobile,canScan}) {
                 <button onClick={()=>addI(p)} disabled={!!inL}
                   style={{padding:"8px 14px",borderRadius:8,border:"none",fontSize:13,fontWeight:700,
                     background:inL?"#d5f5e3":"#1e8449",color:inL?"#1a5276":"#fff",
-                    cursor:inL?"not-allowed":"pointer",flexShrink:0,whiteSpace:"nowrap"}}>
-                  {inL?"✓ Agregado":"+ Agregar"}
+                    cursor:inL?"not-allowed":"pointer",flexShrink:0,whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:5}}>
+                  {inL?<><CheckCircle size={12} strokeWidth={2.5}/> Agregado</>:"+ Agregar"}
                 </button>
               </div>
             );
@@ -5610,8 +5617,8 @@ function Compras({products,onStock,isMobile,canScan}) {
               <div style={{fontWeight:800,fontSize:15}}>{fARS(totalCost)}</div>
               <div style={{fontSize:11,opacity:.85}}>{items.length} producto{items.length!==1?"s":""} agregado{items.length!==1?"s":""}</div>
             </div>
-            <button onClick={()=>setMStep(2)} style={{padding:"10px 20px",borderRadius:10,border:"none",background:"#fff",color:"#1e8449",fontWeight:800,fontSize:14,cursor:"pointer"}}>
-              Ver detalle →
+            <button onClick={()=>setMStep(2)} style={{padding:"10px 20px",borderRadius:10,border:"none",background:"#fff",color:"#1e8449",fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+              Ver detalle <ArrowRightIcon size={13} strokeWidth={2.4}/>
             </button>
           </div>
         )}
@@ -5620,10 +5627,10 @@ function Compras({products,onStock,isMobile,canScan}) {
       {/* Paso 2 — Detalle y confirmar */}
       {mStep===2 && (
         <div style={{paddingBottom:80}}>
-          <div style={{fontWeight:800,fontSize:14,marginBottom:12,color:"#1a1a1a"}}>🧾 Detalle de Compra</div>
+          <div style={{fontWeight:800,fontSize:14,marginBottom:12,color:"#1a1a1a",display:"flex",alignItems:"center",gap:6}}><FileText size={14} strokeWidth={2.3}/>Detalle de Compra</div>
           {items.map(it=>(
             <div key={it.pid} style={{background:"#fff",borderRadius:12,padding:14,marginBottom:10,boxShadow:"0 1px 4px #0001",border:it.esNuevo?"1.5px solid #e67e22":"none"}}>
-              {it.esNuevo && <div style={{fontSize:10,color:"#e67e22",fontWeight:700,marginBottom:4}}>⚠️ NUEVO en catálogo</div>}
+              {it.esNuevo && <div style={{fontSize:10,color:"#e67e22",fontWeight:700,marginBottom:4,display:"flex",alignItems:"center",gap:4}}><AlertTriangle size={9} strokeWidth={2.6}/>NUEVO en catálogo</div>}
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
                 <div style={{flex:1,marginRight:8}}>
                   <div style={{fontWeight:700,fontSize:13,lineHeight:1.3}}>{it.name}</div>
@@ -5654,8 +5661,8 @@ function Compras({products,onStock,isMobile,canScan}) {
             </div>
           ))}
 
-          <button onClick={()=>setMStep(1)} style={{width:"100%",padding:"10px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer",marginBottom:8}}>
-            ← Seguir agregando productos
+          <button onClick={()=>setMStep(1)} style={{width:"100%",padding:"10px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+            <ArrowLeftIcon size={11} strokeWidth={2.4}/> Seguir agregando productos
           </button>
 
           {/* Barra flotante confirmar */}
@@ -5679,25 +5686,28 @@ function Compras({products,onStock,isMobile,canScan}) {
       {showScanner && <BarcodeScanner onDetected={handleBarcode} onClose={()=>setShowScanner(false)}/>}
       <div>
         <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px #0001"}}>
-          <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>📥 Ingresar al Stock</div>
-          {scanMsg && <div style={{background:scanMsg.startsWith("✅")?"#eafaf1":"#fef9e7",borderRadius:8,padding:"8px 12px",fontSize:13,fontWeight:600,marginBottom:10,color:scanMsg.startsWith("✅")?"#1e8449":"#b7770d"}}>{scanMsg}</div>}
+          <div style={{fontWeight:800,fontSize:15,marginBottom:12,display:"flex",alignItems:"center",gap:7}}><Package size={15} strokeWidth={2.3}/>Ingresar al Stock</div>
+          {scanMsg && <div style={{display:"flex",alignItems:"center",gap:7,background:scanMsg.tipo==="ok"?"#eafaf1":"#fef9e7",borderRadius:8,padding:"8px 12px",fontSize:13,fontWeight:600,marginBottom:10,color:scanMsg.tipo==="ok"?"#1e8449":"#b7770d"}}>{scanMsg.tipo==="ok"?<CheckCircle size={14} strokeWidth={2.4}/>:<AlertTriangle size={14} strokeWidth={2.3}/>}{scanMsg.texto}</div>}
           <div style={{display:"flex",gap:8,marginBottom:10}}>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscá los productos que recibiste..."
-              style={{flex:1,padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none"}}/>
+            <div style={{position:"relative",flex:1}}>
+              <Search size={13} color="#aaa" strokeWidth={2.3} style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)"}}/>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscá los productos que recibiste..."
+                style={{width:"100%",padding:"8px 12px 8px 32px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+            </div>
             {canScan && <button onClick={()=>setShowScanner(true)}
-              style={{padding:"8px 14px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#1a5276,#2980b9)",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",whiteSpace:"nowrap"}}>
-              📷 Escanear
+              style={{padding:"8px 14px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#1a5276,#2980b9)",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}}>
+              <Camera size={13} strokeWidth={2.3}/> Escanear
             </button>}
           </div>
           {search&&<div style={{fontSize:11,color:"#aaa",marginBottom:6}}>{found.length} resultados</div>}
           <div style={{marginTop:12,borderTop:"1px solid #f0f0f0",paddingTop:12}}>
             <button onClick={()=>{setShowManual(s=>!s);setManualError("");}}
-              style={{padding:"6px 14px",borderRadius:8,border:"1.5px solid #e67e22",background:showManual?"#fef9e7":"#fff",color:"#e67e22",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-              {showManual?"✕ Cancelar":"➕ Producto no está en el catálogo"}
+              style={{padding:"6px 14px",borderRadius:8,border:"1.5px solid #e67e22",background:showManual?"#fef9e7":"#fff",color:"#e67e22",fontWeight:700,fontSize:12,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6}}>
+              {showManual?<><XIcon size={11} strokeWidth={2.6}/> Cancelar</>:<><Plus size={12} strokeWidth={2.4}/> Producto no está en el catálogo</>}
             </button>
             {showManual && (
               <div style={{background:"#fef9e7",border:"1.5px solid #e67e22",borderRadius:10,padding:14,marginTop:10}}>
-                <div style={{fontWeight:700,fontSize:13,color:"#e67e22",marginBottom:10}}>⚠️ Producto nuevo (excepcional)</div>
+                <div style={{fontWeight:700,fontSize:13,color:"#e67e22",marginBottom:10,display:"flex",alignItems:"center",gap:6}}><AlertTriangle size={13} strokeWidth={2.3}/>Producto nuevo (excepcional)</div>
                 <div style={{fontSize:11,color:"#888",marginBottom:12,lineHeight:1.5}}>Solo usá esto si el producto no figura en el Excel.</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
                   <div><div style={{fontSize:10,fontWeight:700,color:"#666",marginBottom:4}}>SKU *</div>
@@ -5709,8 +5719,8 @@ function Compras({products,onStock,isMobile,canScan}) {
                   <input value={manualForm.name} onChange={e=>setManualForm(f=>({...f,name:e.target.value}))} placeholder="Nombre completo" style={{...inputStyle,fontSize:12,padding:"6px 10px"}}/></div>
                 <div style={{marginBottom:12}}><div style={{fontSize:10,fontWeight:700,color:"#666",marginBottom:4}}>Precio de costo ($)</div>
                   <input type="number" min={0} value={manualForm.cost} onChange={e=>setManualForm(f=>({...f,cost:e.target.value}))} style={{...inputStyle,fontSize:12,padding:"6px 10px"}}/></div>
-                {manualError && <div style={{color:"#c0392b",fontSize:12,marginBottom:8,fontWeight:600}}>⚠️ {manualError}</div>}
-                <button onClick={addManual} style={{width:"100%",padding:"8px",borderRadius:8,border:"none",background:"#e67e22",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>➕ Agregar a la compra</button>
+                {manualError && <div style={{display:"flex",alignItems:"center",gap:5,color:"#c0392b",fontSize:12,marginBottom:8,fontWeight:600}}><AlertTriangle size={11} strokeWidth={2.4}/>{manualError}</div>}
+                <button onClick={addManual} style={{width:"100%",padding:"8px",borderRadius:8,border:"none",background:"#e67e22",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}><Plus size={12} strokeWidth={2.4}/> Agregar a la compra</button>
               </div>
             )}
           </div>
@@ -5722,7 +5732,7 @@ function Compras({products,onStock,isMobile,canScan}) {
                 return <div key={p.id} style={{background:"#fff",borderRadius:10,padding:14,border:inL?"2px solid #1e8449":"2px solid transparent",boxShadow:"0 1px 4px #0001"}}>
                   <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",marginBottom:3,lineHeight:1.3}}>{p.name}</div>
                   <div style={{fontSize:10,color:"#aaa",marginBottom:8}}>{p.id} · Stock: <strong>{p.stock}</strong></div>
-                  <button onClick={()=>addI(p)} disabled={!!inL} style={{width:"100%",padding:"7px",borderRadius:7,border:"none",fontSize:12,fontWeight:700,background:inL?"#d5f5e3":"#1e8449",color:inL?"#1a5276":"#fff",cursor:inL?"not-allowed":"pointer"}}>{inL?"✓ Agregado":"+ Agregar"}</button>
+                  <button onClick={()=>addI(p)} disabled={!!inL} style={{width:"100%",padding:"7px",borderRadius:7,border:"none",fontSize:12,fontWeight:700,background:inL?"#d5f5e3":"#1e8449",color:inL?"#1a5276":"#fff",cursor:inL?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>{inL?<><CheckCircle size={11} strokeWidth={2.6}/> Agregado</>:"+ Agregar"}</button>
                 </div>;
               })
             : <div style={{padding:20,color:"#aaa",fontSize:13}}>{search?"Sin resultados.":"Escribí el nombre del producto a ingresar."}</div>
@@ -5731,12 +5741,12 @@ function Compras({products,onStock,isMobile,canScan}) {
       </div>
       <div style={{position:"sticky",top:16}}>
         <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 2px 12px #0002"}}>
-          <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>🧾 Detalle de Compra</div>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:14,display:"flex",alignItems:"center",gap:7}}><FileText size={15} strokeWidth={2.3}/>Detalle de Compra</div>
           {items.length===0
             ? <div style={{textAlign:"center",color:"#aaa",fontSize:12,padding:"16px 0"}}>Seleccioná productos</div>
             : items.map(it=>(
                 <div key={it.pid} style={{background:"#f9f9f9",borderRadius:8,padding:12,marginBottom:10,border:it.esNuevo?"1.5px solid #e67e22":"none"}}>
-                  {it.esNuevo && <div style={{fontSize:10,color:"#e67e22",fontWeight:700,marginBottom:4}}>⚠️ NUEVO en catálogo</div>}
+                  {it.esNuevo && <div style={{fontSize:10,color:"#e67e22",fontWeight:700,marginBottom:4,display:"flex",alignItems:"center",gap:4}}><AlertTriangle size={9} strokeWidth={2.6}/>NUEVO en catálogo</div>}
                   <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
                     <span style={{fontWeight:600,fontSize:12,flex:1,marginRight:6,lineHeight:1.3}}>{it.name}</span>
                     <button onClick={()=>remI(it.pid)} style={{background:"none",border:"none",cursor:"pointer",color:RED,fontSize:18,lineHeight:1}}>×</button>
