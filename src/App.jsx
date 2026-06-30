@@ -70,6 +70,8 @@ const EyeOff = (p) => <Ico {...p}><path d="M2 12s3.5-7 10-7c2 0 3.7.6 5.1 1.4M22
 const Wrench = (p) => <Ico {...p}><path d="M14.7 6.3a4 4 0 1 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2z"/></Ico>;
 const Folder = (p) => <Ico {...p}><path d="M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></Ico>;
 const ImageIcon = (p) => <Ico {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></Ico>;
+const ZoomIn = (p) => <Ico {...p}><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></Ico>;
+const ZoomOut = (p) => <Ico {...p}><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/><line x1="8" y1="11" x2="14" y2="11"/></Ico>;
 const UserMinus = (p) => <Ico {...p}><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6"/><line x1="16" y1="10" x2="22" y2="10"/></Ico>;
 const ArrowLeftIcon = (p) => <Ico {...p}><line x1="20" y1="12" x2="4" y2="12"/><polyline points="11 5 4 12 11 19"/></Ico>;
 const ArrowRightIcon = (p) => <Ico {...p}><line x1="4" y1="12" x2="20" y2="12"/><polyline points="13 5 20 12 13 19"/></Ico>;
@@ -1253,6 +1255,98 @@ function AppInner() {
   />;
 }
 
+// ─── LIGHTBOX DE FOTO DE PRODUCTO — zoom con pellizco + arrastre, sin librerías ──
+const lightboxIconBtnStyle = { width: 38, height: 38, borderRadius: 10, border: "none", background: "#ffffff22", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
+function ImageLightbox({ src, onClose }) {
+  const [scale, setScale] = useState(1);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const state = useRef({
+    pointers: new Map(),
+    startDist: 0,
+    startScale: 1,
+    startPos: { x: 0, y: 0 },
+    dragging: false,
+    dragOrigin: { x: 0, y: 0 },
+  });
+
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+  const onPointerDown = (e) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    state.current.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const pts = [...state.current.pointers.values()];
+    if (pts.length === 2) {
+      state.current.startDist = dist(pts[0], pts[1]);
+      state.current.startScale = scale;
+      state.current.startPos = pos;
+    } else if (pts.length === 1) {
+      state.current.dragging = true;
+      state.current.startPos = pos;
+      state.current.dragOrigin = pts[0];
+    }
+  };
+  const onPointerMove = (e) => {
+    if (!state.current.pointers.has(e.pointerId)) return;
+    state.current.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const pts = [...state.current.pointers.values()];
+    if (pts.length === 2) {
+      const newDist = dist(pts[0], pts[1]);
+      const factor = newDist / (state.current.startDist || 1);
+      setScale(Math.min(5, Math.max(1, state.current.startScale * factor)));
+    } else if (pts.length === 1 && state.current.dragging && scale > 1) {
+      const dx = pts[0].x - state.current.dragOrigin.x;
+      const dy = pts[0].y - state.current.dragOrigin.y;
+      setPos({ x: state.current.startPos.x + dx, y: state.current.startPos.y + dy });
+    }
+  };
+  const onPointerUp = (e) => {
+    state.current.pointers.delete(e.pointerId);
+    if (state.current.pointers.size < 2) state.current.dragging = state.current.pointers.size === 1;
+    if (state.current.pointers.size === 0 && scale < 1.05) { setScale(1); setPos({ x: 0, y: 0 }); }
+  };
+  const reset = () => { setScale(1); setPos({ x: 0, y: 0 }); };
+  const zoomBtn = (dir) => setScale(s => Math.min(5, Math.max(1, s + dir * 0.5)));
+
+  return (
+    <div onClick={(e)=>e.target===e.currentTarget&&onClose()} style={{ position: "fixed", inset: 0, background: "#000d", zIndex: 2000, display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px" }}>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => zoomBtn(-1)} style={lightboxIconBtnStyle}><ZoomOut size={18} color="#fff" strokeWidth={2}/></button>
+          <button onClick={() => zoomBtn(1)} style={lightboxIconBtnStyle}><ZoomIn size={18} color="#fff" strokeWidth={2}/></button>
+          {scale > 1 && <button onClick={reset} style={lightboxIconBtnStyle}><RefreshCw size={16} color="#fff" strokeWidth={2}/></button>}
+        </div>
+        <button onClick={onClose} style={lightboxIconBtnStyle}><XIcon size={20} color="#fff" strokeWidth={2.2}/></button>
+      </div>
+      <div
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onDoubleClick={() => (scale > 1 ? reset() : setScale(2.5))}
+        style={{ flex: 1, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", touchAction: "none", cursor: scale > 1 ? "grab" : "default" }}
+      >
+        <img
+          src={src}
+          alt=""
+          draggable={false}
+          style={{
+            maxWidth: "90%", maxHeight: "80%", objectFit: "contain",
+            transform: `translate(${pos.x}px, ${pos.y}px) scale(${scale})`,
+            transition: state.current.pointers.size > 0 ? "none" : "transform .15s ease-out",
+            userSelect: "none",
+          }}
+        />
+      </div>
+      <div style={{ textAlign: "center", color: "#fff9", fontSize: 12, paddingBottom: 16 }}>
+        Pellizcá para hacer zoom · arrastrá para mover · doble toque para alternar
+      </div>
+    </div>
+  );
+}
+
+
+// en vez de dejar la app en blanco. Permite mandar una foto del error directo
+// desde el celular, sin necesitar conectar a una computadora.
 // ─── RED DE SEGURIDAD: si algo se rompe, mostrar el error en pantalla ────────
 // en vez de dejar la app en blanco. Permite mandar una foto del error directo
 // desde el celular, sin necesitar conectar a una computadora.
@@ -3444,6 +3538,7 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
   const [cat,setCat]=useState("todos");
   const [catOpen,setCatOpen]=useState(false);
   const [soloStock,setSoloStock]=useState(false);
+  const [lightboxImg,setLightboxImg]=useState(null);
   const CATS=useMemo(()=>["todos",...new Set(products.map(p=>p.category))].sort(),[products]);
   const shown=useMemo(()=>{
     const q=search.toLowerCase();
@@ -3560,7 +3655,7 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
               const finalPrice=isDesc?Math.max(0,promo.data?.tipoValor==="%"?p.salePrice*(1-(promo.data?.valor||0)/100):p.salePrice-(promo.data?.valor||0)):p.salePrice;
               return (
               <div key={p.id} style={{background:"#fff",borderRadius:10,padding:"12px 14px",display:"flex",alignItems:"center",gap:10,boxShadow:"0 1px 4px #0001",border:ic?`2px solid ${RED}`:promo?"2px solid #f3d98a":"2px solid transparent"}}>
-                <div style={{width:46,height:46,borderRadius:8,background:p.imageUrl?"transparent":"#f4f6f9",overflow:"hidden",flexShrink:0,border:"1px solid #f0f0f0",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <div onClick={p.imageUrl?(e)=>{e.stopPropagation();setLightboxImg(p.imageUrl);}:undefined} style={{width:46,height:46,borderRadius:8,background:p.imageUrl?"transparent":"#f4f6f9",overflow:"hidden",flexShrink:0,border:"1px solid #f0f0f0",display:"flex",alignItems:"center",justifyContent:"center",cursor:p.imageUrl?"zoom-in":"default"}}>
                   {p.imageUrl ? <img src={p.imageUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <ImageIcon size={18} color="#ddd" strokeWidth={1.6}/>}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
@@ -3606,7 +3701,7 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
               const isDesc=promo?.tipo==="descuento";
               const finalPrice=isDesc?Math.max(0,promo.data?.tipoValor==="%"?p.salePrice*(1-(promo.data?.valor||0)/100):p.salePrice-(promo.data?.valor||0)):p.salePrice;
               return <div key={p.id} style={{background:"#fff",borderRadius:10,padding:14,border:ic?`2px solid ${RED}`:promo?"2px solid #f3d98a":"2px solid transparent",boxShadow:"0 1px 4px #0001"}}>
-              <div style={{width:"100%",height:110,borderRadius:8,background:p.imageUrl?"transparent":"#f4f6f9",overflow:"hidden",marginBottom:9,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <div onClick={p.imageUrl?(e)=>{e.stopPropagation();setLightboxImg(p.imageUrl);}:undefined} style={{width:"100%",height:110,borderRadius:8,background:p.imageUrl?"transparent":"#f4f6f9",overflow:"hidden",marginBottom:9,display:"flex",alignItems:"center",justifyContent:"center",cursor:p.imageUrl?"zoom-in":"default"}}>
                 {p.imageUrl ? <img src={p.imageUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <ImageIcon size={26} color="#ddd" strokeWidth={1.5}/>}
               </div>
               {promo && <div style={{marginBottom:5}}><span style={{fontSize:10,fontWeight:800,borderRadius:6,padding:"2px 7px",display:"inline-block",background:promo.tipo==="3x2"?"#fef9e7":"#fdecea",color:promo.tipo==="3x2"?"#b7770d":"#c0392b",border:promo.tipo==="3x2"?"1px solid #f3d98a":"1px solid #f5b7b1"}}><span style={{display:"inline-flex",alignItems:"center",gap:3}}>{promo.tipo==="3x2"?<Tag size={10} strokeWidth={2.6}/>:<TrendDown size={10} strokeWidth={2.6}/>} {promo.tipo==="3x2"?`${promo.data.comprar}×${promo.data.pagar}`:`-${promo.data.valor}${promo.data.tipoValor==="%"?"%":""}`}</span></span></div>}
@@ -3632,6 +3727,7 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
             </div>;})}
           </div>
       }
+      {lightboxImg && <ImageLightbox src={lightboxImg} onClose={()=>setLightboxImg(null)}/>}
     </div>
   );
 }
@@ -4700,6 +4796,7 @@ function EditModal({p,onSave,onClose}) {
   const [stock,setStock]=useState(p.stock);
   const [imageUrl,setImageUrl]=useState(p.imageUrl||"");
   const [uploadingImg,setUploadingImg]=useState(false);
+  const [showLightbox,setShowLightbox]=useState(false);
   const m=cost>0?((sale-cost)/cost*100).toFixed(1):"-";
 
   const handleImage = async (e) => {
@@ -4727,7 +4824,7 @@ function EditModal({p,onSave,onClose}) {
         </div>
 
         <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:18}}>
-          <div style={{width:64,height:64,borderRadius:12,background:imageUrl?"transparent":"#f4f6f9",overflow:"hidden",flexShrink:0,border:"1.5px solid #f0f0f0",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div onClick={imageUrl&&!uploadingImg?()=>setShowLightbox(true):undefined} style={{width:64,height:64,borderRadius:12,background:imageUrl?"transparent":"#f4f6f9",overflow:"hidden",flexShrink:0,border:"1.5px solid #f0f0f0",display:"flex",alignItems:"center",justifyContent:"center",cursor:imageUrl&&!uploadingImg?"zoom-in":"default"}}>
             {uploadingImg
               ? <RefreshCw size={20} color="#aaa" strokeWidth={2}/>
               : imageUrl ? <img src={imageUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <ImageIcon size={24} color="#ccc" strokeWidth={1.6}/>}
@@ -4756,6 +4853,7 @@ function EditModal({p,onSave,onClose}) {
           <button onClick={()=>onSave({...p,costPrice:cost,salePrice:sale,stock,imageUrl})} style={{padding:"8px 14px",borderRadius:8,border:"none",background:RED,color:"#fff",cursor:"pointer",fontWeight:700}}>Guardar</button>
         </div>
       </div>
+      {showLightbox && <ImageLightbox src={imageUrl} onClose={()=>setShowLightbox(false)}/>}
     </div>
   );
 }
