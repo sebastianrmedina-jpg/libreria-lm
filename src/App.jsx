@@ -652,9 +652,15 @@ async function sendCrossNotif(db, setNotifs, {title, body, tag, para, de}) {
     para, de,
     leida: [],  // lista de userIds que ya la leyeron (igual al resto de las notificaciones de la app)
   };
-  // Guardar en lm_notifs para Realtime (cuando la app está abierta) — esto sí se espera, es lo que ve el admin en la app
-  await db.addNotif(notif);
-  setNotifs(n=>[notif,...n]);
+  // La notificacion es secundaria al hecho que la dispara (confirmar pago, aprobar edicion, etc.
+  // que ya se guardo ANTES de llamar a esta funcion en todos los casos). Si el insert falla por un
+  // hipo de red, no debe dejar el boton de "Guardando..." de quien la llamo trabado para siempre.
+  try {
+    await db.addNotif(notif);
+    setNotifs(n=>[notif,...n]);
+  } catch(e) {
+    console.warn("No se pudo guardar la notificación (la acción principal ya se guardó igual):", e);
+  }
   // Enviar push via OneSignal (cuando la app está cerrada) — best-effort, nunca debe bloquear ni trabar a quien envía
   sendPushNotif({ title, body, targetUsername: para }).catch(()=>{});
 }
@@ -1669,10 +1675,17 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const updatedProds=products.map(x=>{if(x.id!==pid)return x;const u={...x,stock:x.stock+qty};if(newCost){u.costPrice=newCost;u.salePrice=Math.round(newCost*1.5*100)/100;}return u;});
     setProducts(updatedProds);
     const updProd=updatedProds.find(p=>p.id===pid);
-    if(updProd)await db.upsertProduct(updProd);
+    if(updProd)await db.upsertProduct(updProd); // esto es lo importante: el stock real. Si esto falla, sí queremos que el error se propague.
     if(prod){
-      const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"ALTA_MERCADERIA",para:"admin",icono:"📦",titulo:"Alta de mercaderia",cuerpo:`${prod.name} - +${qty} unidades${newCost?` - Nuevo costo: ${fARS(newCost)}`:""}`,ref:pid};
-      await db.addNotif(notif); setNotifs(n=>[notif,...n]);
+      // La notificación es secundaria — si falla (ej: hipo de red), NO debe tirar abajo
+      // toda la operación ni dejar el boton de "Guardando..." trabado para siempre,
+      // porque el stock de arriba ya quedó guardado correctamente.
+      try {
+        const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"ALTA_MERCADERIA",para:"admin",icono:"📦",titulo:"Alta de mercaderia",cuerpo:`${prod.name} - +${qty} unidades${newCost?` - Nuevo costo: ${fARS(newCost)}`:""}`,ref:pid};
+        await db.addNotif(notif); setNotifs(n=>[notif,...n]);
+      } catch(e) {
+        console.warn("No se pudo crear la notificacion de alta de mercaderia (el stock SI se actualizo):", e);
+      }
     }
   };
 
@@ -4708,13 +4721,19 @@ function IngresarDesdeSolicitud({po, products, onStock, onDone, onArrived}) {
     const toIngresar = items.filter(i => i.incluir && i.qtyRecibida > 0);
     if(!toIngresar.length) { toast.error("Seleccioná al menos un producto para ingresar"); return; }
     setSaving(true);
-    for(const it of toIngresar) {
-      await onStock(it.pid, +it.qtyRecibida, +it.cost);
+    try {
+      for(const it of toIngresar) {
+        await onStock(it.pid, +it.qtyRecibida, +it.cost);
+      }
+      if(onArrived) { try { await onArrived(); } catch(e) { console.warn(e); } }
+      setOk(true);
+      setTimeout(()=>onDone(), 1500);
+    } catch(e) {
+      console.warn("Error al ingresar mercadería:", e);
+      toast.error("Hubo un problema de conexión. Revisá el Stock — puede que ya se haya actualizado igual.");
+    } finally {
+      setSaving(false);
     }
-    if(onArrived) { try { await onArrived(); } catch(e) { console.warn(e); } }
-    setOk(true);
-    setSaving(false);
-    setTimeout(()=>onDone(), 1500);
   };
 
   if(ok) return (
@@ -5435,6 +5454,7 @@ function Compras({products,onStock,isMobile,canScan}) {
   const [search,setSearch]=useState("");
   const [items,setItems]=useState([]);
   const [ok,setOk]=useState(false);
+  const [saving,setSaving]=useState(false);
   const [showManual, setShowManual] = useState(false);
   const [manualForm, setManualForm] = useState({sku:"", name:"", qty:1, cost:0});
   const [manualError, setManualError] = useState("");
@@ -5480,13 +5500,23 @@ function Compras({products,onStock,isMobile,canScan}) {
     setShowManual(false);
   };
 
-  const submit=()=>{
-    items.forEach(i=>onStock(i.pid,+i.qty,+i.cost));
-    setItems([]); setSearch(""); setMStep(1);
-    setOk(true); setTimeout(()=>setOk(false),2000);
+  const submit=async()=>{
+    if(saving) return;
+    setSaving(true);
+    try {
+      for(const i of items) { await onStock(i.pid,+i.qty,+i.cost); }
+      setItems([]); setSearch(""); setMStep(1);
+      setOk(true); setTimeout(()=>setOk(false),2000);
+    } catch(e) {
+      console.warn("Error al ingresar al stock:", e);
+      toast.error("Hubo un problema de conexión. Revisá el Stock — puede que ya se haya actualizado igual.");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{fontSize:60}}>📦</div><div style={{fontWeight:800,color:"#1e8449",fontSize:20,marginTop:12}}>¡Stock actualizado!</div></div>;
+  if(saving) return <SaveSpinner label="Ingresando al stock..." color="#1e8449"/>;
+  if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{display:"flex",justifyContent:"center"}}><Package size={52} color="#1e8449" strokeWidth={1.8}/></div><div style={{fontWeight:800,color:"#1e8449",fontSize:20,marginTop:12}}>¡Stock actualizado!</div></div>;
 
   // ── MOBILE ──────────────────────────────────────────────────────────────────
   if(isMobile) return (
@@ -5634,8 +5664,8 @@ function Compras({products,onStock,isMobile,canScan}) {
               <div style={{fontWeight:800,fontSize:15}}>{fARS(totalCost)}</div>
               <div style={{fontSize:11,opacity:.85}}>{items.length} producto{items.length!==1?"s":""}</div>
             </div>
-            <button onClick={submit} style={{padding:"10px 20px",borderRadius:10,border:"none",background:"#fff",color:"#1e8449",fontWeight:800,fontSize:14,cursor:"pointer"}}>
-              📦 Ingresar al Stock
+            <button onClick={submit} style={{padding:"10px 20px",borderRadius:10,border:"none",background:"#fff",color:"#1e8449",fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+              <Package size={13} strokeWidth={2.4}/> Ingresar al Stock
             </button>
           </div>
         </div>
@@ -5725,7 +5755,7 @@ function Compras({products,onStock,isMobile,canScan}) {
           <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:16,color:RED,padding:"10px 0",borderTop:"2px solid #f5f5f5",margin:"8px 0 14px"}}>
             <span>Total compra</span><span>{fARS(totalCost)}</span>
           </div>
-          <button onClick={submit} disabled={!items.length} style={{width:"100%",padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:!items.length?"#e5e5e5":"linear-gradient(135deg,#1a5e20,#1e8449)",color:!items.length?"#aaa":"#fff"}}>📦 Ingresar al Stock</button>
+          <button onClick={submit} disabled={!items.length||saving} style={{width:"100%",padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:!items.length?"#e5e5e5":"linear-gradient(135deg,#1a5e20,#1e8449)",color:!items.length?"#aaa":"#fff",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}><Package size={13} strokeWidth={2.4}/> Ingresar al Stock</button>
         </div>
       </div>
     </div>
