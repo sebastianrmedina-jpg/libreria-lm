@@ -64,6 +64,11 @@ const MapPin = (p) => <Ico {...p}><path d="M12 21s7-6.5 7-12a7 7 0 1 0-14 0c0 5.
 const IdCard = (p) => <Ico {...p}><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="8" cy="11" r="2"/><path d="M5 17c0-1.5 1.3-2.5 3-2.5s3 1 3 2.5"/><line x1="14" y1="9" x2="19" y2="9"/><line x1="14" y1="13" x2="19" y2="13"/></Ico>;
 const Plus = (p) => <Ico {...p}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></Ico>;
 const Info = (p) => <Ico {...p}><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><circle cx="12" cy="7.5" r="0.4" fill={p.color||"currentColor"} stroke="none"/></Ico>;
+const Lightbulb = (p) => <Ico {...p}><path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.7 10.7c.5.4.7 1 .7 1.6V16h6v-.7c0-.6.2-1.2.7-1.6A6 6 0 0 0 12 3z"/></Ico>;
+const Crown = (p) => <Ico {...p}><path d="M3 17h18l-1.5-8-4 3-2.5-6-2.5 6-4-3z"/><path d="M5 20h14"/></Ico>;
+const EyeOff = (p) => <Ico {...p}><path d="M2 12s3.5-7 10-7c2 0 3.7.6 5.1 1.4M22 12s-1.2 2.4-3.3 4.2M9.5 9.7a3 3 0 0 0 4.2 4.2"/><line x1="3" y1="3" x2="21" y2="21"/></Ico>;
+const Wrench = (p) => <Ico {...p}><path d="M14.7 6.3a4 4 0 1 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2z"/></Ico>;
+const Folder = (p) => <Ico {...p}><path d="M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></Ico>;
 const UserMinus = (p) => <Ico {...p}><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6"/><line x1="16" y1="10" x2="22" y2="10"/></Ico>;
 const ArrowLeftIcon = (p) => <Ico {...p}><line x1="20" y1="12" x2="4" y2="12"/><polyline points="11 5 4 12 11 19"/></Ico>;
 const ArrowRightIcon = (p) => <Ico {...p}><line x1="4" y1="12" x2="20" y2="12"/><polyline points="13 5 20 12 13 19"/></Ico>;
@@ -6206,7 +6211,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
     <div>
       {isMobile && section && (
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 12px 0",marginBottom:8}}>
-          <button onClick={()=>setSection(null)} style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",fontWeight:600,fontSize:12,cursor:"pointer",color:"#555"}}>← Volver</button>
+          <button onClick={()=>setSection(null)} style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",fontWeight:600,fontSize:12,cursor:"pointer",color:"#555",display:"inline-flex",alignItems:"center",gap:5}}><ArrowLeftIcon size={11} strokeWidth={2.4}/> Volver</button>
           <div style={{fontWeight:800,fontSize:15,display:"flex",alignItems:"center",gap:6}}>
             {(() => { const cur = SECTIONS.find(s=>s.k===section); return cur ? <><cur.Icon size={15} color="#1a1a1a" strokeWidth={2.2}/> {cur.label}</> : null; })()}
           </div>
@@ -6565,9 +6570,9 @@ function OfertasPanel({promos, setPromos, products, isMobile, prefillProductId, 
 
   if(view==="elegir") {
     const TIPOS = [
-      {k:"combo",     icon:"🎁", title:"Combo",            desc:"Varios productos distintos agrupados a un precio fijo"},
-      {k:"3x2",       icon:"🏷️", title:"Oferta 3×N",        desc:"Comprando X unidades de un producto, paga menos"},
-      {k:"descuento", icon:"🔻", title:"Descuento simple", desc:"Un producto puntual con % o $ de descuento"},
+      {k:"combo",     Icon:Gift,    title:"Combo",            desc:"Varios productos distintos agrupados a un precio fijo"},
+      {k:"3x2",       Icon:Tag,     title:"Oferta 3×N",        desc:"Comprando X unidades de un producto, paga menos"},
+      {k:"descuento", Icon:TrendDown, title:"Descuento simple", desc:"Un producto puntual con % o $ de descuento"},
     ];
     return (
       <div>
@@ -6581,7 +6586,7 @@ function OfertasPanel({promos, setPromos, products, isMobile, prefillProductId, 
               style={{background:"#fff",borderRadius:14,padding:"24px 18px",textAlign:"center",boxShadow:"0 1px 6px #0001",cursor:"pointer",border:"2px solid transparent",transition:"border .15s"}}
               onMouseEnter={e=>e.currentTarget.style.border=`2px solid ${RED}`}
               onMouseLeave={e=>e.currentTarget.style.border="2px solid transparent"}>
-              <div style={{fontSize:36,marginBottom:10}}>{t.icon}</div>
+              <div style={{marginBottom:10,display:"flex",justifyContent:"center"}}><t.Icon size={30} color="#555" strokeWidth={1.8}/></div>
               <div style={{fontWeight:800,fontSize:14,marginBottom:6}}>{t.title}</div>
               <div style={{fontSize:12,color:"#888",lineHeight:1.4}}>{t.desc}</div>
             </div>
@@ -6618,9 +6623,9 @@ function OfertasPanel({promos, setPromos, products, isMobile, prefillProductId, 
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
                       <TypeBadge tipo={p.tipo}/>
                       <div>
-                        <button onClick={()=>editPromo(p)} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"2px 6px"}}>✏️</button>
+                        <button onClick={()=>editPromo(p)} style={{background:"none",border:"none",cursor:"pointer",padding:"2px 6px",display:"flex",alignItems:"center"}}><Pencil size={13} strokeWidth={2.3} color="#888"/></button>
                         <button onClick={()=>togglePausa(p)} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"2px 6px"}}>{p.activa?"⏸️":"▶️"}</button>
-                        <button onClick={()=>delPromo(p)} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"2px 6px"}}>🗑️</button>
+                        <button onClick={()=>delPromo(p)} style={{background:"none",border:"none",cursor:"pointer",padding:"2px 6px",display:"flex",alignItems:"center"}}><Trash size={13} strokeWidth={2.3} color="#888"/></button>
                       </div>
                     </div>
                     <div style={{fontWeight:700,fontSize:13}}>{titulo}</div>
@@ -6656,9 +6661,9 @@ function OfertasPanel({promos, setPromos, products, isMobile, prefillProductId, 
                         <td style={{padding:"11px 14px",fontSize:12,color:"#555"}}>{vig}</td>
                         <td style={{padding:"11px 14px"}}><PromoEstado promo={p} vigente={isPromoVigente(p)} dias={p.vigenciaHasta?diasRestantes(p.vigenciaHasta):null}/></td>
                         <td style={{padding:"11px 14px",textAlign:"right",whiteSpace:"nowrap"}}>
-                          <button onClick={()=>editPromo(p)} title="Editar" style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"4px 6px",color:"#888"}}>✏️</button>
+                          <button onClick={()=>editPromo(p)} title="Editar" style={{background:"none",border:"none",cursor:"pointer",padding:"4px 6px",color:"#888",display:"flex",alignItems:"center"}}><Pencil size={13} strokeWidth={2.3}/></button>
                           <button onClick={()=>togglePausa(p)} title={p.activa?"Pausar":"Reactivar"} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"4px 6px",color:"#888"}}>{p.activa?"⏸️":"▶️"}</button>
-                          <button onClick={()=>delPromo(p)} title="Eliminar" style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"4px 6px",color:"#888"}}>🗑️</button>
+                          <button onClick={()=>delPromo(p)} title="Eliminar" style={{background:"none",border:"none",cursor:"pointer",padding:"4px 6px",color:"#888",display:"flex",alignItems:"center"}}><Trash size={13} strokeWidth={2.3}/></button>
                         </td>
                       </tr>
                     );
@@ -6714,14 +6719,14 @@ function ComboForm({products, editing, nextSku, onSave, onCancel}) {
 
   return (
     <div style={{maxWidth:680}}>
-      <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>🎁 {isEdit?"Editar":"Nuevo"} Combo</div>
+      <div style={{fontWeight:800,fontSize:15,marginBottom:14,display:"flex",alignItems:"center",gap:7}}><Gift size={15} strokeWidth={2.3}/>{isEdit?"Editar":"Nuevo"} Combo</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
         <Field label="SKU del combo (automático)"><input value={sku} disabled style={{...inputStyle,background:"#f5f5f5",color:"#888",fontWeight:700}}/></Field>
         <Field label="Nombre del combo *"><input value={nombre} onChange={e=>setNombre(e.target.value)} style={inputStyle}/></Field>
       </div>
 
       <Field label="Productos incluidos">
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar producto para agregar al combo..." style={{...inputStyle,marginBottom:8}}/>
+        <div style={{position:"relative",marginBottom:8}}><Search size={13} color="#aaa" strokeWidth={2.3} style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)"}}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar producto para agregar al combo..." style={{...inputStyle,paddingLeft:32}}/></div>
         {found.length>0 && <div style={{border:"1.5px solid #f0f0f0",borderRadius:8,marginBottom:8,overflow:"hidden"}}>
           {found.map(p=><div key={p.id} onClick={()=>addComp(p)} style={{padding:"8px 12px",cursor:"pointer",fontSize:12,borderBottom:"1px solid #f5f5f5"}}>{p.name} <span style={{color:"#aaa"}}>· {fARS(p.salePrice)}</span></div>)}
         </div>}
@@ -6745,7 +6750,7 @@ function ComboForm({products, editing, nextSku, onSave, onCancel}) {
 
       {precioFijo && precioNormal>0 && (
         <div style={{background:"#eafaf1",border:"1.5px solid #a9dfbf",borderRadius:8,padding:"12px 14px",margin:"14px 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <span style={{fontSize:13,fontWeight:700,color:"#1e8449"}}>💰 Ahorro para el cliente</span>
+          <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:13,fontWeight:700,color:"#1e8449"}}><Banknote size={12} strokeWidth={2.4}/>Ahorro para el cliente</span>
           <span style={{fontSize:15,fontWeight:800,color:ahorro>=0?"#1e8449":RED}}>{fARS(ahorro)} ({ahorroPct.toFixed(1)}%)</span>
         </div>
       )}
@@ -6758,7 +6763,7 @@ function ComboForm({products, editing, nextSku, onSave, onCancel}) {
       {error && <div style={{color:RED,fontSize:12,fontWeight:600,marginBottom:10}}>{error}</div>}
       <div style={{display:"flex",gap:10,marginTop:6}}>
         <button onClick={onCancel} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancelar</button>
-        <button onClick={submit} disabled={saving} style={{flex:2,padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",opacity:saving?.7:1}}>{saving?"Guardando...":"✅ Guardar Combo"}</button>
+        <button onClick={submit} disabled={saving} style={{flex:2,padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",opacity:saving?.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>{saving?"Guardando...":<><CheckCircle size={13} strokeWidth={2.4}/> Guardar Combo</>}</button>
       </div>
     </div>
   );
@@ -6805,7 +6810,7 @@ function TresPorDosForm({products, editing, nextSku, onSave, onCancel}) {
 
   return (
     <div style={{maxWidth:680}}>
-      <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>🏷️ {isEdit?"Editar":"Nueva"} Oferta</div>
+      <div style={{fontWeight:800,fontSize:15,marginBottom:14,display:"flex",alignItems:"center",gap:7}}><Tag size={15} strokeWidth={2.3}/>{isEdit?"Editar":"Nueva"} Oferta</div>
       <Field label="SKU de la oferta (automático)"><input value={sku} disabled style={{...inputStyle,maxWidth:300,background:"#f5f5f5",color:"#888",fontWeight:700}}/></Field>
 
       <Field label="Producto al que aplica *">
@@ -6813,10 +6818,10 @@ function TresPorDosForm({products, editing, nextSku, onSave, onCancel}) {
           ? <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:"#f9f9f9",borderRadius:8,border:"1.5px solid #f0f0f0"}}>
               <span style={{flex:1,fontWeight:700,fontSize:13}}>{producto.name}</span>
               <span style={{fontSize:12,color:"#888"}}>{fARS(producto.salePrice)} c/u</span>
-              <span onClick={()=>setProducto(null)} style={{color:RED,cursor:"pointer"}}>✕</span>
+              <span onClick={()=>setProducto(null)} style={{color:RED,cursor:"pointer",display:"inline-flex"}}><XIcon size={13} strokeWidth={2.6}/></span>
             </div>
           : <>
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar producto..." style={inputStyle}/>
+              <div style={{position:"relative"}}><Search size={13} color="#aaa" strokeWidth={2.3} style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)"}}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar producto..." style={{...inputStyle,paddingLeft:32}}/></div>
               {found.length>0 && <div style={{border:"1.5px solid #f0f0f0",borderRadius:8,marginTop:6,overflow:"hidden"}}>
                 {found.map(p=><div key={p.id} onClick={()=>{setProducto(p);setSearch("");}} style={{padding:"8px 12px",cursor:"pointer",fontSize:12,borderBottom:"1px solid #f5f5f5"}}>{p.name} <span style={{color:"#aaa"}}>· {fARS(p.salePrice)}</span></div>)}
               </div>}
@@ -6846,14 +6851,14 @@ function TresPorDosForm({products, editing, nextSku, onSave, onCancel}) {
 
       {comprar>0 && pagar>0 && pagar<comprar && (
         <div style={{background:"#fef9e7",border:"1.5px solid #f8e9b0",borderRadius:8,padding:"12px 14px",margin:"14px 0",fontSize:13,color:"#7d6608",fontWeight:600}}>
-          💡 Equivale a un <b>{pct.toFixed(1)}% de descuento</b> sobre la compra de este producto, aplicado automáticamente a partir de {comprar} unidades ({comprar*2}, {comprar*3}...). No afecta compras de menos de {comprar} unidades.
+          <Lightbulb size={12} strokeWidth={2.3} style={{display:"inline",verticalAlign:"-2px",marginRight:4}}/>Equivale a un <b>{pct.toFixed(1)}% de descuento</b> sobre la compra de este producto, aplicado automáticamente a partir de {comprar} unidades ({comprar*2}, {comprar*3}...). No afecta compras de menos de {comprar} unidades.
         </div>
       )}
 
       {error && <div style={{color:RED,fontSize:12,fontWeight:600,marginBottom:10}}>{error}</div>}
       <div style={{display:"flex",gap:10,marginTop:6}}>
         <button onClick={onCancel} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancelar</button>
-        <button onClick={submit} disabled={saving} style={{flex:2,padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",opacity:saving?.7:1}}>{saving?"Guardando...":"✅ Guardar Oferta"}</button>
+        <button onClick={submit} disabled={saving} style={{flex:2,padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",opacity:saving?.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>{saving?"Guardando...":<><CheckCircle size={13} strokeWidth={2.4}/> Guardar Oferta</>}</button>
       </div>
     </div>
   );
@@ -6895,17 +6900,17 @@ function DescuentoForm({products, editing, prefillProductId, onSave, onCancel}) 
 
   return (
     <div style={{maxWidth:680}}>
-      <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>🔻 {isEdit?"Editar":"Nuevo"} Descuento</div>
+      <div style={{fontWeight:800,fontSize:15,marginBottom:14,display:"flex",alignItems:"center",gap:7}}><TrendDown size={15} strokeWidth={2.3}/>{isEdit?"Editar":"Nuevo"} Descuento</div>
 
       <Field label="Producto al que aplica *">
         {producto
           ? <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:"#f9f9f9",borderRadius:8,border:"1.5px solid #f0f0f0"}}>
               <span style={{flex:1,fontWeight:700,fontSize:13}}>{producto.name}</span>
               <span style={{fontSize:12,color:"#888"}}>{fARS(producto.salePrice)} c/u</span>
-              <span onClick={()=>setProducto(null)} style={{color:RED,cursor:"pointer"}}>✕</span>
+              <span onClick={()=>setProducto(null)} style={{color:RED,cursor:"pointer",display:"inline-flex"}}><XIcon size={13} strokeWidth={2.6}/></span>
             </div>
           : <>
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar producto..." style={inputStyle}/>
+              <div style={{position:"relative"}}><Search size={13} color="#aaa" strokeWidth={2.3} style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)"}}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar producto..." style={{...inputStyle,paddingLeft:32}}/></div>
               {found.length>0 && <div style={{border:"1.5px solid #f0f0f0",borderRadius:8,marginTop:6,overflow:"hidden"}}>
                 {found.map(p=><div key={p.id} onClick={()=>{setProducto(p);setSearch("");}} style={{padding:"8px 12px",cursor:"pointer",fontSize:12,borderBottom:"1px solid #f5f5f5"}}>{p.name} <span style={{color:"#aaa"}}>· {fARS(p.salePrice)}</span></div>)}
               </div>}
@@ -6939,7 +6944,7 @@ function DescuentoForm({products, editing, prefillProductId, onSave, onCancel}) 
       {error && <div style={{color:RED,fontSize:12,fontWeight:600,marginBottom:10}}>{error}</div>}
       <div style={{display:"flex",gap:10,marginTop:6}}>
         <button onClick={onCancel} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancelar</button>
-        <button onClick={submit} disabled={saving} style={{flex:2,padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",opacity:saving?.7:1}}>{saving?"Guardando...":"✅ Guardar Descuento"}</button>
+        <button onClick={submit} disabled={saving} style={{flex:2,padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",opacity:saving?.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>{saving?"Guardando...":<><CheckCircle size={13} strokeWidth={2.4}/> Guardar Descuento</>}</button>
       </div>
     </div>
   );
@@ -6952,15 +6957,15 @@ function ActivityPanel({activity, setActivity}) {
   const [confirmClear, setConfirmClear] = useState(false);
 
   const TIPOS = {
-    "Nuevo pedido":                {color:"#1a5276", bg:"#d6eaf8",  icon:"🛒"},
-    "Cambio estado: Confirmado":   {color:"#1a5276", bg:"#d6eaf8",  icon:"✅"},
-    "Cambio estado: En Armado":    {color:"#6c3483", bg:"#e8daef",  icon:"📦"},
-    "Cambio estado: Entregado":    {color:"#1e8449", bg:"#d5f5e3",  icon:"🎉"},
-    "Cambio estado: Reserva":      {color:"#c0392b", bg:"#fdecea",  icon:"🕐"},
-    "Nueva cotización":            {color:"#6c3483", bg:"#e8daef",  icon:"📄"},
-    "Cotización convertida a reserva":{color:"#e67e22",bg:"#fef9e7",icon:"🔄"},
-    "Pedido eliminado":            {color:"#c0392b", bg:"#fdecea",  icon:"🗑"},
-    "Precio/stock editado":        {color:"#e67e22", bg:"#fef9e7",  icon:"✏️"},
+    "Nuevo pedido":                {color:"#1a5276", bg:"#d6eaf8",  Icon:ShoppingCart},
+    "Cambio estado: Confirmado":   {color:"#1a5276", bg:"#d6eaf8",  Icon:CheckCircle},
+    "Cambio estado: En Armado":    {color:"#6c3483", bg:"#e8daef",  Icon:Package},
+    "Cambio estado: Entregado":    {color:"#1e8449", bg:"#d5f5e3",  Icon:PartyPopper},
+    "Cambio estado: Reserva":      {color:"#c0392b", bg:"#fdecea",  Icon:Clock},
+    "Nueva cotización":            {color:"#6c3483", bg:"#e8daef",  Icon:FileText},
+    "Cotización convertida a reserva":{color:"#e67e22",bg:"#fef9e7",Icon:RefreshCw},
+    "Pedido eliminado":            {color:"#c0392b", bg:"#fdecea",  Icon:Trash},
+    "Precio/stock editado":        {color:"#e67e22", bg:"#fef9e7",  Icon:Pencil},
   };
 
   const tiposUnicos = ["todos", ...new Set(activity.map(a=>a.accion))];
@@ -6989,12 +6994,12 @@ function ActivityPanel({activity, setActivity}) {
       {/* KPIs */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginBottom:16}}>
         <div style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 4px #0001",borderLeft:`4px solid ${RED}`}}>
-          <div style={{fontSize:11,color:"#888",fontWeight:600}}>📝 Total acciones</div>
+          <div style={{fontSize:11,color:"#888",fontWeight:600,display:"flex",alignItems:"center",gap:4}}><Pencil size={10} strokeWidth={2.4}/>Total acciones</div>
           <div style={{fontSize:24,fontWeight:900,color:RED}}>{activity.length}</div>
         </div>
         {byUser.slice(0,3).map(([u,n])=>(
           <div key={u} style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 4px #0001",borderLeft:"4px solid #1a5276"}}>
-            <div style={{fontSize:11,color:"#888",fontWeight:600}}>👤 {u}</div>
+            <div style={{fontSize:11,color:"#888",fontWeight:600,display:"flex",alignItems:"center",gap:4}}><Users size={10} strokeWidth={2.4}/>{u}</div>
             <div style={{fontSize:24,fontWeight:900,color:"#1a5276"}}>{n}</div>
           </div>
         ))}
@@ -7002,9 +7007,12 @@ function ActivityPanel({activity, setActivity}) {
 
       {/* Filtros */}
       <div style={{background:"#fff",borderRadius:12,padding:12,marginBottom:12,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",boxShadow:"0 1px 4px #0001"}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)}
-          placeholder="🔍 Buscar por usuario, acción o detalle..."
-          style={{flex:1,minWidth:200,padding:"7px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none"}}/>
+        <div style={{position:"relative",flex:1,minWidth:200}}>
+          <Search size={13} color="#aaa" strokeWidth={2.3} style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)"}}/>
+          <input value={search} onChange={e=>setSearch(e.target.value)}
+            placeholder="Buscar por usuario, acción o detalle..."
+            style={{width:"100%",padding:"7px 12px 7px 32px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+        </div>
         <select value={filterTipo} onChange={e=>setFilterTipo(e.target.value)}
           style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:12,background:"#fff",cursor:"pointer"}}>
           {tiposUnicos.map(t=><option key={t} value={t}>{t==="todos"?"Todas las acciones":t}</option>)}
@@ -7016,14 +7024,14 @@ function ActivityPanel({activity, setActivity}) {
                 <button onClick={async()=>{setActivity([]);await db.clearActivity();setConfirmClear(false);}} style={{padding:"3px 10px",borderRadius:6,border:"none",background:RED,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:12}}>Sí</button>
                 <button onClick={()=>setConfirmClear(false)} style={{padding:"3px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12}}>No</button>
               </div>
-            : <button onClick={()=>setConfirmClear(true)} style={{padding:"6px 12px",borderRadius:8,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:11,fontWeight:600,whiteSpace:"nowrap"}}>🗑 Limpiar</button>
+            : <button onClick={()=>setConfirmClear(true)} style={{padding:"6px 12px",borderRadius:8,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:11,fontWeight:600,whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:5}}><Trash size={11} strokeWidth={2.4}/>Limpiar</button>
         )}
       </div>
 
       {/* Tabla */}
       {filtered.length===0
         ? <div style={{textAlign:"center",padding:50,color:"#aaa",background:"#fff",borderRadius:12}}>
-            <div style={{fontSize:40,marginBottom:8}}>📝</div>
+            <div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><Pencil size={34} color="#ddd" strokeWidth={1.8}/></div>
             <div>{activity.length===0?"No hay actividad registrada aún.":"No hay resultados para ese filtro."}</div>
           </div>
         : <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 4px #0001",overflow:"auto"}}>
@@ -7037,7 +7045,7 @@ function ActivityPanel({activity, setActivity}) {
               </thead>
               <tbody>
                 {filtered.map((a,i)=>{
-                  const cfg = TIPOS[a.accion]||{color:"#666",bg:"#f5f5f5",icon:"•"};
+                  const cfg = TIPOS[a.accion]||{color:"#666",bg:"#f5f5f5",Icon:Info};
                   return (
                     <tr key={a.id||i} style={{borderTop:"1px solid #f5f5f5"}}>
                       <td style={{padding:"9px 12px",fontSize:11,color:"#888",whiteSpace:"nowrap"}}>{a.fecha}</td>
@@ -7046,8 +7054,8 @@ function ActivityPanel({activity, setActivity}) {
                         <span style={{fontSize:10,color:a.rol==="admin"?RED:"#1a5276",marginLeft:4,fontWeight:600}}>({a.rol})</span>
                       </td>
                       <td style={{padding:"9px 12px"}}>
-                        <span style={{background:cfg.bg,color:cfg.color,borderRadius:8,padding:"3px 9px",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>
-                          {cfg.icon} {a.accion}
+                        <span style={{display:"inline-flex",alignItems:"center",gap:5,background:cfg.bg,color:cfg.color,borderRadius:8,padding:"3px 9px",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>
+                          <cfg.Icon size={11} strokeWidth={2.4}/> {a.accion}
                         </span>
                       </td>
                       <td style={{padding:"9px 12px",color:"#555",fontSize:12,maxWidth:300,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={a.detalle}>{a.detalle}</td>
@@ -7096,8 +7104,8 @@ function PriceListsPanel({priceLists, setPriceLists}) {
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,alignItems:"start"}}>
       {/* Form */}
       <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 1px 4px #0001"}}>
-        <div style={{fontWeight:800,fontSize:15,marginBottom:16}}>
-          {editing ? "✏️ Editar lista" : "➕ Nueva lista de precios"}
+        <div style={{fontWeight:800,fontSize:15,marginBottom:16,display:"flex",alignItems:"center",gap:7}}>
+          {editing ? <><Pencil size={14} strokeWidth={2.4}/> Editar lista</> : <><Plus size={15} strokeWidth={2.4}/> Nueva lista de precios</>}
         </div>
         <Field label="Nombre de la lista">
           <input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}
@@ -7145,8 +7153,8 @@ function PriceListsPanel({priceLists, setPriceLists}) {
             </div>
             <div style={{display:"flex",gap:6}}>
               {pl.id!=="default"&&<>
-                <button onClick={()=>startEdit(pl)} style={{padding:"5px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12}}>✏️</button>
-                <button onClick={()=>del(pl.id)} style={{padding:"5px 10px",borderRadius:6,border:"1.5px solid #fcc",background:"#fff",cursor:"pointer",fontSize:12,color:RED}}>🗑</button>
+                <button onClick={()=>startEdit(pl)} style={{padding:"5px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12,display:"flex",alignItems:"center"}}><Pencil size={12} strokeWidth={2.3}/></button>
+                <button onClick={()=>del(pl.id)} style={{padding:"5px 10px",borderRadius:6,border:"1.5px solid #fcc",background:"#fff",cursor:"pointer",fontSize:12,color:RED,display:"flex",alignItems:"center"}}><Trash size={12} strokeWidth={2.3}/></button>
               </>}
               {pl.id==="default"&&<span style={{fontSize:11,color:"#aaa",padding:"5px 8px"}}>predeterminada</span>}
             </div>
@@ -7204,7 +7212,7 @@ function VendorsPanel({vendors,setVendors}) {
 
   return (
     <div style={{background:"#fff",borderRadius:12,padding:24,boxShadow:"0 1px 4px #0001",maxWidth:520}}>
-      <div style={{fontWeight:800,fontSize:16,marginBottom:16}}>👥 Gestión de Vendedores</div>
+      <div style={{fontWeight:800,fontSize:16,marginBottom:16,display:"flex",alignItems:"center",gap:7}}><Users size={16} strokeWidth={2.2}/>Gestión de Vendedores</div>
       <div style={{display:"flex",gap:8,marginBottom:20}}>
         <input value={newName} onChange={e=>setNewName(e.target.value)}
           onKeyDown={e=>e.key==="Enter"&&add()}
@@ -7218,25 +7226,25 @@ function VendorsPanel({vendors,setVendors}) {
         ? <div style={{textAlign:"center",padding:30,color:"#aaa"}}>No hay vendedores cargados.</div>
         : vendors.map(v=>(
           <div key={v} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderRadius:10,border:"1.5px solid #f0f0f0",marginBottom:8,background:"#fafafa"}}>
-            <span style={{fontSize:20}}>👤</span>
+            <div style={{width:30,height:30,borderRadius:9,background:"#f4f6f9",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Users size={14} color="#888" strokeWidth={2.1}/></div>
             {editing===v
               ? <>
                   <input value={editVal} onChange={e=>setEditVal(e.target.value)}
                     onKeyDown={e=>{if(e.key==="Enter")saveEdit(v);if(e.key==="Escape")setEditing(null);}}
                     style={{...inputStyle,flex:1,fontSize:13}} autoFocus/>
-                  <button onClick={()=>saveEdit(v)} style={{padding:"5px 12px",borderRadius:7,border:"none",background:"#1e8449",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:12}}>v</button>
-                  <button onClick={()=>setEditing(null)} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12}}>x</button>
+                  <button onClick={()=>saveEdit(v)} style={{padding:"5px 12px",borderRadius:7,border:"none",background:"#1e8449",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center"}}><CheckCircle size={13} strokeWidth={2.4}/></button>
+                  <button onClick={()=>setEditing(null)} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12,display:"flex",alignItems:"center"}}><XIcon size={12} strokeWidth={2.4}/></button>
                 </>
               : <>
                   <span style={{flex:1,fontWeight:600,fontSize:14}}>{v}</span>
-                  <button onClick={()=>{setEditing(v);setEditVal(v);}} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12}}>✏️️ Editar</button>
+                  <button onClick={()=>{setEditing(v);setEditVal(v);}} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",gap:5}}><Pencil size={11} strokeWidth={2.4}/>Editar</button>
                   {confirmDel===v
                     ? <div style={{display:"flex",alignItems:"center",gap:5,background:"#fdecea",borderRadius:8,padding:"4px 8px",border:`1px solid ${RED}44`}}>
                         <span style={{fontSize:11,color:RED,fontWeight:600,whiteSpace:"nowrap"}}>?Eliminar?</span>
                         <button onClick={doRemove} style={{padding:"3px 9px",borderRadius:6,border:"none",background:RED,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:11}}>Sí</button>
                         <button onClick={()=>setConfirmDel(null)} style={{padding:"3px 8px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11}}>No</button>
                       </div>
-                    : <button onClick={()=>setConfirmDel(v)} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:12}}>🗑</button>
+                    : <button onClick={()=>setConfirmDel(v)} style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center"}}><Trash size={12} strokeWidth={2.3}/></button>
                   }
                 </>
             }
@@ -7304,8 +7312,8 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
         <div style={{fontWeight:700,fontSize:13}}>{label}</div>
         {sub&&<div style={{fontSize:11,color:"#888",marginTop:2}}>{sub}</div>}
       </div>
-      <button onClick={onChange} style={{padding:"6px 14px",borderRadius:20,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:val?"#1e8449":"#e5e5e5",color:val?"#fff":"#888",whiteSpace:"nowrap"}}>
-        {val?"✅ Sí":"🔒 No"}
+      <button onClick={onChange} style={{padding:"6px 14px",borderRadius:20,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:val?"#1e8449":"#e5e5e5",color:val?"#fff":"#888",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:5}}>
+        {val?<><CheckCircle size={11} strokeWidth={2.5}/>Sí</>:<><Lock size={11} strokeWidth={2.5}/>No</>}
       </button>
     </div>
   );
@@ -7316,11 +7324,11 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
   return (
     <div>
       <div style={{background:"#fff",borderRadius:12,padding:4,marginBottom:16,display:"flex",gap:4,boxShadow:"0 1px 4px #0001"}}>
-        <button onClick={()=>{setView("lista");cancelEdit();}} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="lista"?`linear-gradient(135deg,#922b21,${RED})`:"transparent",color:view==="lista"?"#fff":"#555"}}>
-          🔐 Usuarios ({users.length})
+        <button onClick={()=>{setView("lista");cancelEdit();}} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="lista"?`linear-gradient(135deg,#922b21,${RED})`:"transparent",color:view==="lista"?"#fff":"#555",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+          <Lock size={13} strokeWidth={2.3}/> Usuarios ({users.length})
         </button>
-        <button onClick={()=>setView("form")} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="form"?`linear-gradient(135deg,#922b21,${RED})`:"transparent",color:view==="form"?"#fff":"#555"}}>
-          {editing?"✏️ Editando":"+ Nuevo usuario"}
+        <button onClick={()=>setView("form")} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="form"?`linear-gradient(135deg,#922b21,${RED})`:"transparent",color:view==="form"?"#fff":"#555",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+          {editing?<><Pencil size={12} strokeWidth={2.4}/> Editando</>:<><Plus size={13} strokeWidth={2.4}/> Nuevo usuario</>}
         </button>
       </div>
 
@@ -7330,21 +7338,21 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
             <div key={u.id} style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 4px #0001",border:`1.5px solid ${editing===u.id?"#c0392b":"#f0f0f0"}`}}>
               <div style={{display:"flex",alignItems:"center",gap:12}}>
                 <div style={{width:48,height:48,borderRadius:"50%",background:u.avatar?"transparent":"linear-gradient(135deg,#7b1a1a,#c0392b)",overflow:"hidden",flexShrink:0,border:"2px solid #f0f0f0",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  {u.avatar ? <img src={u.avatar} alt={u.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontSize:20}}>{u.role==="admin"?"👑":"👤"}</span>}
+                  {u.avatar ? <img src={u.avatar} alt={u.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/> : (u.role==="admin" ? <Crown size={20} color="#fff" strokeWidth={2}/> : <Users size={19} color="#fff" strokeWidth={2}/>)}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontWeight:700,fontSize:14}}>{u.name}{u.cargo&&<span style={{fontWeight:400,color:"#888",fontSize:12}}> · {u.cargo}</span>}</div>
-                  <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:4}}>
+                  <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:4,alignItems:"center"}}>
                     <span style={{background:u.role==="admin"?"#fdecea":"#eaf4fc",color:u.role==="admin"?RED:"#1a5276",borderRadius:6,padding:"1px 8px",fontWeight:700,fontSize:10}}>{u.role==="admin"?"Admin":"Vendedor"}</span>
-                    {u.vendedor&&<span style={{background:"#f5eef8",color:"#6c3483",borderRadius:6,padding:"1px 8px",fontWeight:700,fontSize:10}}>👤 {u.vendedor}</span>}
-                    {u.barcodeEnabled&&<span style={{background:"#eaf4fc",color:"#1a5276",borderRadius:6,padding:"1px 8px",fontWeight:700,fontSize:10}}>📷 Lector</span>}
-                    {u.canSeeAll===false&&<span style={{background:"#fef9e7",color:"#b7770d",borderRadius:6,padding:"1px 8px",fontWeight:700,fontSize:10}}>🔒 Solo suyos</span>}
+                    {u.vendedor&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:"#f5eef8",color:"#6c3483",borderRadius:6,padding:"1px 8px",fontWeight:700,fontSize:10}}><Users size={9} strokeWidth={2.5}/>{u.vendedor}</span>}
+                    {u.barcodeEnabled&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:"#eaf4fc",color:"#1a5276",borderRadius:6,padding:"1px 8px",fontWeight:700,fontSize:10}}><Camera size={9} strokeWidth={2.5}/>Lector</span>}
+                    {u.canSeeAll===false&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:"#fef9e7",color:"#b7770d",borderRadius:6,padding:"1px 8px",fontWeight:700,fontSize:10}}><Lock size={9} strokeWidth={2.5}/>Solo suyos</span>}
                   </div>
-                  {(u.phone||u.email)&&<div style={{fontSize:11,color:"#aaa",marginTop:4}}>{u.phone&&<span>📱 {u.phone}</span>}{u.phone&&u.email&&" · "}{u.email&&<span>📧 {u.email}</span>}</div>}
+                  {(u.phone||u.email)&&<div style={{fontSize:11,color:"#aaa",marginTop:4,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>{u.phone&&<span style={{display:"inline-flex",alignItems:"center",gap:3}}><Phone size={9} strokeWidth={2.4}/>{u.phone}</span>}{u.phone&&u.email&&"·"}{u.email&&<span style={{display:"inline-flex",alignItems:"center",gap:3}}><Mail size={9} strokeWidth={2.4}/>{u.email}</span>}</div>}
                 </div>
                 <div style={{display:"flex",gap:6,flexShrink:0}}>
-                  <button onClick={()=>{startEdit(u);setView("form");}} style={{padding:"6px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12,fontWeight:600}}>✏️ Editar</button>
-                  <button onClick={()=>remove(u.id)} style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:12}}>🗑</button>
+                  <button onClick={()=>{startEdit(u);setView("form");}} style={{padding:"6px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:5}}><Pencil size={11} strokeWidth={2.4}/>Editar</button>
+                  <button onClick={()=>remove(u.id)} style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center"}}><Trash size={12} strokeWidth={2.3}/></button>
                 </div>
               </div>
             </div>
@@ -7357,18 +7365,18 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
 
       {view==="form" && (
         <div style={{background:"#fff",borderRadius:12,padding:24,boxShadow:"0 1px 4px #0001"}}>
-          <div style={{fontWeight:800,fontSize:15,marginBottom:16}}>{editing?"✏️ Editando usuario":"+ Nuevo usuario"}</div>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:16,display:"flex",alignItems:"center",gap:7}}>{editing?<><Pencil size={14} strokeWidth={2.4}/>Editando usuario</>:<><Plus size={15} strokeWidth={2.4}/>Nuevo usuario</>}</div>
           <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:16,padding:"14px 16px",background:"#f9f9f9",borderRadius:12}}>
             <div style={{width:72,height:72,borderRadius:"50%",background:avatarPreview?"transparent":"linear-gradient(135deg,#7b1a1a,#c0392b)",overflow:"hidden",flexShrink:0,border:"3px solid #fff",boxShadow:"0 2px 8px #0002",display:"flex",alignItems:"center",justifyContent:"center"}}>
-              {avatarPreview ? <img src={avatarPreview} alt="avatar" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span style={{fontSize:28}}>👤</span>}
+              {avatarPreview ? <img src={avatarPreview} alt="avatar" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <Users size={30} color="#fff" strokeWidth={2}/>}
             </div>
             <div style={{flex:1}}>
               <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>Foto de perfil</div>
-              <label style={{display:"inline-block",padding:"8px 14px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",color:"#555"}}>
-                📷 Subir foto
+              <label style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",color:"#555"}}>
+                <Camera size={13} strokeWidth={2.3}/> Subir foto
                 <input type="file" accept="image/*" onChange={handleAvatar} style={{display:"none"}}/>
               </label>
-              {avatarPreview&&<button onClick={()=>{setAvatarPreview("");setForm(f=>({...f,avatar:""}));}} style={{marginLeft:8,padding:"8px 12px",borderRadius:8,border:"none",background:"#fdecea",color:RED,fontSize:12,cursor:"pointer",fontWeight:600}}>✕ Quitar</button>}
+              {avatarPreview&&<button onClick={()=>{setAvatarPreview("");setForm(f=>({...f,avatar:""}));}} style={{marginLeft:8,padding:"8px 12px",borderRadius:8,border:"none",background:"#fdecea",color:RED,fontSize:12,cursor:"pointer",fontWeight:600,display:"inline-flex",alignItems:"center",gap:4}}><XIcon size={10} strokeWidth={2.6}/>Quitar</button>}
               <div style={{fontSize:11,color:"#aaa",marginTop:6}}>Aparecerá en el PDF y lista de usuarios</div>
             </div>
           </div>
@@ -7383,7 +7391,7 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
             <Field label="Contraseña *">
               <div style={{position:"relative"}}>
                 <input type={showPass.form?"text":"password"} value={form.password} onChange={e=>setForm(f=>({...f,password:e.target.value}))} placeholder="••••••••" style={{...inputStyle,paddingRight:40}}/>
-                <button onClick={()=>setShowPass(s=>({...s,form:!s.form}))} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:15,color:"#aaa"}}>{showPass.form?"🙈":"👁️"}</button>
+                <button onClick={()=>setShowPass(s=>({...s,form:!s.form}))} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"#aaa",display:"flex",alignItems:"center"}}>{showPass.form?<EyeOff size={15} strokeWidth={2.2}/>:<Eye size={15} strokeWidth={2.2}/>}</button>
               </div>
             </Field>
           </div>
@@ -7397,9 +7405,9 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
             </select>
           </Field>
           <Toggle label="Ver todos los pedidos" sub={form.canSeeAll?"Ve todos los pedidos":"Solo sus propios pedidos"} val={form.canSeeAll} onChange={()=>setForm(f=>({...f,canSeeAll:!f.canSeeAll}))}/>
-          <Toggle label="📷 Lector de código de barras" sub={form.barcodeEnabled?"Puede usar el lector":"Sin acceso al lector"} val={form.barcodeEnabled} onChange={()=>setForm(f=>({...f,barcodeEnabled:!f.barcodeEnabled}))}/>
+          <Toggle label={<><Camera size={12} strokeWidth={2.4} style={{display:"inline",verticalAlign:"-2px",marginRight:5}}/>Lector de código de barras</>} sub={form.barcodeEnabled?"Puede usar el lector":"Sin acceso al lector"} val={form.barcodeEnabled} onChange={()=>setForm(f=>({...f,barcodeEnabled:!f.barcodeEnabled}))}/>
           <div style={{display:"flex",gap:8,marginTop:8}}>
-            <button onClick={save} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:RED,color:"#fff",fontWeight:800,cursor:"pointer",fontSize:14}}>{editing?"💾 Guardar cambios":"✅ Crear usuario"}</button>
+            <button onClick={save} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:RED,color:"#fff",fontWeight:800,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>{editing?<><Save size={14} strokeWidth={2.3}/>Guardar cambios</>:<><CheckCircle size={14} strokeWidth={2.3}/>Crear usuario</>}</button>
             <button onClick={()=>{cancelEdit();setView("lista");}} style={{padding:"11px 16px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontWeight:600,color:"#666"}}>Cancelar</button>
           </div>
         </div>
@@ -7636,7 +7644,7 @@ function ExcelPanel({products,setProducts}) {
       await new Promise(r=>setTimeout(r,100));
     }
     setProducts(newProds);
-    setStatus({type:"success",msg:`✅ ${updated.length} productos actualizados.${notFound.length>0?` ${notFound.length} códigos no encontrados en el catálogo.`:""}`});
+    setStatus({type:"success",msg:`${updated.length} productos actualizados.${notFound.length>0?` ${notFound.length} códigos no encontrados en el catálogo.`:""}`});
     setPreview(null);
     if(fileRef.current) fileRef.current.value="";
   };
@@ -7646,18 +7654,18 @@ function ExcelPanel({products,setProducts}) {
       {rotos.length>0 && (
         <div style={{background:"#fdecea",border:"1px solid #f1948a",borderRadius:12,padding:"14px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
           <div style={{flex:1,minWidth:220}}>
-            <div style={{fontWeight:800,fontSize:14,color:RED}}>⚠️ {rotos.length} producto{rotos.length!==1?"s":""} con precio de venta roto</div>
+            <div style={{fontWeight:800,fontSize:14,color:RED,display:"flex",alignItems:"center",gap:6}}><AlertTriangle size={14} strokeWidth={2.3}/>{rotos.length} producto{rotos.length!==1?"s":""} con precio de venta roto</div>
             <div style={{fontSize:12,color:"#a33",marginTop:2}}>Quedaron con precio de venta igual o menor al costo, probablemente por un import anterior. Esto los recalcula como costo × 1,5 (tu fórmula habitual).</div>
           </div>
           <button onClick={corregirPrecios} disabled={fixing}
-            style={{padding:"9px 16px",borderRadius:9,border:"none",background:RED,color:"#fff",fontWeight:700,fontSize:13,cursor:fixing?"default":"pointer",opacity:fixing?0.7:1,whiteSpace:"nowrap"}}>
-            {fixing?"Corrigiendo...":`🔧 Corregir ${rotos.length} producto${rotos.length!==1?"s":""}`}
+            style={{padding:"9px 16px",borderRadius:9,border:"none",background:RED,color:"#fff",fontWeight:700,fontSize:13,cursor:fixing?"default":"pointer",opacity:fixing?0.7:1,whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}}>
+            {fixing?"Corrigiendo...":<><Wrench size={12} strokeWidth={2.4}/> Corregir {rotos.length} producto{rotos.length!==1?"s":""}</>}
           </button>
         </div>
       )}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,alignItems:"start"}}>
       <div style={{background:"#fff",borderRadius:12,padding:24,boxShadow:"0 1px 4px #0001"}}>
-        <div style={{fontWeight:800,fontSize:16,marginBottom:6}}>📊 Importar Lista de Precios</div>
+        <div style={{fontWeight:800,fontSize:16,marginBottom:6,display:"flex",alignItems:"center",gap:7}}><BarChart size={16} strokeWidth={2.2}/>Importar Lista de Precios</div>
         <div style={{fontSize:13,color:"#666",marginBottom:16,lineHeight:1.6}}>
           El sistema lee automáticamente las columnas:<br/>
           <strong>CÓDIGO . DESCRIPCIÓN . PRECIO CON IVA . PRECIO OFERTA . FECHA ULTIMA ACTUALIZACIÓN . PRECIO FINAL . UNIDAD (múltiplo de compra) . CÓDIGO DE BARRAS</strong>
@@ -7676,7 +7684,7 @@ function ExcelPanel({products,setProducts}) {
         <div onClick={()=>fileRef.current?.click()} style={{border:"2px dashed #e5e5e5",borderRadius:12,padding:"28px 20px",textAlign:"center",cursor:"pointer",background:"#fafafa",marginBottom:14,transition:"border-color .2s"}}
           onMouseEnter={e=>e.currentTarget.style.borderColor=RED}
           onMouseLeave={e=>e.currentTarget.style.borderColor="#e5e5e5"}>
-          <div style={{fontSize:36,marginBottom:8}}>📂</div>
+          <div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><Folder size={32} color="#ccc" strokeWidth={1.7}/></div>
           <div style={{fontWeight:700,color:"#555",fontSize:14}}>Hacé clic o arrastrá tu archivo Excel</div>
           <div style={{fontSize:12,color:"#aaa",marginTop:4}}>.xlsx . .xls . .csv</div>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}}
@@ -7687,18 +7695,18 @@ function ExcelPanel({products,setProducts}) {
           color:status.type==="error"?RED:status.type==="progress"?"#7d6608":"#1e8449",
           fontSize:13,fontWeight:600,marginBottom:12}}>{status.msg}</div>}
         {preview&&(
-          <button onClick={applyImport} disabled={status?.type==="progress"} style={{width:"100%",padding:"11px",borderRadius:10,border:"none",background:status?.type==="progress"?"#aaa":`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",fontWeight:800,fontSize:14,cursor:status?.type==="progress"?"not-allowed":"pointer"}}>
-            {status?.type==="progress"?"⏳ Importando, no cierres esta página...":"📥 Aplicar importación ("+preview.total+" productos)"}
+          <button onClick={applyImport} disabled={status?.type==="progress"} style={{width:"100%",padding:"11px",borderRadius:10,border:"none",background:status?.type==="progress"?"#aaa":`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",fontWeight:800,fontSize:14,cursor:status?.type==="progress"?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+            {status?.type==="progress"?<><Clock size={13} strokeWidth={2.4}/> Importando, no cierres esta página...</>:<><Save size={13} strokeWidth={2.4}/> Aplicar importación ({preview.total} productos)</>}
           </button>
         )}
       </div>
       <div style={{background:"#fff",borderRadius:12,padding:24,boxShadow:"0 1px 4px #0001"}}>
-        <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>
-          {preview ? `👁️ Vista previa (${preview.total} filas)` : "📋 Instrucciones"}
+        <div style={{fontWeight:800,fontSize:15,marginBottom:12,display:"flex",alignItems:"center",gap:6}}>
+          {preview ? <><Eye size={14} strokeWidth={2.3}/>Vista previa ({preview.total} filas)</> : <><ClipboardList size={14} strokeWidth={2.3}/>Instrucciones</>}
         </div>
         {preview?.detectedCols && (
           <div style={{background:"#f0fdf4",border:"1px solid #a7f3d0",borderRadius:8,padding:"10px 12px",marginBottom:12}}>
-            <div style={{fontWeight:700,fontSize:11,color:"#065f46",marginBottom:6}}>✅ Columnas detectadas:</div>
+            <div style={{fontWeight:700,fontSize:11,color:"#065f46",marginBottom:6,display:"flex",alignItems:"center",gap:5}}><CheckCircle size={11} strokeWidth={2.5}/>Columnas detectadas:</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
               {Object.entries(preview.detectedCols).map(([k,v])=>(
                 <span key={k} style={{background:"#fff",border:"1px solid #d1fae5",borderRadius:6,padding:"3px 8px",fontSize:11,color:"#065f46"}}>
