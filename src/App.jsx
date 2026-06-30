@@ -174,7 +174,7 @@ const supabase = createClient(SUPA_URL, SUPA_ANON);
 const supaAdmin = supabase;
 
 const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock,multiploCompra:r.multiplo_compra||1,barcode:r.barcode||"",costPriceAnterior:r.cost_price_anterior||0,imageUrl:r.image_url||""});
-const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||"",isTest:r.is_test||false,isSandbox:r.is_sandbox||false,internalNote:r.internal_note||"",editStatus:r.edit_status||"",editReason:r.edit_reason||"",editItems:r.edit_items||null,editRejectReason:r.edit_reject_reason||"",comprobanteUrl:r.comprobante_url||"",comprobanteNombre:r.comprobante_nombre||"",comprobanteFecha:r.comprobante_fecha||"",pagoTipo:r.pago_tipo||"",pagoEfectivoFecha:r.pago_efectivo_fecha||""});
+const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||"",isTest:r.is_test||false,isSandbox:r.is_sandbox||false,internalNote:r.internal_note||"",editStatus:r.edit_status||"",editReason:r.edit_reason||"",editItems:r.edit_items||null,editRejectReason:r.edit_reject_reason||"",comprobanteUrl:r.comprobante_url||"",comprobanteNombre:r.comprobante_nombre||"",comprobanteFecha:r.comprobante_fecha||"",pagoTipo:r.pago_tipo||"",pagoEfectivoFecha:r.pago_efectivo_fecha||"",encargueResuelto:r.encargue_resuelto||false});
 const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,date:r.date,items:r.items||[],validity:r.validity||"",docNum:r.doc_num||"",convertida:r.convertida||false,ordenId:r.orden_id||"",extendida:r.extendida||false,extendReason:r.extend_reason||"",extendDate:r.extend_date||"",globalDisc:r.global_disc||null,subtotal:r.subtotal||0});
 
 
@@ -293,7 +293,7 @@ const db = {
   deleteProduct: async (id) => { const {error} = await supaAdmin.from("lm_products").delete().eq("id",id); if(error) throw error; },
 
   getOrders:    async () => { const {data,error} = await supabase.from("lm_orders").select("*").order("date",{ascending:false}); if(error) throw error; return (data||[]).map(mapOrder); },
-  upsertOrder:  async (o) => { const {error} = await supaAdmin.from("lm_orders").upsert({id:o.id,client:o.client,vendedor:o.vendedor||"",notes:o.notes||"",total:o.total,stage:o.stage,date:o.date,items:o.items,doc_num:o.docNum||"",comp_num:o.compNum||"",is_test:o.isTest||false,is_sandbox:o.isSandbox||false,internal_note:o.internalNote||"",edit_status:o.editStatus||"",edit_reason:o.editReason||"",edit_items:o.editItems||null,edit_reject_reason:o.editRejectReason||"",comprobante_url:o.comprobanteUrl||"",comprobante_nombre:o.comprobanteNombre||"",comprobante_fecha:o.comprobanteFecha||"",pago_tipo:o.pagoTipo||"",pago_efectivo_fecha:o.pagoEfectivoFecha||""}); if(error) throw error; },
+  upsertOrder:  async (o) => { const {error} = await supaAdmin.from("lm_orders").upsert({id:o.id,client:o.client,vendedor:o.vendedor||"",notes:o.notes||"",total:o.total,stage:o.stage,date:o.date,items:o.items,doc_num:o.docNum||"",comp_num:o.compNum||"",is_test:o.isTest||false,is_sandbox:o.isSandbox||false,internal_note:o.internalNote||"",edit_status:o.editStatus||"",edit_reason:o.editReason||"",edit_items:o.editItems||null,edit_reject_reason:o.editRejectReason||"",comprobante_url:o.comprobanteUrl||"",comprobante_nombre:o.comprobanteNombre||"",comprobante_fecha:o.comprobanteFecha||"",pago_tipo:o.pagoTipo||"",pago_efectivo_fecha:o.pagoEfectivoFecha||"",encargue_resuelto:o.encargueResuelto||false}); if(error) throw error; },
   deleteOrder:  async (id) => { const {error} = await supaAdmin.from("lm_orders").delete().eq("id",id); if(error) throw error; },
 
   getQuotes:    async () => { const {data,error} = await supabase.from("lm_quotes").select("*").order("date",{ascending:false}); if(error) throw error; return (data||[]).map(mapQuote); },
@@ -1779,6 +1779,15 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     setProducts(p=>p.map(x=>x.id===upd.id?upd:x)); await db.upsertProduct(upd);
     if(prev) await logActivity("Precio/stock editado", `${upd.name} - Venta: ${fARS(upd.salePrice)} (antes ${fARS(prev.salePrice)}) - Stock: ${upd.stock}`, upd.id, "producto");
   };
+  // ── POR ENCARGUE: marcar manualmente como resuelto cuando llega la mercaderia ──
+  const resolverEncargue = async (orderId) => {
+    const ord = orders.find(o=>o.id===orderId);
+    if(!ord) return;
+    const updated = {...ord, encargueResuelto:true};
+    setOrders(os=>os.map(o=>o.id===orderId?updated:o));
+    await db.upsertOrder(updated);
+  };
+
   const addStock = async (pid,qty,newCost) => {
     const prod=products.find(p=>p.id===pid);
     const updatedProds=products.map(x=>{if(x.id!==pid)return x;const u={...x,stock:x.stock+qty};if(newCost){u.costPrice=newCost;u.salePrice=Math.round(newCost*1.5*100)/100;}return u;});
@@ -1794,6 +1803,25 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
         await db.addNotif(notif); setNotifs(n=>[notif,...n]);
       } catch(e) {
         console.warn("No se pudo crear la notificacion de alta de mercaderia (el stock SI se actualizo):", e);
+      }
+      // Avisarle al vendedor si este producto tenía pedidos esperando por encargue y ya
+      // entró stock suficiente como para que pueda cerrar la venta con el cliente. Esto
+      // es solo un AVISO — no resuelve nada solo, el vendedor confirma manualmente desde
+      // la tarjeta del pedido ("Ya está disponible"), para no prometerle algo a un cliente
+      // por accidente si en realidad ese stock nuevo ya estaba comprometido con otro pedido.
+      if(updProd.stock > 0) {
+        const pendientes = orders.filter(o=>!o.encargueResuelto && (o.items||[]).some(it=>it.pid===pid && it.porEncargue));
+        for(const ord of pendientes) {
+          try {
+            await sendCrossNotif(db, setNotifs, {
+              title: "📦 Llegó stock — revisá el pedido",
+              body: `${prod.name} tiene stock de nuevo. El pedido de ${ord.client} estaba esperando — fijate si ya podés cerrarlo.`,
+              tag: `encargue-${ord.id}-${pid}`,
+              para: ord.vendedor || "",
+              de: "admin",
+            });
+          } catch(e) { console.warn("No se pudo avisar al vendedor del encargue resuelto:", e); }
+        }
       }
     }
   };
@@ -2175,6 +2203,8 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
           onDeleteClient={deleteClient} onRejectDeleteClient={rejectDeleteClient}
           onQuickReviewPO={quickReviewPO} onViewPO={(id)=>{setDeepLinkPOId(id);setTab("solicitud");}}
           onGoToPagos={()=>{setDeepLinkAdminSection("pagos");setTab("admin");}}
+          onPedirEncargue={(items)=>{setDeepLinkSolicitudItem(items);setTab("solicitud");}}
+          onResolverEncargue={resolverEncargue}
           currentUser={currentUser} isMobile={isMobile}/>}
         {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} promos={promos} orders={orders}/>}
         {tab==="clientes"   && <ClientesPanel clients={clients} onSave={saveClient} onDelete={deleteClient} onRequestDelete={requestDeleteClient} onRejectDelete={rejectDeleteClient} currentUser={currentUser} isMobile={isMobile} orders={orders}/>}
@@ -2494,18 +2524,21 @@ function ConsolaAprobaciones({orders,clients,purchaseOrders,onApproveEditRequest
 }
 
 // ─── CENTRAL ──────────────────────────────────────────────────────────────────
-function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,onConfirmarComprobante,onRechazarComprobante,onMarcarEfectivo,onConfirmarEfectivo,onRechazarEfectivo,exigirPagoConfirmado,clients,purchaseOrders,onDeleteClient,onRejectDeleteClient,onQuickReviewPO,onViewPO,onGoToPagos,currentUser,isMobile}) {
+function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,onConfirmarComprobante,onRechazarComprobante,onMarcarEfectivo,onConfirmarEfectivo,onRechazarEfectivo,exigirPagoConfirmado,clients,purchaseOrders,onDeleteClient,onRejectDeleteClient,onQuickReviewPO,onViewPO,onGoToPagos,onPedirEncargue,onResolverEncargue,currentUser,isMobile}) {
   const isAdmin = currentUser?.role === "admin";
   const [fStage,setFStage]=useState("todos");
   const [fVendedor,setFVendedor]=useState("todos");
   const [search,setSearch]=useState("");
   const [expanded,setExpanded]=useState(null);
+  const [soloEncargue,setSoloEncargue]=useState(false);
   const getP = id=>products.find(p=>p.id===id);
   const vendedores = useMemo(()=>[...new Set(orders.map(o=>o.vendedor).filter(Boolean))].sort(),[orders]);
+  const countEncargue = useMemo(()=>orders.filter(o=>!o.encargueResuelto&&(o.items||[]).some(it=>it.porEncargue&&it.qtyFaltante>0)).length,[orders]);
   const filtered = orders.filter(o=>{
     if(fStage!=="todos"&&o.stage!==fStage) return false;
     if(fVendedor!=="todos"&&o.vendedor!==fVendedor) return false;
     if(search&&!norm(o.client).includes(norm(search))&&!o.id.toLowerCase().includes(search.toLowerCase())) return false;
+    if(soloEncargue&&!(!o.encargueResuelto&&(o.items||[]).some(it=>it.porEncargue&&it.qtyFaltante>0))) return false;
     return true;
   });
   // Si todos los pedidos son sandbox (usuario Prueba), contar normalmente
@@ -2566,11 +2599,12 @@ function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onAppro
         </select>}
         <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
           {["todos",...STAGES].map(s=>{const c=SCFG[s];return <button key={s} onClick={()=>setFStage(s)} style={{padding:"5px 11px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:fStage===s?(c?.color||RED):"#e5e5e5",background:fStage===s?(c?.bg||"#fdecea"):"#fff",color:fStage===s?(c?.color||RED):"#666"}}>{s==="todos"?"Todos":c.label}</button>;})}
+          {countEncargue>0 && <button onClick={()=>setSoloEncargue(s=>!s)} style={{padding:"5px 11px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:700,borderColor:soloEncargue?"#b7770d":"#f0d080",background:soloEncargue?"#fef3e0":"#fffaf2",color:"#b7770d",display:"inline-flex",alignItems:"center",gap:5}}><Package size={10} strokeWidth={2.5}/>Por encargue ({countEncargue})</button>}
         </div>
       </div>
       {filtered.length===0
         ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{fontSize:48}}>📭</div><div style={{marginTop:8}}>No hay pedidos. !Creá uno desde "Nuevo Pedido"!</div></div>
-        : filtered.map(o=><OCard key={o.id} o={o} exp={expanded===o.id} toggle={()=>setExpanded(expanded===o.id?null:o.id)} getP={getP} onStage={onStage} onDel={onDel} onSaveNote={onSaveNote} onRequestEdit={onRequestEdit} onApproveEditRequest={onApproveEditRequest} onRejectEditRequest={onRejectEditRequest} onSubmitEdit={onSubmitEdit} onApproveEdit={onApproveEdit} onRejectEdit={onRejectEdit} onUploadComprobante={onUploadComprobante} onConfirmarComprobante={onConfirmarComprobante} onRechazarComprobante={onRechazarComprobante} onMarcarEfectivo={onMarcarEfectivo} onConfirmarEfectivo={onConfirmarEfectivo} onRechazarEfectivo={onRechazarEfectivo} exigirPagoConfirmado={exigirPagoConfirmado} onGoToPagos={onGoToPagos} currentUser={currentUser} products={products}/>)
+        : filtered.map(o=><OCard key={o.id} o={o} exp={expanded===o.id} toggle={()=>setExpanded(expanded===o.id?null:o.id)} getP={getP} onStage={onStage} onDel={onDel} onSaveNote={onSaveNote} onRequestEdit={onRequestEdit} onApproveEditRequest={onApproveEditRequest} onRejectEditRequest={onRejectEditRequest} onSubmitEdit={onSubmitEdit} onApproveEdit={onApproveEdit} onRejectEdit={onRejectEdit} onUploadComprobante={onUploadComprobante} onConfirmarComprobante={onConfirmarComprobante} onRechazarComprobante={onRechazarComprobante} onMarcarEfectivo={onMarcarEfectivo} onConfirmarEfectivo={onConfirmarEfectivo} onRechazarEfectivo={onRechazarEfectivo} exigirPagoConfirmado={exigirPagoConfirmado} onGoToPagos={onGoToPagos} onPedirEncargue={onPedirEncargue} onResolverEncargue={onResolverEncargue} currentUser={currentUser} products={products}/>)
       }
     </div>
   );
@@ -2588,8 +2622,10 @@ function DelBtn({onConfirm}) {
   return <button onClick={()=>setConfirm(true)} style={{marginLeft:"auto",padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13,display:"inline-flex",alignItems:"center",gap:5}}><Trash size={12} strokeWidth={2.4}/> Eliminar</button>;
 }
 
-function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,onConfirmarComprobante,onRechazarComprobante,onMarcarEfectivo,onConfirmarEfectivo,onRechazarEfectivo,exigirPagoConfirmado,onGoToPagos,currentUser,products}) {
+function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,onConfirmarComprobante,onRechazarComprobante,onMarcarEfectivo,onConfirmarEfectivo,onRechazarEfectivo,exigirPagoConfirmado,onGoToPagos,onPedirEncargue,onResolverEncargue,currentUser,products}) {
   const isAdmin = currentUser?.role === "admin";
+  const itemsPorEncargue = (o.items||[]).filter(it=>it.porEncargue && it.qtyFaltante>0);
+  const tieneEncargue = itemsPorEncargue.length>0 && !o.encargueResuelto;
   const idx=STAGES.indexOf(o.stage), next=STAGES[idx+1];
   const pt = normPagoTipo(o.pagoTipo); // normaliza valores viejos ("comprobante"/"efectivo" sin sufijo)
   const pagoConfirmado = pt==="comprobante_confirmado" || pt==="efectivo_confirmado";
@@ -2677,6 +2713,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
             <span>{o.date}</span>
             {o.vendedor&&<><Dot/><span>{o.vendedor}</span></>}
             {o.internalNote&&<><Dot/><span style={{display:"inline-flex",alignItems:"center",gap:3,color:"#e67e22"}}><Pencil size={10} strokeWidth={2.5}/>Nota</span></>}
+            {tieneEncargue&&<><Dot/><span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef3e0",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"2px 8px",fontWeight:700}}><Package size={10} strokeWidth={2.5}/>Por encargue</span></>}
             {/* Pago — badge inline */}
             {pt==="comprobante_pendiente"  && <span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#eaf2f8",color:"#1a5276",border:"1px solid #aed6f1",borderRadius:20,padding:"2.5px 9px 2.5px 7px",fontSize:10.5,fontWeight:700}}><Paperclip size={10} strokeWidth={2.5}/>Comprobante · pendiente</span>}
             {pt==="efectivo_pendiente"     && <span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"2.5px 9px 2.5px 7px",fontSize:10.5,fontWeight:700}}><Banknote size={10} strokeWidth={2.5}/>Efectivo · pendiente</span>}
@@ -3090,6 +3127,30 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
               </div>
             )}
           </div>
+
+          {/* POR ENCARGUE */}
+          {tieneEncargue && (
+            <div style={{background:"#fffaf2",border:"1.5px solid #f0d080",borderRadius:10,padding:"10px 14px",marginBottom:12}}>
+              <div style={{fontWeight:700,fontSize:12.5,color:"#b7770d",marginBottom:6,display:"flex",alignItems:"center",gap:6}}><Package size={13} strokeWidth={2.4}/>Esperando reposición</div>
+              {itemsPorEncargue.map(it=>(
+                <div key={it.pid} style={{fontSize:12,color:"#7d6608",padding:"2px 0"}}>{it.name} — <strong>{it.qtyFaltante}</strong> por encargue</div>
+              ))}
+              <div style={{display:"flex",gap:8,marginTop:9,flexWrap:"wrap"}}>
+                {isAdmin && onPedirEncargue && (
+                  <button onClick={()=>onPedirEncargue(itemsPorEncargue.map(it=>({pid:it.pid,qty:it.qtyFaltante})))}
+                    style={{flex:1,minWidth:140,padding:"7px 12px",borderRadius:8,border:"none",background:"#6c3483",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                    <ShoppingCart size={12} strokeWidth={2.4}/> Pedir lo que falta
+                  </button>
+                )}
+                {onResolverEncargue && (
+                  <button onClick={async()=>{if(await confirmDialog("¿Marcar como disponible?","Esto confirma que ya llegó la mercadería y podés cerrar el pedido con el cliente."))onResolverEncargue(o.id);}}
+                    style={{flex:1,minWidth:140,padding:"7px 12px",borderRadius:8,border:"1.5px solid #1e8449",background:"#fff",color:"#1e8449",fontWeight:700,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                    <CheckCircle size={12} strokeWidth={2.4}/> Ya está disponible
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* ACTIONS */}
           <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
@@ -3588,17 +3649,24 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
   // ── Productos regulares (no-combo) ──
   // En loteMode (Solicitud de Compra), el proveedor exige pedir en multiplos de caja (columna UNIDAD del Excel)
   const step = p => loteMode ? (p.multiploCompra||1) : 1;
+  // "Por encargue": si se pide más de lo que hay en stock, no se bloquea — se deja
+  // tomar el pedido igual, pero queda marcado para hacerle seguimiento despues.
+  // No aplica en Solicitud de Compra (loteMode): ahi no se le vende a un cliente.
+  const encargueFields = (p,qty) => loteMode ? {} : {
+    porEncargue: qty > (p.stock||0),
+    qtyFaltante: Math.max(0, qty - (p.stock||0)),
+  };
   const addC=p=>setCart(c=>{
     const promo = getProductPromo(promos,p.id);
     const ex = c.find(i=>i.cartKey===p.id);
     if(ex) {
       const newQty = ex.qty+step(p);
       const {disc,label} = computeAutoDisc(promo,newQty);
-      return c.map(i=>i.cartKey===p.id?{...i,qty:newQty,disc,promoLabel:label}:i);
+      return c.map(i=>i.cartKey===p.id?{...i,qty:newQty,disc,promoLabel:label,...encargueFields(p,newQty)}:i);
     }
     const qtyInicial = step(p);
     const {disc,label} = computeAutoDisc(promo,qtyInicial);
-    return [...c,{pid:p.id,id:p.id,cartKey:p.id,qty:qtyInicial,price:p.salePrice,name:p.name,disc,promoLabel:label}];
+    return [...c,{pid:p.id,id:p.id,cartKey:p.id,qty:qtyInicial,price:p.salePrice,name:p.name,disc,promoLabel:label,...encargueFields(p,qtyInicial)}];
   });
   const setQ=(cartKey,qty)=>{
     if(qty<=0){setCart(c=>c.filter(i=>i.cartKey!==cartKey));return;}
@@ -3607,7 +3675,8 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
       if(i.comboId) return {...i,qty}; // los combos ajustan su cantidad como set completo, ver setComboQty
       const promo = getProductPromo(promos,i.pid);
       const {disc,label} = computeAutoDisc(promo,qty);
-      return {...i,qty,disc,promoLabel:label};
+      const p = products.find(pr=>pr.id===i.pid);
+      return {...i,qty,disc,promoLabel:label,...(p?encargueFields(p,qty):{})};
     }));
   };
 
@@ -3698,10 +3767,11 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
                   <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",lineHeight:1.3,marginBottom:2}}>{p.name}</div>
                   <div style={{fontSize:11,color:"#666"}}>{p.id} · {p.category}</div>
                   {loteMode && p.multiploCompra>1 && <span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"1.5px 8px",fontSize:10,fontWeight:700,marginTop:3}}><BoxIcon size={10} strokeWidth={2.4}/>Caja de {p.multiploCompra}</span>}
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4,flexWrap:"wrap"}}>
                     {isDesc&&<span style={{fontSize:11,color:"#aaa",textDecoration:"line-through"}}>{fARS(p.salePrice)}</span>}
                     <span style={{fontSize:15,fontWeight:800,color:RED}}>{fARS(finalPrice)}</span>
                     <SPill n={p.stock}/>
+                    {ic?.porEncargue && <span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef3e0",color:"#b7770d",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}><Package size={9} strokeWidth={2.5}/>{ic.qtyFaltante} por encargue</span>}
                   </div>
                 </div>
                 {ic
@@ -3746,6 +3816,7 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                 <span>{isDesc&&<span style={{fontSize:11,color:"#aaa",textDecoration:"line-through",marginRight:5}}>{fARS(p.salePrice)}</span>}<span style={{fontSize:17,fontWeight:800,color:RED}}>{fARS(finalPrice)}</span></span><SPill n={p.stock}/>
               </div>
+              {ic?.porEncargue && <div style={{marginBottom:10}}><span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef3e0",color:"#b7770d",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}><Package size={9} strokeWidth={2.5}/>{ic.qtyFaltante} por encargue</span></div>}
               {ic?<div style={{display:"flex",alignItems:"center",gap:5}}>
                 <button onClick={()=>setQ(p.id,ic.qty-step(p))} style={{width:27,height:27,borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:15,fontWeight:700}}>−</button>
                 <input type="number" value={ic.qty} onChange={e=>{
@@ -5130,11 +5201,16 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
 
   // Deep-link desde "Pedir reposicion" (stock bajo) — abre Nueva Solicitud con el producto
   // ya cargado, en la cantidad del multiplo del proveedor (el admin la puede modificar despues)
+  // Tambien acepta un array de items (ej: "Pedir lo que falta" desde un pedido con varios
+  // productos por encargue distintos a la vez)
   useEffect(() => {
     if(!prefillItem) return;
-    const p = products.find(pr=>pr.id===prefillItem.pid);
-    if(p) {
-      setCart([{pid:p.id, id:p.id, cartKey:p.id, qty:prefillItem.qty||1, price:p.salePrice, name:p.name}]);
+    const items = Array.isArray(prefillItem) ? prefillItem : [prefillItem];
+    const newCart = items
+      .map(it => { const p = products.find(pr=>pr.id===it.pid); return p ? {pid:p.id, id:p.id, cartKey:p.id, qty:it.qty||1, price:p.salePrice, name:p.name} : null; })
+      .filter(Boolean);
+    if(newCart.length) {
+      setCart(newCart);
       setView("nueva");
     }
     onConsumedPrefillItem && onConsumedPrefillItem();
