@@ -974,10 +974,13 @@ function NotifGroup({items, cfg, cat, currentUser, markRead, delNotif, onNavigat
   );
 }
 function NotifPanel({notifs,setNotifs,currentUser,users,onClose,onMarkAllRead,pushNotif,orders,onNavigate}) {
-  const myNotifs = notifs.filter(n =>
-    n.para === "todos" || n.para === currentUser.role || n.para === currentUser.id
-    || n.para === currentUser.username || n.para === currentUser.name || n.para === currentUser.vendedor
-  );
+  const myNotifs = notifs.filter(n => {
+    if(n.para==="todos"||n.para===currentUser.role||n.para===currentUser.id) return true;
+    const para=(n.para||"").toLowerCase().trim();
+    return para===(currentUser.name||"").toLowerCase().trim()
+      || para===(currentUser.username||"").toLowerCase().trim()
+      || (currentUser.vendedor && para===(currentUser.vendedor||"").toLowerCase().trim());
+  });
   const unread = myNotifs.filter(n => !leidaArr(n).includes(currentUser.id));
   const markRead = async (id) => {
     const n = notifs.find(x=>x.id===id);
@@ -1418,12 +1421,16 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const full = {id:genId(), fecha:new Date().toLocaleString("es-AR"), leida:[], ...notif};
     setNotifs(n=>[full,...n]); await db.addNotif(full);
   };
-  const unreadCount = notifs.filter(n =>
-    !leidaArr(n).includes(currentUser.id) &&
-    (n.para==="todos"||n.para===currentUser.role||n.para===currentUser.id)
-  ).length;
+  const isMyNotif = (n) => {
+    if(n.para==="todos"||n.para===currentUser.role||n.para===currentUser.id) return true;
+    const para=(n.para||"").toLowerCase().trim();
+    return para===(currentUser.name||"").toLowerCase().trim()
+      || para===(currentUser.username||"").toLowerCase().trim()
+      || (currentUser.vendedor && para===(currentUser.vendedor||"").toLowerCase().trim());
+  };
+  const unreadCount = notifs.filter(n => !leidaArr(n).includes(currentUser.id) && isMyNotif(n)).length;
   const markAllRead = async () => {
-    const toUpdate = notifs.filter(n=>!leidaArr(n).includes(currentUser.id)&&(n.para==="todos"||n.para===currentUser.role||n.para===currentUser.id));
+    const toUpdate = notifs.filter(n=>!leidaArr(n).includes(currentUser.id)&&isMyNotif(n));
     for(const n of toUpdate) await db.updateNotif(n.id,{leida:[...leidaArr(n),currentUser.id]});
     setNotifs(ns=>ns.map(n=>leidaArr(n).includes(currentUser.id)?n:{...n,leida:[...leidaArr(n),currentUser.id]}));
   };
@@ -1765,6 +1772,34 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     await db.upsertOrder(ordNo);
     await sendCrossNotif(db, setNotifs, {title:"❌ Cambios rechazados", body:`El admin rechazó tu edición del pedido de ${ordNo?.client}. Motivo: "${reason}"`, tag:`edit-no-${id}`, para:ordNo?.vendedor||"", de:"admin", ref:id});
   };
+  // Admin edición directa (sin flujo de solicitud/aprobación)
+  const editDirect = async (id, newItems) => {
+    const ord = orders.find(o=>o.id===id);
+    if(!ord) return;
+    const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
+    if(!isSandboxOrder) {
+      let prods = [...products];
+      // Devolver stock de items originales
+      ord.items.forEach(it => {
+        const idx = prods.findIndex(p=>p.id===it.pid);
+        if(idx>=0) prods[idx] = {...prods[idx], stock: prods[idx].stock + it.qty};
+      });
+      // Descontar stock de items nuevos
+      newItems.forEach(it => {
+        const idx = prods.findIndex(p=>p.id===it.pid);
+        if(idx>=0) prods[idx] = {...prods[idx], stock: Math.max(0, prods[idx].stock - it.qty)};
+      });
+      setProducts(prods);
+      for(const p of prods.filter(p=>ord.items.find(i=>i.pid===p.id)||newItems.find(i=>i.pid===p.id))) await db.upsertProduct(p);
+    }
+    const newTotal = newItems.reduce((s,it)=>s+it.price*it.qty, 0);
+    const updated = orders.map(o=>o.id===id ? {...o, items:newItems, total:newTotal, editStatus:"", editItems:null} : o);
+    setOrders(updated);
+    const ordUpd = updated.find(o=>o.id===id);
+    if(isSandboxOrder) return;
+    await db.upsertOrder(ordUpd);
+    await logActivity("Edición directa admin", `Pedido ${ordUpd.docNum||ordUpd.compNum||""} editado por admin`, id, "pedido");
+  };
   const addQuote = async (quote) => {
     const test = isTestOrder(quote.vendedor);
     const n = test ? 0 : await db.nextCounter("presu");
@@ -1989,9 +2024,15 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
         const n = payload.new;
         // Mostrar solo si está dirigida a este usuario o al rol admin
         const esAdmin = currentUser.role === "admin";
-        const dirigidaAMi = n.para === currentUser.username || n.para === currentUser.name || n.para === currentUser.vendedor;
+        const paraLower = (n.para||"").toLowerCase().trim();
+        const dirigidaAMi = paraLower === (currentUser.username||"").toLowerCase().trim()
+          || paraLower === (currentUser.name||"").toLowerCase().trim()
+          || (currentUser.vendedor && paraLower === (currentUser.vendedor||"").toLowerCase().trim());
         const dirigidaAAdmin = n.para === "admin" && esAdmin;
-        if((dirigidaAMi || dirigidaAAdmin) && n.de !== currentUser.name && n.de !== currentUser.vendedor) {
+        const deLower = (n.de||"").toLowerCase().trim();
+        const esDeOtro = deLower !== (currentUser.name||"").toLowerCase().trim()
+          && deLower !== (currentUser.vendedor||"").toLowerCase().trim();
+        if((dirigidaAMi || dirigidaAAdmin) && esDeOtro) {
           sendLocalNotif(n.titulo, n.cuerpo, n.tag);
           setNotifs(prev => prev.find(x=>x.id===n.id) ? prev : [n,...prev]);
         }
@@ -2252,7 +2293,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                 : orders}  // vendedor con canSeeAll ve todos
           products={pricedProducts} onStage={setStage} onDel={delOrder} onSaveNote={saveNote}
           onRequestEdit={requestEdit} onApproveEditRequest={approveEditRequest} onRejectEditRequest={rejectEditRequest}
-          onSubmitEdit={submitEdit} onApproveEdit={approveEdit} onRejectEdit={rejectEdit}
+          onSubmitEdit={submitEdit} onApproveEdit={approveEdit} onRejectEdit={rejectEdit} onEditDirect={editDirect}
           onUploadComprobante={uploadComprobante}
           onConfirmarComprobante={confirmarComprobante} onRechazarComprobante={rechazarComprobante}
           onMarcarEfectivo={marcarEfectivo} onConfirmarEfectivo={confirmarEfectivo} onRechazarEfectivo={rechazarEfectivo}
@@ -2582,7 +2623,7 @@ function ConsolaAprobaciones({orders,clients,purchaseOrders,onApproveEditRequest
 }
 
 // ─── CENTRAL ──────────────────────────────────────────────────────────────────
-function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,onConfirmarComprobante,onRechazarComprobante,onMarcarEfectivo,onConfirmarEfectivo,onRechazarEfectivo,exigirPagoConfirmado,clients,purchaseOrders,onDeleteClient,onRejectDeleteClient,onQuickReviewPO,onViewPO,onGoToPagos,onPedirEncargue,onResolverEncargue,currentUser,isMobile}) {
+function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onEditDirect,onUploadComprobante,onConfirmarComprobante,onRechazarComprobante,onMarcarEfectivo,onConfirmarEfectivo,onRechazarEfectivo,exigirPagoConfirmado,clients,purchaseOrders,onDeleteClient,onRejectDeleteClient,onQuickReviewPO,onViewPO,onGoToPagos,onPedirEncargue,onResolverEncargue,currentUser,isMobile}) {
   const isAdmin = currentUser?.role === "admin";
   const [fStage,setFStage]=useState("todos");
   const [fVendedor,setFVendedor]=useState("todos");
@@ -2662,7 +2703,7 @@ function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onAppro
       </div>
       {filtered.length===0
         ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{fontSize:48}}>📭</div><div style={{marginTop:8}}>No hay pedidos. !Creá uno desde "Nuevo Pedido"!</div></div>
-        : filtered.map(o=><OCard key={o.id} o={o} exp={expanded===o.id} toggle={()=>setExpanded(expanded===o.id?null:o.id)} getP={getP} onStage={onStage} onDel={onDel} onSaveNote={onSaveNote} onRequestEdit={onRequestEdit} onApproveEditRequest={onApproveEditRequest} onRejectEditRequest={onRejectEditRequest} onSubmitEdit={onSubmitEdit} onApproveEdit={onApproveEdit} onRejectEdit={onRejectEdit} onUploadComprobante={onUploadComprobante} onConfirmarComprobante={onConfirmarComprobante} onRechazarComprobante={onRechazarComprobante} onMarcarEfectivo={onMarcarEfectivo} onConfirmarEfectivo={onConfirmarEfectivo} onRechazarEfectivo={onRechazarEfectivo} exigirPagoConfirmado={exigirPagoConfirmado} onGoToPagos={onGoToPagos} onPedirEncargue={onPedirEncargue} onResolverEncargue={onResolverEncargue} currentUser={currentUser} products={products}/>)
+        : filtered.map(o=><OCard key={o.id} o={o} exp={expanded===o.id} toggle={()=>setExpanded(expanded===o.id?null:o.id)} getP={getP} onStage={onStage} onDel={onDel} onSaveNote={onSaveNote} onRequestEdit={onRequestEdit} onApproveEditRequest={onApproveEditRequest} onRejectEditRequest={onRejectEditRequest} onSubmitEdit={onSubmitEdit} onApproveEdit={onApproveEdit} onRejectEdit={onRejectEdit} onEditDirect={onEditDirect} onUploadComprobante={onUploadComprobante} onConfirmarComprobante={onConfirmarComprobante} onRechazarComprobante={onRechazarComprobante} onMarcarEfectivo={onMarcarEfectivo} onConfirmarEfectivo={onConfirmarEfectivo} onRechazarEfectivo={onRechazarEfectivo} exigirPagoConfirmado={exigirPagoConfirmado} onGoToPagos={onGoToPagos} onPedirEncargue={onPedirEncargue} onResolverEncargue={onResolverEncargue} currentUser={currentUser} products={products}/>)
       }
     </div>
   );
@@ -2680,7 +2721,7 @@ function DelBtn({onConfirm}) {
   return <button onClick={()=>setConfirm(true)} style={{marginLeft:"auto",padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13,display:"inline-flex",alignItems:"center",gap:5}}><Trash size={12} strokeWidth={2.4}/> Eliminar</button>;
 }
 
-function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onUploadComprobante,onConfirmarComprobante,onRechazarComprobante,onMarcarEfectivo,onConfirmarEfectivo,onRechazarEfectivo,exigirPagoConfirmado,onGoToPagos,onPedirEncargue,onResolverEncargue,currentUser,products}) {
+function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onApproveEditRequest,onRejectEditRequest,onSubmitEdit,onApproveEdit,onRejectEdit,onEditDirect,onUploadComprobante,onConfirmarComprobante,onRechazarComprobante,onMarcarEfectivo,onConfirmarEfectivo,onRechazarEfectivo,exigirPagoConfirmado,onGoToPagos,onPedirEncargue,onResolverEncargue,currentUser,products}) {
   const isAdmin = currentUser?.role === "admin";
   const itemsPorEncargue = (o.items||[]).filter(it=>it.porEncargue && it.qtyFaltante>0);
   const tieneEncargue = itemsPorEncargue.length>0 && !o.encargueResuelto;
@@ -2866,7 +2907,8 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
           )}
 
           {/* EDIT MODE — formulario de edición */}
-          {!isAdmin && es==="aprobada" && showEditMode && (
+          {/* Edición — admin directo o vendedor con aprobación */}
+          {((!isAdmin && es==="aprobada") || (isAdmin && !es && showEditMode)) && showEditMode && (
             <div style={{background:"#eaf4fc",border:"1.5px solid #aed6f1",borderRadius:10,padding:"14px",marginBottom:14}} onClick={e=>e.stopPropagation()}>
               <div style={{fontWeight:800,fontSize:13,color:"#1a5276",marginBottom:10,display:"flex",alignItems:"center",gap:6}}><Pencil size={13} strokeWidth={2.4}/>Editando pedido</div>
               {editItems.map((it)=>{
@@ -2917,10 +2959,24 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
               <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:15,color:RED,padding:"10px 0",borderTop:"2px solid #d6eaf8",margin:"4px 0 10px"}}>
                 <span>Nuevo total</span><span>{fARS(editTotal)}</span>
               </div>
-              <button onClick={async()=>{if(!editItems.length)return;setSaving(true);try{await onSubmitEdit(o.id,editItems,editTotal);setShowEditMode(false);}catch(e){console.warn(e);toast.error("No se pudo enviar la edición. Probá de nuevo.");}finally{setSaving(false);}}}
+              <button onClick={async()=>{
+                if(!editItems.length) return;
+                setSaving(true);
+                try {
+                  if(isAdmin) {
+                    await onEditDirect(o.id, editItems);
+                    setShowEditMode(false);
+                    toast.success("Pedido actualizado.");
+                  } else {
+                    await onSubmitEdit(o.id,editItems,editTotal);
+                    setShowEditMode(false);
+                  }
+                } catch(e){console.warn(e);toast.error("No se pudo guardar. Probá de nuevo.");}
+                finally{setSaving(false);}
+              }}
                 disabled={!editItems.length||saving}
-                style={{width:"100%",padding:"10px",borderRadius:9,border:"none",background:editItems.length?"linear-gradient(135deg,#1a5276,#2980b9)":"#e5e5e5",color:editItems.length?"#fff":"#aaa",fontWeight:800,fontSize:14,cursor:editItems.length?"pointer":"not-allowed",marginBottom:8}}>
-                {saving?"Enviando...":<><Send size={12} strokeWidth={2.4}/> Enviar para revisión</>}
+                style={{width:"100%",padding:"10px",borderRadius:9,border:"none",background:editItems.length?"linear-gradient(135deg,#1a5276,#2980b9)":"#e5e5e5",color:editItems.length?"#fff":"#aaa",fontWeight:800,fontSize:14,cursor:editItems.length?"pointer":"not-allowed",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+                {saving?"Guardando...":isAdmin?<><CheckCircle size={13} strokeWidth={2.4}/> Guardar cambios</>:<><Send size={12} strokeWidth={2.4}/> Enviar para revisión</>}
               </button>
               <button onClick={()=>setShowEditMode(false)}
                 style={{width:"100%",padding:"9px",borderRadius:9,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontSize:13,cursor:"pointer"}}>Cancelar</button>
@@ -3246,12 +3302,13 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
             {!isAdmin && !es && o.stage!=="entregado" && (
               !showReqForm
                 ? <button onClick={(e)=>{e.stopPropagation();setShowReqForm(true);}}
-                    style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #aed6f1",background:"#fff",color:"#1a5276",fontWeight:600,fontSize:13,cursor:"pointer"}}>
-                    <Pencil size={12} strokeWidth={2.4}/> Solicitar edición
+                    style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #aed6f1",background:"#fff",color:"#1a5276",fontWeight:600,fontSize:13,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6}}>
+                    <Plus size={12} strokeWidth={2.4}/> Agregar / Editar
                   </button>
                 : <div style={{width:"100%",marginTop:8}} onClick={e=>e.stopPropagation()}>
+                    <div style={{fontSize:12,color:"#555",marginBottom:6}}>Describí qué querés agregar o cambiar:</div>
                     <textarea value={reqReason} onChange={e=>setReqReason(e.target.value)}
-                      placeholder="Motivo de la edición..."
+                      placeholder="Ej: Agregar 2 resmas de papel A4, cambiar cantidad de cuadernos a 5..."
                       style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #aed6f1",fontSize:13,resize:"vertical",minHeight:60,outline:"none",boxSizing:"border-box"}}/>
                     <div style={{display:"flex",gap:8,marginTop:6}}>
                       <button onClick={async()=>{if(!reqReason.trim())return;setSaving(true);try{await onRequestEdit(o.id,reqReason);setShowReqForm(false);setReqReason("");}catch(e){console.warn(e);toast.error("No se pudo enviar la solicitud. Probá de nuevo.");}finally{setSaving(false);}}}
@@ -3263,6 +3320,13 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                         style={{padding:"6px 12px",borderRadius:7,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:12,cursor:"pointer"}}>Cancelar</button>
                     </div>
                   </div>
+            )}
+            {/* Admin: edición directa sin solicitud — solo si no hay edición en curso */}
+            {isAdmin && !es && o.stage!=="entregado" && !showEditMode && (
+              <button onClick={(e)=>{e.stopPropagation();startEditMode();}}
+                style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #aed6f1",background:"#fff",color:"#1a5276",fontWeight:600,fontSize:13,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6}}>
+                <Plus size={12} strokeWidth={2.4}/> Agregar / Editar
+              </button>
             )}
             <DelBtn onConfirm={()=>onDel(o.id)}/>
           </div>
