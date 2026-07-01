@@ -926,9 +926,9 @@ const iconForTag = (tag="") => {
 };
 
 // ─── NOTIF PANEL ─────────────────────────────────────────────────────────────
-function NotifRow({n, isRead, cfg, onClick, onDelete}) {
+function NotifRow({n, isRead, cfg, onClick, onDelete, onNavigate}) {
   return (
-    <div onClick={onClick} style={{padding:"12px 16px",borderBottom:"1px solid #f9f9f9",background:isRead?"#fff":"#fafbff",cursor:"pointer",display:"flex",gap:10,alignItems:"flex-start"}}>
+    <div onClick={()=>{onClick();onNavigate&&onNavigate(n);}} style={{padding:"12px 16px",borderBottom:"1px solid #f9f9f9",background:isRead?"#fff":"#fafbff",cursor:"pointer",display:"flex",gap:10,alignItems:"flex-start"}}>
       <span style={{fontSize:20,flexShrink:0,marginTop:2}}>{cfg.icon}</span>
       <div style={{flex:1,minWidth:0}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
@@ -936,13 +936,16 @@ function NotifRow({n, isRead, cfg, onClick, onDelete}) {
           {!isRead&&<span style={{width:8,height:8,borderRadius:"50%",background:RED,flexShrink:0,marginTop:4}}/>}
         </div>
         <div style={{fontSize:12,color:"#666",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.cuerpo}</div>
-        <div style={{fontSize:10,color:"#aaa",marginTop:4}}>{n.fecha}</div>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginTop:4}}>
+          <span style={{fontSize:10,color:"#aaa"}}>{n.fecha}</span>
+          {n.ref && n.tipo!=="ALTA_MERCADERIA" && <span style={{fontSize:10,color:RED,fontWeight:600}}>Ver pedido →</span>}
+        </div>
       </div>
       <button onClick={e=>{e.stopPropagation();onDelete();}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:16,flexShrink:0,padding:0,lineHeight:1}}>x</button>
     </div>
   );
 }
-function NotifGroup({items, cfg, cat, currentUser, markRead, delNotif}) {
+function NotifGroup({items, cfg, cat, currentUser, markRead, delNotif, onNavigate}) {
   const [open, setOpen] = useState(false);
   const unreadN = items.filter(n=>!leidaArr(n).includes(currentUser.id)).length;
   return (
@@ -958,15 +961,16 @@ function NotifGroup({items, cfg, cat, currentUser, markRead, delNotif}) {
       {open && <div style={{background:"#fcfcfc"}}>
         {items.map(n=>(
           <NotifRow key={n.id} n={n} isRead={leidaArr(n).includes(currentUser.id)} cfg={cfg}
-            onClick={()=>markRead(n.id)} onDelete={()=>delNotif(n.id)}/>
+            onClick={()=>markRead(n.id)} onDelete={()=>delNotif(n.id)} onNavigate={onNavigate}/>
         ))}
       </div>}
     </div>
   );
 }
-function NotifPanel({notifs,setNotifs,currentUser,users,onClose,onMarkAllRead,pushNotif,orders}) {
+function NotifPanel({notifs,setNotifs,currentUser,users,onClose,onMarkAllRead,pushNotif,orders,onNavigate}) {
   const myNotifs = notifs.filter(n =>
     n.para === "todos" || n.para === currentUser.role || n.para === currentUser.id
+    || n.para === currentUser.username || n.para === currentUser.name || n.para === currentUser.vendedor
   );
   const unread = myNotifs.filter(n => !leidaArr(n).includes(currentUser.id));
   const markRead = async (id) => {
@@ -1015,10 +1019,10 @@ function NotifPanel({notifs,setNotifs,currentUser,users,onClose,onMarkAllRead,pu
                   const items = groups[cat];
                   const cfg = NOTIF_TYPES[items[0].tipo] || iconForTag(items[0].tag);
                   if(items.length>1) {
-                    return <NotifGroup key={cat} items={items} cfg={cfg} cat={cat} currentUser={currentUser} markRead={markRead} delNotif={delNotif}/>;
+                    return <NotifGroup key={cat} items={items} cfg={cfg} cat={cat} currentUser={currentUser} markRead={markRead} delNotif={delNotif} onNavigate={n=>{onNavigate&&onNavigate(n);onClose();}}/>;
                   }
                   const n = items[0];
-                  return <NotifRow key={n.id} n={n} isRead={leidaArr(n).includes(currentUser.id)} cfg={cfg} onClick={()=>markRead(n.id)} onDelete={()=>delNotif(n.id)}/>;
+                  return <NotifRow key={n.id} n={n} isRead={leidaArr(n).includes(currentUser.id)} cfg={cfg} onClick={()=>markRead(n.id)} onDelete={()=>delNotif(n.id)} onNavigate={n=>{onNavigate&&onNavigate(n);onClose();}}/>;
                 });
               })()
           }
@@ -1417,6 +1421,38 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     for(const n of toUpdate) await db.updateNotif(n.id,{leida:[...leidaArr(n),currentUser.id]});
     setNotifs(ns=>ns.map(n=>leidaArr(n).includes(currentUser.id)?n:{...n,leida:[...leidaArr(n),currentUser.id]}));
   };
+
+  // Navegar al pedido/solicitud referenciado en una notificación
+  const handleNotifNavigate = (n) => {
+    if(!n.ref) return;
+    const tipo = n.tipo||"";
+    // Notificaciones de pedido (comprobante, efectivo, edicion, cambio estado, nuevo pedido, por encargue)
+    const esPedido = ["NUEVO_PEDIDO","CAMBIO_ESTADO","PAGO","EDICION"].some(t=>tipo.includes(t))
+      || tipo==="" // notifs via sendCrossNotif no tienen tipo, pero sí ref con el id del pedido
+      || orders.some(o=>o.id===n.ref);
+    if(esPedido && n.ref) {
+      setTab("central");
+      // El deeplink se maneja expandiendo la tarjeta directamente desde Central via URL hash
+      setTimeout(()=>{
+        const el = document.getElementById(`order-${n.ref}`);
+        if(el) { el.scrollIntoView({behavior:"smooth",block:"center"}); el.click(); }
+      }, 300);
+      return;
+    }
+    // Notificaciones de solicitud de compra
+    if(tipo==="SOLICITUD_COMPRA" || purchaseOrders.some(po=>po.id===n.ref)) {
+      setDeepLinkPOId(n.ref);
+      setTab("solicitud");
+      return;
+    }
+    // Notificaciones de alta de mercadería — va a Stock
+    if(tipo==="ALTA_MERCADERIA") {
+      setTab("stock");
+      return;
+    }
+    // Fallback: si no se reconoce, va a Central
+    setTab("central");
+  };
   // ── PRICE LIST ──
   // Admin can preview any list; other users use their assigned list
   const [previewListId, setPreviewListId] = useState(null);
@@ -1558,7 +1594,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
     if(isSandboxOrder) { sendLocalNotif("📎 Comprobante subido", "Esperando confirmación del admin", `comp-${id}`); return; }
     if(currentUser.role==="admin") return;
-    await sendCrossNotif(db, setNotifs, {title:"📎 Comprobante subido", body:`${currentUser.name} subió un comprobante de pago (${ord.client})`, tag:`comp-${id}`, para:"admin", de:currentUser.name});
+    await sendCrossNotif(db, setNotifs, {title:"📎 Comprobante subido", body:`${currentUser.name} subió un comprobante de pago (${ord.client})`, tag:`comp-${id}`, para:"admin", de:currentUser.name, ref:id});
   };
 
   // Admin confirma que el comprobante es correcto
@@ -1569,7 +1605,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
     await db.upsertOrder(ord);
     if(isSandboxOrder) return;
-    await sendCrossNotif(db, setNotifs, {title:"✅ Comprobante confirmado", body:`El admin confirmó el comprobante del pedido de ${ord.client}`, tag:`comp-ok-${id}`, para:ord.vendedor||"", de:"admin"});
+    await sendCrossNotif(db, setNotifs, {title:"✅ Comprobante confirmado", body:`El admin confirmó el comprobante del pedido de ${ord.client}`, tag:`comp-ok-${id}`, para:ord.vendedor||"", de:"admin", ref:id});
   };
 
   // Admin rechaza el comprobante (motivo obligatorio) → vuelve a sin pago, el vendedor puede resubir
@@ -1580,7 +1616,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
     await db.upsertOrder(ord);
     if(isSandboxOrder) return;
-    await sendCrossNotif(db, setNotifs, {title:"❌ Comprobante rechazado", body:`El admin rechazó el comprobante del pedido de ${ord.client}: "${motivo}"`, tag:`comp-no-${id}`, para:ord.vendedor||"", de:"admin"});
+    await sendCrossNotif(db, setNotifs, {title:"❌ Comprobante rechazado", body:`El admin rechazó el comprobante del pedido de ${ord.client}: "${motivo}"`, tag:`comp-no-${id}`, para:ord.vendedor||"", de:"admin", ref:id});
   };
 
   // ── PAGO EN EFECTIVO ─────────────────────────────────────────────────────────
@@ -1595,7 +1631,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     await db.upsertOrder(ord);
     if(isSandboxOrder) { sendLocalNotif(esAdmin?"💵 Efectivo confirmado":"💵 Efectivo registrado", esAdmin?"Pago en efectivo registrado":"Esperando confirmación del admin", `ef-pend-${id}`); return; }
     if(esAdmin) return; // el admin no necesita notificarse a si mismo
-    await sendCrossNotif(db, setNotifs, {title:"💵 Pago en efectivo", body:`${currentUser.name} registró pago en efectivo (${ord.client})`, tag:`ef-pend-${id}`, para:"admin", de:currentUser.name});
+    await sendCrossNotif(db, setNotifs, {title:"💵 Pago en efectivo", body:`${currentUser.name} registró pago en efectivo (${ord.client})`, tag:`ef-pend-${id}`, para:"admin", de:currentUser.name, ref:id});
   };
 
   // Fase 2a (admin): confirma el efectivo
@@ -1606,7 +1642,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
     await db.upsertOrder(ord);
     if(isSandboxOrder) return;
-    await sendCrossNotif(db, setNotifs, {title:"✅ Efectivo confirmado", body:`El admin confirmó el pago en efectivo del pedido de ${ord.client}`, tag:`ef-ok-${id}`, para:ord.vendedor||"", de:"admin"});
+    await sendCrossNotif(db, setNotifs, {title:"✅ Efectivo confirmado", body:`El admin confirmó el pago en efectivo del pedido de ${ord.client}`, tag:`ef-ok-${id}`, para:ord.vendedor||"", de:"admin", ref:id});
   };
 
   // Fase 2b (admin): rechaza el efectivo → vuelve a sin pago
@@ -1617,7 +1653,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
     await db.upsertOrder(ord);
     if(isSandboxOrder) return;
-    await sendCrossNotif(db, setNotifs, {title:"❌ Efectivo no confirmado", body:`El admin no pudo confirmar el pago en efectivo del pedido de ${ord.client}`, tag:`ef-no-${id}`, para:ord.vendedor||"", de:"admin"});
+    await sendCrossNotif(db, setNotifs, {title:"❌ Efectivo no confirmado", body:`El admin no pudo confirmar el pago en efectivo del pedido de ${ord.client}`, tag:`ef-no-${id}`, para:ord.vendedor||"", de:"admin", ref:id});
   };
 
   // ── CONFIGURACION GLOBAL: exigir pago confirmado para habilitar Entregar ────
@@ -1636,7 +1672,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const isSandboxOrder = ord0 && (ord0.isSandbox || isTestOrder(ord0.vendedor));
     if(isSandboxOrder) { sendLocalNotif("✏️ Solicitud enviada", `Esperá la aprobación del admin`, `edit-req-${id}`); return; }
     await db.upsertOrder(ord0);
-    await sendCrossNotif(db, setNotifs, {title:"✏️ Solicitud de edición", body:`${ord0?.vendedor} quiere editar un pedido (${ord0?.client})`, tag:`edit-req-${id}`, para:"admin", de:ord0?.vendedor||""});
+    await sendCrossNotif(db, setNotifs, {title:"✏️ Solicitud de edición", body:`${ord0?.vendedor} quiere editar un pedido (${ord0?.client})`, tag:`edit-req-${id}`, para:"admin", de:ord0?.vendedor||"", ref:id});
     sendLocalNotif("✏️ Solicitud enviada", `Esperá la aprobación del admin`, `edit-req-${id}`);
   };
 
@@ -1648,7 +1684,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const isSandboxOrder = ordApr && (ordApr.isSandbox || isTestOrder(ordApr.vendedor));
     if(isSandboxOrder) return;
     await db.upsertOrder(ordApr);
-    await sendCrossNotif(db, setNotifs, {title:"✅ Edición aprobada", body:`Tu solicitud para editar el pedido de ${ordApr?.client} fue aprobada`, tag:`edit-apr-${id}`, para:ordApr?.vendedor||"", de:"admin"});
+    await sendCrossNotif(db, setNotifs, {title:"✅ Edición aprobada", body:`Tu solicitud para editar el pedido de ${ordApr?.client} fue aprobada`, tag:`edit-apr-${id}`, para:ordApr?.vendedor||"", de:"admin", ref:id});
   };
 
   // Fase 2b: admin rechaza la solicitud
@@ -1659,7 +1695,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const isSandboxOrder = ordRej && (ordRej.isSandbox || isTestOrder(ordRej.vendedor));
     if(isSandboxOrder) return;
     await db.upsertOrder(ordRej);
-    await sendCrossNotif(db, setNotifs, {title:"❌ Edición rechazada", body:`Tu solicitud para editar el pedido de ${ordRej?.client} fue rechazada. Motivo: "${reason}"`, tag:`edit-rej-${id}`, para:ordRej?.vendedor||"", de:"admin"});
+    await sendCrossNotif(db, setNotifs, {title:"❌ Edición rechazada", body:`Tu solicitud para editar el pedido de ${ordRej?.client} fue rechazada. Motivo: "${reason}"`, tag:`edit-rej-${id}`, para:ordRej?.vendedor||"", de:"admin", ref:id});
   };
 
   // Fase 3: vendedor guarda los cambios editados
@@ -1670,7 +1706,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const isSandboxOrder = ordSub && (ordSub.isSandbox || isTestOrder(ordSub.vendedor));
     if(isSandboxOrder) { sendLocalNotif("📤 Cambios enviados", `El admin revisará tu edición`, `edit-sub-${id}`); return; }
     await db.upsertOrder(ordSub);
-    await sendCrossNotif(db, setNotifs, {title:"👀 Cambios para revisar", body:`${ordSub?.vendedor} editó el pedido de ${ordSub?.client} — revisá los cambios`, tag:`edit-sub-${id}`, para:"admin", de:ordSub?.vendedor||""});
+    await sendCrossNotif(db, setNotifs, {title:"👀 Cambios para revisar", body:`${ordSub?.vendedor} editó el pedido de ${ordSub?.client} — revisá los cambios`, tag:`edit-sub-${id}`, para:"admin", de:ordSub?.vendedor||"", ref:id});
     sendLocalNotif("📤 Cambios enviados", `El admin revisará tu edición`, `edit-sub-${id}`);
   };
 
@@ -1709,7 +1745,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     if(isSandboxOrder) return;
     const ordOk = updated.find(o=>o.id===id);
     await db.upsertOrder(ordOk);
-    await sendCrossNotif(db, setNotifs, {title:"✅ Cambios aprobados", body:`Tu edición del pedido de ${ordOk?.client} fue aprobada`, tag:`edit-ok-${id}`, para:ordOk?.vendedor||"", de:"admin"});
+    await sendCrossNotif(db, setNotifs, {title:"✅ Cambios aprobados", body:`Tu edición del pedido de ${ordOk?.client} fue aprobada`, tag:`edit-ok-${id}`, para:ordOk?.vendedor||"", de:"admin", ref:id});
     await logActivity("Edición aprobada", `Pedido ${ord.docNum||ord.compNum||""} editado`, id, "pedido");
   };
 
@@ -1721,7 +1757,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const isSandboxOrder = ordNo && (ordNo.isSandbox || isTestOrder(ordNo.vendedor));
     if(isSandboxOrder) return;
     await db.upsertOrder(ordNo);
-    await sendCrossNotif(db, setNotifs, {title:"❌ Cambios rechazados", body:`El admin rechazó tu edición del pedido de ${ordNo?.client}. Motivo: "${reason}"`, tag:`edit-no-${id}`, para:ordNo?.vendedor||"", de:"admin"});
+    await sendCrossNotif(db, setNotifs, {title:"❌ Cambios rechazados", body:`El admin rechazó tu edición del pedido de ${ordNo?.client}. Motivo: "${reason}"`, tag:`edit-no-${id}`, para:ordNo?.vendedor||"", de:"admin", ref:id});
   };
   const addQuote = async (quote) => {
     const test = isTestOrder(quote.vendedor);
@@ -1968,8 +2004,24 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       .on("postgres_changes", {event:"DELETE", schema:"public", table:"lm_purchase_orders"}, (payload) => {
         setPurchaseOrders(prev => prev.filter(x => x.id !== payload.old.id));
       })
-      .subscribe((status) => {
+      .subscribe(async (status) => {
         console.log("Realtime status:", status);
+        if(status === "SUBSCRIBED") {
+          // Al reconectarse después de un error, recargar datos para no perderse
+          // eventos que pasaron mientras el canal estaba caído
+          try {
+            const [freshOrders, freshQuotes, freshNotifs, freshPOs] = await Promise.all([
+              db.getOrders(), db.getQuotes(), db.getNotifs(), db.getPurchaseOrders(),
+            ]);
+            setOrders(freshOrders);
+            setQuotes(freshQuotes);
+            setNotifs(freshNotifs);
+            setPurchaseOrders(freshPOs);
+          } catch(e) { console.warn("Error recargando datos en reconexión:", e); }
+        }
+        if(status === "CHANNEL_ERROR") {
+          console.warn("Realtime CHANNEL_ERROR — puede ser falta de política RLS en Supabase. Ver docs.");
+        }
       });
 
     return () => { supabase.removeChannel(channel); };
@@ -2101,7 +2153,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                 </div>
                 <button onClick={onLogout} style={{background:"transparent",border:"1.5px solid #ffffff55",color:"#ffe5e5",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:13,fontWeight:700,display:"inline-flex",alignItems:"center",gap:5}}><LogOut size={12} strokeWidth={2.4}/> Salir</button>
               </div>
-              {showNotifs&&<NotifPanel notifs={notifs} setNotifs={setNotifs} currentUser={currentUser} users={users} onClose={()=>setShowNotifs(false)} onMarkAllRead={markAllRead} pushNotif={pushNotif} orders={orders}/>}
+              {showNotifs&&<NotifPanel notifs={notifs} setNotifs={setNotifs} currentUser={currentUser} users={users} onClose={()=>setShowNotifs(false)} onMarkAllRead={markAllRead} pushNotif={pushNotif} orders={orders} onNavigate={handleNotifNavigate}/>}
             </div>
           </div>
         )}
@@ -2181,7 +2233,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
 
       {compPopup && <CompPopup order={compPopup} onClose={()=>setCompPopup(null)}/>}
       {showChangePass && <ChangePasswordModal currentUser={currentUser} users={users} setUsers={setUsers} onClose={(updated)=>{setShowChangePass(false);}}/>}
-      {showNotifs && isMobile && <NotifPanel notifs={notifs} setNotifs={setNotifs} currentUser={currentUser} users={users} onClose={()=>setShowNotifs(false)} onMarkAllRead={markAllRead} pushNotif={pushNotif} orders={orders}/>}
+      {showNotifs && isMobile && <NotifPanel notifs={notifs} setNotifs={setNotifs} currentUser={currentUser} users={users} onClose={()=>setShowNotifs(false)} onMarkAllRead={markAllRead} pushNotif={pushNotif} orders={orders} onNavigate={handleNotifNavigate}/>}
 
       <div style={{maxWidth:isMobile?undefined:1200,margin:"0 auto",padding:isMobile?"12px 0":"20px 16px"}}>
         {tab==="central"    && <Central
@@ -3171,7 +3223,11 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
             ) : (
               next&&!es&&<button onClick={()=>onStage(o.id,next)} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",background:SCFG[next].color,color:"#fff",fontWeight:700,fontSize:13}}>{SCFG[next].icon} Pasar a {SCFG[next].label}</button>
             )}
-            {idx>0&&o.stage!=="entregado"&&!es&&<button onClick={()=>onStage(o.id,STAGES[idx-1])} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",cursor:"pointer",background:"#fff",color:"#666",fontWeight:600,fontSize:13,display:"inline-flex",alignItems:"center",gap:5}}><ArrowLeftIcon size={12} strokeWidth={2.4}/> Retroceder</button>}
+            {idx>0&&!es&&(isAdmin||o.stage!=="entregado")&&<button onClick={async()=>{
+              const label = STAGES[idx-1]; const cfg = SCFG[label];
+              if(o.stage==="entregado"&&isAdmin){if(!await confirmDialog("¿Retroceder pedido entregado?",`Vas a deshacer el estado "Entregado" y volver a "${cfg.label}". El stock ya fue descontado — tenés que ajustarlo manualmente si hace falta.`,true)) return;}
+              onStage(o.id,label);
+            }} style={{padding:"8px 12px",borderRadius:8,border:`1.5px solid ${o.stage==="entregado"?"#f1948a":"#e5e5e5"}`,cursor:"pointer",background:"#fff",color:o.stage==="entregado"?RED:"#666",fontWeight:600,fontSize:13,display:"inline-flex",alignItems:"center",gap:5}}><ArrowLeftIcon size={12} strokeWidth={2.4}/> {o.stage==="entregado"?"Deshacer entrega":"Retroceder"}</button>}
             <button onClick={()=>printDoc(o, o.stage==="reserva"?"reserva":"confirmado")} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #d6eaf8",cursor:"pointer",background:"#fff",color:"#1a5276",fontWeight:600,fontSize:13}}>
               <Printer size={12} strokeWidth={2.4} style={{display:"inline",verticalAlign:"-2px"}}/> {o.stage==="reserva"?(o.docNum||"Imprimir"):(o.compNum||"Imprimir")}
             </button>
