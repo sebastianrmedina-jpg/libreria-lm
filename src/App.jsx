@@ -228,7 +228,10 @@ async function uploadComprobanteFile(orderId, file) {
   const ext = (processed.name.split(".").pop() || "jpg").toLowerCase();
   const path = `${orderId}-${Date.now()}.${ext}`;
   const { error } = await supabase.storage.from("comprobantes").upload(path, processed, { cacheControl: "3600", upsert: false });
-  if(error) throw error;
+  if(error) {
+    console.error("Supabase Storage error (comprobantes):", error);
+    throw new Error(error.message || error.error || JSON.stringify(error));
+  }
   const { data } = supabase.storage.from("comprobantes").getPublicUrl(path);
   return { url: data.publicUrl, nombre: file.name };
 }
@@ -241,7 +244,10 @@ async function uploadProductImage(productId, file) {
   const ext = (processed.name.split(".").pop() || "jpg").toLowerCase();
   const path = `${productId}-${Date.now()}.${ext}`;
   const { error } = await supabase.storage.from("productos").upload(path, processed, { cacheControl: "3600", upsert: false });
-  if(error) throw error;
+  if(error) {
+    console.error("Supabase Storage error (productos):", error);
+    throw new Error(error.message || error.error || JSON.stringify(error));
+  }
   const { data } = supabase.storage.from("productos").getPublicUrl(path);
   return data.publicUrl;
 }
@@ -2728,8 +2734,9 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
       const { url, nombre } = await uploadComprobanteFile(o.id, file);
       await onUploadComprobante(o.id, { url, nombre, fecha: today() });
     } catch(err) {
-      console.warn(err);
-      toast.error("No se pudo subir el comprobante. Probá de nuevo.");
+      console.error("Error subiendo comprobante:", err);
+      const msg = err?.message || err?.error_description || JSON.stringify(err) || "Error desconocido";
+      toast.error(`No se pudo subir: ${msg}`);
     } finally {
       setUploadingComp(false);
     }
@@ -4982,8 +4989,9 @@ function EditModal({p,onSave,onClose}) {
       const url = await uploadProductImage(p.id, file);
       setImageUrl(url);
     } catch(err) {
-      console.warn(err);
-      toast.error("No se pudo subir la foto. Probá de nuevo.");
+      console.error("Error subiendo foto de producto:", err);
+      const msg = err?.message || err?.error_description || JSON.stringify(err) || "Error desconocido";
+      toast.error(`No se pudo subir: ${msg}`);
     } finally {
       setUploadingImg(false);
       e.target.value = "";
