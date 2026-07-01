@@ -1016,23 +1016,37 @@ function NotifPanel({notifs,setNotifs,currentUser,users,onClose,onMarkAllRead,pu
           {myNotifs.length===0
             ? <div style={{textAlign:"center",padding:40,color:"#aaa"}}><div style={{fontSize:36,marginBottom:8}}>🔕</div><div>No tenés notificaciones</div></div>
             : (() => {
-                // Agrupa por categoria (tipo viejo si existe, sino la categoria derivada del tag).
-                // Si una categoria tiene 2+ notificaciones se muestra colapsada; si tiene 1 sola, suelta.
+                // Notificaciones con ref (cambio de estado, comprobante, edición, etc.)
+                // son eventos de pedidos puntuales → siempre individuales, jamás agrupadas.
+                // Notificaciones sin ref (alta de mercadería, genéricas) → pueden agruparse.
+                const individual = myNotifs.filter(n=>n.ref);
+                const agrupables = myNotifs.filter(n=>!n.ref);
+
                 const groups = {}; const order = [];
-                myNotifs.forEach(n=>{
+                agrupables.forEach(n=>{
                   const cat = NOTIF_TYPES[n.tipo]?.label || iconForTag(n.tag).cat;
                   if(!groups[cat]) { groups[cat]=[]; order.push(cat); }
                   groups[cat].push(n);
                 });
-                return order.map(cat=>{
+
+                const rows = [];
+                // Primero las individuales, ordenadas por fecha desc (ya vienen ordenadas)
+                individual.forEach(n=>{
+                  const cfg = NOTIF_TYPES[n.tipo] || iconForTag(n.tag);
+                  rows.push(<NotifRow key={n.id} n={n} isRead={leidaArr(n).includes(currentUser.id)} cfg={cfg} onClick={()=>markRead(n.id)} onDelete={()=>delNotif(n.id)} onNavigate={n=>{onNavigate&&onNavigate(n);onClose();}}/>);
+                });
+                // Después las agrupables
+                order.forEach(cat=>{
                   const items = groups[cat];
                   const cfg = NOTIF_TYPES[items[0].tipo] || iconForTag(items[0].tag);
                   if(items.length>1) {
-                    return <NotifGroup key={cat} items={items} cfg={cfg} cat={cat} currentUser={currentUser} markRead={markRead} delNotif={delNotif} onNavigate={n=>{onNavigate&&onNavigate(n);onClose();}}/>;
+                    rows.push(<NotifGroup key={cat} items={items} cfg={cfg} cat={cat} currentUser={currentUser} markRead={markRead} delNotif={delNotif} onNavigate={n=>{onNavigate&&onNavigate(n);onClose();}}/>);
+                  } else {
+                    const n = items[0];
+                    rows.push(<NotifRow key={n.id} n={n} isRead={leidaArr(n).includes(currentUser.id)} cfg={cfg} onClick={()=>markRead(n.id)} onDelete={()=>delNotif(n.id)} onNavigate={n=>{onNavigate&&onNavigate(n);onClose();}}/>);
                   }
-                  const n = items[0];
-                  return <NotifRow key={n.id} n={n} isRead={leidaArr(n).includes(currentUser.id)} cfg={cfg} onClick={()=>markRead(n.id)} onDelete={()=>delNotif(n.id)} onNavigate={n=>{onNavigate&&onNavigate(n);onClose();}}/>;
                 });
+                return rows;
               })()
           }
         </div>
@@ -1558,12 +1572,13 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
 
     if(ord){
       const cfg=SCFG[stage]||{};
-      const n1={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"CAMBIO_ESTADO",para:"admin",icono:cfg.icon||"📋",titulo:`Pedido paso a ${cfg.label}`,cuerpo:`${ord.client} - ${fARS(ord.total)} - ${updated.compNum||""}`,ref:id};
+      const numRef = updated.compNum||updated.docNum||"";
+      const n1={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"CAMBIO_ESTADO",para:"admin",icono:cfg.icon||"📋",titulo:`${cfg.label}: ${ord.client}`,cuerpo:`${numRef} · ${fARS(ord.total)} · ${ord.vendedor||""}`,ref:id};
       await db.addNotif(n1); setNotifs(n=>[n1,...n]);
       await logActivity(`Cambio estado: ${cfg.label}`, `${ord.docNum||""} ${updated.compNum||""} - ${ord.client} - ${fARS(ord.total)}`.trim(), id, "pedido");
       const vendUser=users.find(u=>u.name===ord.vendedor||u.username===ord.vendedor);
       if(vendUser&&vendUser.id!==currentUser.id){
-        const n2={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"CAMBIO_ESTADO",para:vendUser.id,icono:cfg.icon||"📋",titulo:`Tu pedido paso a ${cfg.label}`,cuerpo:`${ord.client} - ${fARS(ord.total)}`,ref:id};
+        const n2={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"CAMBIO_ESTADO",para:vendUser.id,icono:cfg.icon||"📋",titulo:`${cfg.label}: ${ord.client}`,cuerpo:`${numRef} · ${fARS(ord.total)}`,ref:id};
         await db.addNotif(n2); setNotifs(n=>[n2,...n]);
       }
     }
@@ -1996,9 +2011,9 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       .on("postgres_changes", {event:"UPDATE", schema:"public", table:"lm_orders"}, (payload) => {
         const o = mapOrder(payload.new);
         setOrders(prev => prev.map(x => x.id===o.id ? o : x));
-        const stageLabels = {confirmado:"✅ Pedido confirmado","en armado":"📦 Pedido en armado",entregado:"🎉 Pedido entregado"};
+        const stageLabels = {confirmado:"Confirmado",["en armado"]:"En Armado",entregado:"Entregado"};
         if(stageLabels[o.stage] && o.vendedor !== currentUser.vendedor && o.vendedor !== currentUser.name) {
-          sendLocalNotif(stageLabels[o.stage], `${o.client} — ${o.docNum||o.compNum||""}`, `stage-${o.id}`);
+          sendLocalNotif(`${stageLabels[o.stage]}: ${o.client}`, `${o.compNum||o.docNum||""} · ${o.vendedor||""}`, `stage-${o.id}`);
         }
       })
       .on("postgres_changes", {event:"DELETE", schema:"public", table:"lm_orders"}, (payload) => {
