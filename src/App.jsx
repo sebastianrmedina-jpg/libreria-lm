@@ -5360,6 +5360,10 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
   }, [prefillItem]);
 
   const myOrders = isAdmin ? purchaseOrders : purchaseOrders.filter(po=>po.vendedor===currentUser.vendedor||po.vendedor===currentUser.name);
+  const [verHistorial, setVerHistorial] = useState(false);
+  const myOrdersFiltradas = myOrders.filter(po => verHistorial ? po.estado==="cerrada" : po.estado!=="cerrada");
+  const countCerradas = myOrders.filter(po=>po.estado==="cerrada").length;
+  const countActivas = myOrders.filter(po=>po.estado!=="cerrada").length;
 
   const savePO = async (po) => {
     setPurchaseOrders(prev=>prev.find(x=>x.id===po.id)?prev.map(x=>x.id===po.id?po:x):[po,...prev]);
@@ -5403,27 +5407,40 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
   // ── LISTA ──
   if(view==="lista") return (
     <div style={{padding:isMobile?"0":"0"}}>
-      <div style={{background:"#fff",borderRadius:12,padding:4,marginBottom:14,display:"flex",gap:4,boxShadow:"0 1px 4px #0001",margin:isMobile?"0 12px 14px":"0 0 14px"}}>
-        <button onClick={()=>setView("nueva")} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:`linear-gradient(135deg,#1a5e20,#1e8449)`,color:"#fff"}}>
-          + Nueva Solicitud
+      <div style={{background:"#fff",borderRadius:12,padding:4,marginBottom:10,display:"flex",gap:4,boxShadow:"0 1px 4px #0001",margin:isMobile?"0 12px 10px":"0 0 10px"}}>
+        <button onClick={()=>setView("nueva")} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:`linear-gradient(135deg,#1a5e20,#1e8449)`,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+          <Plus size={13} strokeWidth={2.4}/> Nueva Solicitud
         </button>
       </div>
 
-      {myOrders.length===0
+      {/* Toggle activas / historial */}
+      <div style={{display:"flex",gap:6,marginBottom:12,margin:isMobile?"0 12px 12px":"0 0 12px"}}>
+        <button onClick={()=>setVerHistorial(false)}
+          style={{flex:1,padding:"8px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:!verHistorial?"linear-gradient(135deg,#1a5e20,#1e8449)":"#f0f0f0",color:!verHistorial?"#fff":"#555",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+          <ClipboardList size={12} strokeWidth={2.3}/> Activas ({countActivas})
+        </button>
+        <button onClick={()=>setVerHistorial(true)}
+          style={{flex:1,padding:"8px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:verHistorial?"linear-gradient(135deg,#1a5276,#2980b9)":"#f0f0f0",color:verHistorial?"#fff":"#555",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+          <Clock size={12} strokeWidth={2.3}/> Historial ({countCerradas})
+        </button>
+      </div>
+
+      {myOrdersFiltradas.length===0
         ? <div style={{textAlign:"center",padding:"50px 20px",color:"#aaa",background:"#fff",borderRadius:12,margin:isMobile?"0 12px":"0"}}>
             <div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><ClipboardList size={42} color="#ccc" strokeWidth={1.6}/></div>
-            <div style={{fontWeight:700,fontSize:15}}>No hay solicitudes aún</div>
-            <div style={{fontSize:13,marginTop:4}}>Creá una para pedir mercadería al proveedor</div>
+            <div style={{fontWeight:700,fontSize:15}}>{verHistorial?"No hay solicitudes recibidas aún":"No hay solicitudes activas"}</div>
+            <div style={{fontSize:13,marginTop:4}}>{verHistorial?"Las solicitudes ingresadas aparecen acá":"Creá una para pedir mercadería al proveedor"}</div>
           </div>
-        : myOrders.map(po=>{
+        : myOrdersFiltradas.map(po=>{
             const cfg = ESTADO_CFG[po.estado]||{};
             return (
-              <div key={po.id} style={{background:"#fff",borderRadius:12,marginBottom:8,boxShadow:"0 1px 6px #0001",overflow:"hidden",margin:isMobile?"0 12px 8px":"0 0 8px"}}>
+              <div key={po.id} style={{background:"#fff",borderRadius:12,marginBottom:8,boxShadow:"0 1px 6px #0001",overflow:"hidden",margin:isMobile?"0 12px 8px":"0 0 8px",opacity:po.estado==="cerrada"?0.85:1}}>
                 <div style={{padding:"13px 16px",display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer"}} onClick={()=>openDetail(po)}>
                   <div style={{width:10,height:10,borderRadius:"50%",background:cfg.color,marginTop:5,flexShrink:0}}/>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontWeight:800,fontSize:14}}>Solicitud #{po.id.slice(-6).toUpperCase()}</div>
                     <div style={{fontSize:11,color:"#888",marginTop:2}}>{po.fecha} · {po.vendedor}</div>
+                    {po.fechaRecibido && <div style={{fontSize:11,color:"#1e8449",marginTop:2,display:"flex",alignItems:"center",gap:4}}><CheckCircle size={10} strokeWidth={2.5}/>Recibida el {po.fechaRecibido}</div>}
                   </div>
                   <div style={{textAlign:"right",flexShrink:0}}>
                     <span style={{display:"inline-flex",alignItems:"center",gap:5,background:cfg.bg,color:cfg.color,borderRadius:8,padding:"3px 10px",fontSize:11,fontWeight:700}}>{cfg.Icon&&<cfg.Icon size={11} strokeWidth={2.4}/>}{cfg.label}</span>
@@ -5614,7 +5631,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
             </div>
             <IngresarDesdeSolicitud po={po} products={products} onStock={onStockExternal} onDone={()=>setView("lista")}
               onArrived={async()=>{
-                const updated = {...po, fechaRecibido: today()};
+                const updated = {...po, fechaRecibido: today(), estado:"cerrada", fechaCierre: today()};
                 setPurchaseOrders(prev=>prev.map(x=>x.id===po.id?updated:x));
                 setSelected(updated);
                 await db.savePurchaseOrder(updated);
