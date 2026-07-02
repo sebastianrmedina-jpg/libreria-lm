@@ -1885,24 +1885,17 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const updatedProds=products.map(x=>{if(x.id!==pid)return x;const u={...x,stock:x.stock+qty};if(newCost){u.costPrice=newCost;u.salePrice=Math.round(newCost*1.5*100)/100;}return u;});
     setProducts(updatedProds);
     const updProd=updatedProds.find(p=>p.id===pid);
-    if(updProd)await db.upsertProduct(updProd); // esto es lo importante: el stock real. Si esto falla, sí queremos que el error se propague.
+    if(updProd)await db.upsertProduct(updProd);
+    let pendientes = [];
     if(prod){
-      // La notificación es secundaria — si falla (ej: hipo de red), NO debe tirar abajo
-      // toda la operación ni dejar el boton de "Guardando..." trabado para siempre,
-      // porque el stock de arriba ya quedó guardado correctamente.
       try {
         const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"ALTA_MERCADERIA",para:"admin",icono:"📦",titulo:"Alta de mercaderia",cuerpo:`${prod.name} - +${qty} unidades${newCost?` - Nuevo costo: ${fARS(newCost)}`:""}`,ref:pid};
         await db.addNotif(notif); setNotifs(n=>[notif,...n]);
       } catch(e) {
         console.warn("No se pudo crear la notificacion de alta de mercaderia (el stock SI se actualizo):", e);
       }
-      // Avisarle al vendedor si este producto tenía pedidos esperando por encargue y ya
-      // entró stock suficiente como para que pueda cerrar la venta con el cliente. Esto
-      // es solo un AVISO — no resuelve nada solo, el vendedor confirma manualmente desde
-      // la tarjeta del pedido ("Ya está disponible"), para no prometerle algo a un cliente
-      // por accidente si en realidad ese stock nuevo ya estaba comprometido con otro pedido.
       if(updProd.stock > 0) {
-        const pendientes = orders.filter(o=>!o.encargueResuelto && (o.items||[]).some(it=>it.pid===pid && it.porEncargue));
+        pendientes = orders.filter(o=>!o.encargueResuelto && (o.items||[]).some(it=>it.pid===pid && it.porEncargue));
         for(const ord of pendientes) {
           try {
             await sendCrossNotif(db, setNotifs, {
@@ -1911,11 +1904,15 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
               tag: `encargue-${ord.id}-${pid}`,
               para: ord.vendedor || "",
               de: "admin",
+              ref: ord.id,
             });
           } catch(e) { console.warn("No se pudo avisar al vendedor del encargue resuelto:", e); }
         }
       }
     }
+    // Devuelve los pedidos que estaban esperando este producto,
+    // para que la pantalla de confirmación pueda mostrar un panel de acción directo.
+    return pendientes;
   };
 
   const pending = orders.filter(o=>o.stage!=="entregado"&&!o.isSandbox).length;
@@ -2341,10 +2338,11 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                 onCrearOferta={(pid)=>{setDeepLinkOfertaProductId(pid);setDeepLinkAdminSection("ofertas");setTab("admin");}}
                 onPedirReposicion={(pid,qty)=>{setDeepLinkSolicitudItem({pid,qty});setTab("solicitud");}}/>
             </>}
-        {tab==="compras"    && <Compras products={products} onStock={addStock} isMobile={isMobile} canScan={currentUser.role==="admin"||isTestOrder(currentUser.vendedor||currentUser.name)||currentUser.barcodeEnabled}/>}
+        {tab==="compras"    && <Compras products={products} onStock={addStock} isMobile={isMobile} canScan={currentUser.role==="admin"||isTestOrder(currentUser.vendedor||currentUser.name)||currentUser.barcodeEnabled} onResolverEncargue={resolverEncargue}/>}
         {tab==="solicitud"  && <SolicitudCompra products={products} currentUser={currentUser} isAdmin={isAdmin} purchaseOrders={purchaseOrders} setPurchaseOrders={setPurchaseOrders} isMobile={isMobile} onStockExternal={addStock} addLog={addLog}
           autoOpenId={deepLinkPOId} onConsumedAutoOpen={()=>setDeepLinkPOId(null)}
           prefillItem={deepLinkSolicitudItem} onConsumedPrefillItem={()=>setDeepLinkSolicitudItem(null)}
+          onResolverEncargue={resolverEncargue}
           onCreated={async(po)=>{
             await sendCrossNotif(db, setNotifs, {
               title:"📋 Nueva solicitud de compra",
@@ -5121,17 +5119,19 @@ function EditModal({p,onSave,onClose}) {
 }
 
 // ─── INGRESAR STOCK DESDE SOLICITUD ──────────────────────────────────────────
-function IngresarDesdeSolicitud({po, products, onStock, onDone, onArrived}) {
+function IngresarDesdeSolicitud({po, products, onStock, onDone, onArrived, onResolverEncargue}) {
   const [items, setItems] = useState(
     po.items.map(i => ({
       ...i,
-      qtyRecibida: i.qty, // default = lo que se pidió
+      qtyRecibida: i.qty,
       cost: products.find(p=>p.id===i.id)?.costPrice || 0,
       incluir: true,
     }))
   );
   const [saving, setSaving] = useState(false);
   const [ok, setOk] = useState(false);
+  const [pedidosPendientes, setPedidosPendientes] = useState([]);
+  const [resueltos, setResueltos] = useState({});
 
   const update = (pid, field, val) =>
     setItems(prev => prev.map(i => i.pid===pid ? {...i,[field]:val} : i));
@@ -5141,12 +5141,17 @@ function IngresarDesdeSolicitud({po, products, onStock, onDone, onArrived}) {
     if(!toIngresar.length) { toast.error("Seleccioná al menos un producto para ingresar"); return; }
     setSaving(true);
     try {
+      const todosLosPendientes = [];
       for(const it of toIngresar) {
-        await onStock(it.pid, +it.qtyRecibida, +it.cost);
+        const pendientes = await onStock(it.pid, +it.qtyRecibida, +it.cost);
+        if(pendientes?.length) todosLosPendientes.push(...pendientes);
       }
       if(onArrived) { try { await onArrived(); } catch(e) { console.warn(e); } }
+      // Deduplicar pedidos (un pedido puede tener varios items por encargue del mismo lote)
+      const unicos = todosLosPendientes.filter((o,i,arr)=>arr.findIndex(x=>x.id===o.id)===i);
+      setPedidosPendientes(unicos);
       setOk(true);
-      setTimeout(()=>onDone(), 1500);
+      if(!unicos.length) setTimeout(()=>onDone(), 1500);
     } catch(e) {
       console.warn("Error al ingresar mercadería:", e);
       toast.error("Hubo un problema de conexión. Revisá el Stock — puede que ya se haya actualizado igual.");
@@ -5156,9 +5161,47 @@ function IngresarDesdeSolicitud({po, products, onStock, onDone, onArrived}) {
   };
 
   if(ok) return (
-    <div style={{textAlign:"center",padding:"20px 0"}}>
-      <div style={{fontSize:40,marginBottom:6}}>✅</div>
-      <div style={{fontWeight:800,color:"#1e8449",fontSize:15}}>¡Stock actualizado!</div>
+    <div style={{padding:"4px 0"}}>
+      <div style={{textAlign:"center",padding:"16px 0 12px"}}>
+        <div style={{display:"flex",justifyContent:"center"}}><CheckCircle size={38} color="#1e8449" strokeWidth={2}/></div>
+        <div style={{fontWeight:800,color:"#1e8449",fontSize:15,marginTop:8}}>¡Stock actualizado!</div>
+      </div>
+
+      {pedidosPendientes.length > 0 && (
+        <div style={{background:"#fffaf2",border:"1.5px solid #f0d080",borderRadius:12,padding:"12px 14px",marginBottom:10}}>
+          <div style={{fontWeight:700,fontSize:13,color:"#b7770d",marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
+            <Package size={14} strokeWidth={2.3}/>
+            {pedidosPendientes.length===1
+              ? "Hay 1 pedido que estaba esperando esta mercadería:"
+              : `Hay ${pedidosPendientes.length} pedidos que estaban esperando esta mercadería:`}
+          </div>
+          {pedidosPendientes.map(ord=>(
+            <div key={ord.id} style={{background:"#fff",borderRadius:9,padding:"10px 12px",marginBottom:8,border:"1px solid #f0d080",display:"flex",alignItems:"center",gap:10}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:700,fontSize:13}}>{ord.client}</div>
+                <div style={{fontSize:11,color:"#888"}}>{ord.compNum||ord.docNum||""} · {ord.vendedor}</div>
+                <div style={{fontSize:11,color:"#b7770d",marginTop:2}}>
+                  {(ord.items||[]).filter(it=>it.porEncargue&&!it.encargueResuelto).map(it=>it.name).join(", ")}
+                </div>
+              </div>
+              {resueltos[ord.id]
+                ? <span style={{display:"inline-flex",alignItems:"center",gap:5,color:"#1e8449",fontWeight:700,fontSize:12}}><CheckCircle size={14} strokeWidth={2.4}/>Resuelto</span>
+                : onResolverEncargue && <button onClick={async()=>{
+                    await onResolverEncargue(ord.id);
+                    setResueltos(r=>({...r,[ord.id]:true}));
+                  }} style={{padding:"7px 12px",borderRadius:8,border:"none",background:"#1e8449",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:5,flexShrink:0}}>
+                    <CheckCircle size={12} strokeWidth={2.4}/> Ya disponible
+                  </button>
+              }
+            </div>
+          ))}
+          <button onClick={onDone} style={{width:"100%",marginTop:4,padding:"9px",borderRadius:9,border:"1.5px solid #e5e5e5",background:"#fff",color:"#555",fontWeight:600,fontSize:13,cursor:"pointer"}}>
+            Cerrar
+          </button>
+        </div>
+      )}
+
+      {pedidosPendientes.length===0 && null}
     </div>
   );
 
@@ -5324,7 +5367,7 @@ function exportSolicitudXLSX(po) {
   XLSX.writeFile(wb, `Solicitud_${po.id.slice(-6).toUpperCase()}_${po.fecha.replace(/\//g,"-")}.xlsx`);
 }
 
-function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchaseOrders,isMobile,onStockExternal,addLog,onCreated,autoOpenId,onConsumedAutoOpen,prefillItem,onConsumedPrefillItem}) {
+function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchaseOrders,isMobile,onStockExternal,addLog,onCreated,autoOpenId,onConsumedAutoOpen,prefillItem,onConsumedPrefillItem,onResolverEncargue}) {
   const [view, setView] = useState("lista"); // lista | nueva | detalle
   const [selected, setSelected] = useState(null);
   const [showAddProduct, setShowAddProduct] = useState(false);
@@ -5630,6 +5673,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
               Podés ingresar el stock recibido directamente desde esta solicitud. Ajustá las cantidades si recibiste diferente a lo pedido.
             </div>
             <IngresarDesdeSolicitud po={po} products={products} onStock={onStockExternal} onDone={()=>setView("lista")}
+              onResolverEncargue={onResolverEncargue}
               onArrived={async()=>{
                 const updated = {...po, fechaRecibido: today(), estado:"cerrada", fechaCierre: today()};
                 setPurchaseOrders(prev=>prev.map(x=>x.id===po.id?updated:x));
@@ -5891,7 +5935,7 @@ function BarcodeScanner({onDetected, onClose}) {
   );
 }
 
-function Compras({products,onStock,isMobile,canScan}) {
+function Compras({products,onStock,isMobile,canScan,onResolverEncargue}) {
   const [search,setSearch]=useState("");
   const [items,setItems]=useState([]);
   const [ok,setOk]=useState(false);
@@ -5902,6 +5946,8 @@ function Compras({products,onStock,isMobile,canScan}) {
   const [mStep, setMStep] = useState(1);
   const [showScanner, setShowScanner] = useState(false);
   const [scanMsg, setScanMsg] = useState("");
+  const [pedidosPendientes, setPedidosPendientes] = useState([]);
+  const [resueltos, setResueltos] = useState({});
 
   const handleBarcode = (code) => {
     setShowScanner(false);
@@ -5945,9 +5991,16 @@ function Compras({products,onStock,isMobile,canScan}) {
     if(saving) return;
     setSaving(true);
     try {
-      for(const i of items) { await onStock(i.pid,+i.qty,+i.cost); }
+      const todos = [];
+      for(const i of items) {
+        const pendientes = await onStock(i.pid,+i.qty,+i.cost);
+        if(pendientes?.length) todos.push(...pendientes);
+      }
       setItems([]); setSearch(""); setMStep(1);
-      setOk(true); setTimeout(()=>setOk(false),2000);
+      const unicos = todos.filter((o,i,arr)=>arr.findIndex(x=>x.id===o.id)===i);
+      setPedidosPendientes(unicos);
+      setOk(true);
+      if(!unicos.length) setTimeout(()=>setOk(false),2000);
     } catch(e) {
       console.warn("Error al ingresar al stock:", e);
       toast.error("Hubo un problema de conexión. Revisá el Stock — puede que ya se haya actualizado igual.");
@@ -5957,7 +6010,40 @@ function Compras({products,onStock,isMobile,canScan}) {
   };
 
   if(saving) return <SaveSpinner label="Ingresando al stock..." color="#1e8449"/>;
-  if(ok) return <div style={{textAlign:"center",padding:80}}><div style={{display:"flex",justifyContent:"center"}}><Package size={52} color="#1e8449" strokeWidth={1.8}/></div><div style={{fontWeight:800,color:"#1e8449",fontSize:20,marginTop:12}}>¡Stock actualizado!</div></div>;
+  if(ok) return (
+    <div style={{padding:"4px 0"}}>
+      <div style={{textAlign:"center",padding:"16px 0 12px"}}>
+        <div style={{display:"flex",justifyContent:"center"}}><Package size={38} color="#1e8449" strokeWidth={1.8}/></div>
+        <div style={{fontWeight:800,color:"#1e8449",fontSize:15,marginTop:8}}>¡Stock actualizado!</div>
+      </div>
+      {pedidosPendientes.length>0 ? (
+        <div style={{background:"#fffaf2",border:"1.5px solid #f0d080",borderRadius:12,padding:"12px 14px"}}>
+          <div style={{fontWeight:700,fontSize:13,color:"#b7770d",marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
+            <Package size={14} strokeWidth={2.3}/>
+            {pedidosPendientes.length===1?"Hay 1 pedido que estaba esperando esta mercadería:":`Hay ${pedidosPendientes.length} pedidos que estaban esperando:`}
+          </div>
+          {pedidosPendientes.map(ord=>(
+            <div key={ord.id} style={{background:"#fff",borderRadius:9,padding:"10px 12px",marginBottom:8,border:"1px solid #f0d080",display:"flex",alignItems:"center",gap:10}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:700,fontSize:13}}>{ord.client}</div>
+                <div style={{fontSize:11,color:"#888"}}>{ord.compNum||ord.docNum||""} · {ord.vendedor}</div>
+              </div>
+              {resueltos[ord.id]
+                ? <span style={{display:"inline-flex",alignItems:"center",gap:5,color:"#1e8449",fontWeight:700,fontSize:12}}><CheckCircle size={14} strokeWidth={2.4}/>Resuelto</span>
+                : onResolverEncargue&&<button onClick={async()=>{await onResolverEncargue(ord.id);setResueltos(r=>({...r,[ord.id]:true}));}}
+                    style={{padding:"7px 12px",borderRadius:8,border:"none",background:"#1e8449",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:5,flexShrink:0}}>
+                    <CheckCircle size={12} strokeWidth={2.4}/> Ya disponible
+                  </button>
+              }
+            </div>
+          ))}
+          <button onClick={()=>setOk(false)} style={{width:"100%",marginTop:4,padding:"9px",borderRadius:9,border:"1.5px solid #e5e5e5",background:"#fff",color:"#555",fontWeight:600,fontSize:13,cursor:"pointer"}}>
+            Cerrar
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
 
   // ── MOBILE ──────────────────────────────────────────────────────────────────
   if(isMobile) return (
