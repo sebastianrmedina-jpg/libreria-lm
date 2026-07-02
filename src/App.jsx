@@ -2317,7 +2317,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
           onPedirEncargue={(items)=>{setDeepLinkSolicitudItem(items);setTab("solicitud");}}
           onResolverEncargue={resolverEncargue}
           currentUser={currentUser} isMobile={isMobile}/>}
-        {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} promos={promos} orders={orders}/>}
+        {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} promos={promos} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={setPreviewListId}/>}
         {tab==="clientes"   && <ClientesPanel clients={clients} onSave={saveClient} onDelete={deleteClient} onRequestDelete={requestDeleteClient} onRejectDelete={rejectDeleteClient} currentUser={currentUser} isMobile={isMobile} orders={orders}/>}
         {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} orders={orders}/>}
         {tab==="precios"    && <Precios products={pricedProducts} canScan={currentUser.role==="admin"||isTestOrder(currentUser.vendedor||currentUser.name)||currentUser.barcodeEnabled}/>}
@@ -4025,7 +4025,7 @@ function CartSummaryLines({cart}) {
   );
 }
 
-function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSaveClient,promos,orders}) {
+function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSaveClient,promos,orders,priceLists,previewListId,onChangeList}) {
   const [selectedClient, setSelectedClient] = useState(null);
   const [notes,setNotes]=useState("");
   const [vendedor,setVendedor]=useState(currentUser.role==="vendedor"?(currentUser.vendedor||currentUser.name):"");
@@ -4081,6 +4081,12 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
               : <ClientSelector clients={clients} onSelect={c=>{setSelectedClient(c);}} onSaveClient={onSaveClient} currentUser={currentUser}/>
             }
             {currentUser.role==="admin"&&<Field label="Vendedor *"><select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,cursor:"pointer",color:vendedor?"#1a1a1a":"#aaa",marginBottom:8}}><option value="">— Seleccioná vendedor —</option>{vendors.map(v=><option key={v} value={v}>{v}</option>)}</select></Field>}
+            {currentUser.role==="admin"&&priceLists?.length>1&&<Field label="Lista de precios">
+              <select value={previewListId||"default"} onChange={e=>onChangeList&&onChangeList(e.target.value==="default"?null:e.target.value)} style={{...inputStyle,cursor:"pointer"}}>
+                {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}{pl.discount>0?` (-${pl.discount}%)`:""}  </option>)}
+              </select>
+              {previewListId&&previewListId!=="default"&&<div style={{fontSize:11,color:"#b7770d",marginTop:4,fontWeight:600}}>⚠️ Los precios ya muestran el descuento aplicado</div>}
+            </Field>}
             <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
             <button onClick={()=>{if(!selectedClient){toast.error("Seleccioná un cliente");return;}if(!vendedor&&currentUser.role==="admin"){toast.error("Seleccioná un vendedor");return;}setMStep(2);}}
               style={{width:"100%",padding:"12px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:selectedClient?`linear-gradient(135deg,${REDD},${RED})`:"#e5e5e5",color:selectedClient?"#fff":"#aaa",marginTop:8,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
@@ -4149,6 +4155,12 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
               </div>
           }
           {currentUser.role==="admin"&&<Field label="Vendedor *"><select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,color:vendedor?"#1a1a1a":"#aaa",cursor:"pointer"}}><option value="">— Seleccioná vendedor —</option>{vendors.map(v=><option key={v} value={v}>{v}</option>)}</select></Field>}
+          {currentUser.role==="admin"&&priceLists?.length>1&&<Field label="Lista de precios">
+            <select value={previewListId||"default"} onChange={e=>onChangeList&&onChangeList(e.target.value==="default"?null:e.target.value)} style={{...inputStyle,cursor:"pointer"}}>
+              {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}{pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
+            </select>
+            {previewListId&&previewListId!=="default"&&<div style={{fontSize:11,color:"#b7770d",marginTop:4,fontWeight:600}}>⚠️ Los precios ya muestran el descuento aplicado</div>}
+          </Field>}
           <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
           <div style={{borderTop:"1px solid #f5f5f5",margin:"4px 0 8px",paddingTop:10}}>
             {cart.length===0?<div style={{textAlign:"center",color:"#aaa",fontSize:12,padding:"10px 0"}}>Agregá productos al pedido</div>
