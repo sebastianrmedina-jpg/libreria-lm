@@ -1997,6 +1997,17 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   // ── Supabase Realtime — se inicia aquí donde currentUser ya existe ──
   useEffect(() => {
     const channel = supabase.channel("lm-realtime-" + currentUser.id)
+      // PRODUCTOS — precios y stock en tiempo real
+      // Cuando el admin importa un Excel o edita un precio, todos los usuarios
+      // ven el cambio sin tener que cerrar y volver a abrir la app.
+      .on("postgres_changes", {event:"UPDATE", schema:"public", table:"lm_products"}, (payload) => {
+        const p = mapProduct(payload.new);
+        setProducts(prev => prev.map(x => x.id===p.id ? p : x));
+      })
+      .on("postgres_changes", {event:"INSERT", schema:"public", table:"lm_products"}, (payload) => {
+        const p = mapProduct(payload.new);
+        setProducts(prev => prev.find(x=>x.id===p.id) ? prev : [...prev, p]);
+      })
       // PEDIDOS
       .on("postgres_changes", {event:"INSERT", schema:"public", table:"lm_orders"}, (payload) => {
         const o = mapOrder(payload.new);
@@ -8157,23 +8168,26 @@ function ExcelPanel({products,setProducts}) {
     const MARKUP_VENTA = 1.25 * 1.20;
 
     // El costo real es el de oferta si el proveedor tiene uno activo (es un costo temporal
-    // mas bajo, NO un precio de venta), sino el normal con IVA.
+    // PRECIO OFERTA = costo especial (con descuento del proveedor). Si existe, reemplaza al PRECIO CON IVA
+    // como base de cálculo. En ambos casos se multiplica por el markup para obtener el precio de venta.
+    // PRECIO FINAL = precio de venta ya calculado (si la lista lo trae, se usa directo sin markup).
     const resolveCosto = (row) => {
-      const oferta = row.precioOferta;
-      const iva    = row.precioIVA;
-      if(oferta !== null && oferta !== undefined && !isNaN(oferta) && oferta > 0) return oferta;
-      return iva;
+      if(row.precioOferta && row.precioOferta > 0) return row.precioOferta;
+      return row.precioIVA || null;
+    };
+    const resolveSalePrice = (row) => {
+      if(row.precioFinal !== null && row.precioFinal > 0) return row.precioFinal;
+      const costo = resolveCosto(row);
+      return costo ? Math.round(costo * MARKUP_VENTA * 100) / 100 : null;
     };
 
     preview.all.forEach(row=>{
       const idx = newProds.findIndex(p=>p.id===row.id);
-      const costo = resolveCosto(row);  // oferta si esta activa, sino IVA
+      const costo     = resolveCosto(row);
+      const salePrice = resolveSalePrice(row);
       if(idx>=0){
-        if(row.precioFinal!==null && row.precioFinal>0)
-                          newProds[idx].salePrice = row.precioFinal;
-        else if(costo!==null) newProds[idx].salePrice = Math.round(costo*MARKUP_VENTA*100)/100;
-        if(costo!==null) {
-          // Guarda el costo previo ANTES de pisarlo, para poder mostrar el cambio en el dashboard
+        if(salePrice !== null) newProds[idx].salePrice = salePrice;
+        if(costo !== null) {
           if(costo !== newProds[idx].costPrice) newProds[idx].costPriceAnterior = newProds[idx].costPrice;
           newProds[idx].costPrice = costo;
         }
@@ -8189,11 +8203,12 @@ function ExcelPanel({products,setProducts}) {
     if(mode==="full") {
       preview.all.forEach(row=>{
         if(!newProds.find(p=>p.id===row.id)) {
-          const costo = resolveCosto(row);
+          const costo     = resolveCosto(row);
+          const salePrice = resolveSalePrice(row);
           newProds.push({
             id:row.id, name:row.name||row.id,
             costPrice:costo||0,
-            salePrice:(row.precioFinal&&row.precioFinal>0)?row.precioFinal:Math.round((costo||0)*MARKUP_VENTA*100)/100,
+            salePrice:salePrice||0,
             category:"Importado", stock:0, multiploCompra:row.multiplo||1, barcode:row.barcode||""
           });
         }
