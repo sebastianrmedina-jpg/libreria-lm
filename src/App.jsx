@@ -78,6 +78,8 @@ const ArrowLeftIcon = (p) => <Ico {...p}><line x1="20" y1="12" x2="4" y2="12"/><
 const ArrowRightIcon = (p) => <Ico {...p}><line x1="4" y1="12" x2="20" y2="12"/><polyline points="13 5 20 12 13 19"/></Ico>;
 const Eye = (p) => <Ico {...p}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></Ico>;
 const BoxIcon = (p) => <Ico {...p}><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></Ico>;
+const Layers = (p) => <Ico {...p}><path d="M12 2l9 5-9 5-9-5 9-5z"/><path d="M3 12l9 5 9-5"/><path d="M3 17l9 5 9-5"/></Ico>;
+const AlertCircle = (p) => <Ico {...p}><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12.5"/><circle cx="12" cy="16" r="0.4" fill={p.color||"currentColor"} stroke="none"/></Ico>;
 
 // ─── Sistema global de toasts (reemplaza toast.error()) — sin Context ni prop-drilling ──
 let _pushToast = null;
@@ -173,7 +175,7 @@ const SUPA_SERVICE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const supabase = createClient(SUPA_URL, SUPA_ANON);
 const supaAdmin = supabase;
 
-const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock,multiploCompra:r.multiplo_compra||1,barcode:r.barcode||"",costPriceAnterior:r.cost_price_anterior||0,imageUrl:r.image_url||""});
+const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock,multiploCompra:r.multiplo_compra||1,barcode:r.barcode||"",costPriceAnterior:r.cost_price_anterior||0,imageUrl:r.image_url||"",skuProveedor:r.sku_proveedor||null,factorVenta:r.factor_venta||1,variantesHabilitadas:r.variantes_habilitadas||false});
 const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||"",isTest:r.is_test||false,isSandbox:r.is_sandbox||false,internalNote:r.internal_note||"",editStatus:r.edit_status||"",editReason:r.edit_reason||"",editItems:r.edit_items||null,editRejectReason:r.edit_reject_reason||"",comprobanteUrl:r.comprobante_url||"",comprobanteNombre:r.comprobante_nombre||"",comprobanteFecha:r.comprobante_fecha||"",pagoTipo:r.pago_tipo||"",pagoEfectivoFecha:r.pago_efectivo_fecha||"",encargueResuelto:r.encargue_resuelto||false});
 const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,date:r.date,items:r.items||[],validity:r.validity||"",docNum:r.doc_num||"",convertida:r.convertida||false,ordenId:r.orden_id||"",extendida:r.extendida||false,extendReason:r.extend_reason||"",extendDate:r.extend_date||"",globalDisc:r.global_disc||null,subtotal:r.subtotal||0});
 
@@ -294,8 +296,8 @@ const db = {
     }
     return all.map(mapProduct);
   },
-  upsertProduct: async (p) => { const {error} = await supaAdmin.from("lm_products").upsert({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0,multiplo_compra:p.multiploCompra||1,barcode:p.barcode||"",cost_price_anterior:p.costPriceAnterior||0,image_url:p.imageUrl||""}); if(error) throw error; },
-  upsertProducts: async (arr) => { const {error} = await supaAdmin.from("lm_products").upsert(arr.map(p=>({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0,multiplo_compra:p.multiploCompra||1,barcode:p.barcode||"",cost_price_anterior:p.costPriceAnterior||0,image_url:p.imageUrl||""}))); if(error) throw error; },
+  upsertProduct: async (p) => { const {error} = await supaAdmin.from("lm_products").upsert({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0,multiplo_compra:p.multiploCompra||1,barcode:p.barcode||"",cost_price_anterior:p.costPriceAnterior||0,image_url:p.imageUrl||"",sku_proveedor:p.skuProveedor||null,factor_venta:p.factorVenta||1,variantes_habilitadas:p.variantesHabilitadas||false}); if(error) throw error; },
+  upsertProducts: async (arr) => { const {error} = await supaAdmin.from("lm_products").upsert(arr.map(p=>({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0,multiplo_compra:p.multiploCompra||1,barcode:p.barcode||"",cost_price_anterior:p.costPriceAnterior||0,image_url:p.imageUrl||"",sku_proveedor:p.skuProveedor||null,factor_venta:p.factorVenta||1,variantes_habilitadas:p.variantesHabilitadas||false}))); if(error) throw error; },
   deleteProduct: async (id) => { const {error} = await supaAdmin.from("lm_products").delete().eq("id",id); if(error) throw error; },
 
   getOrders:    async () => { const {data,error} = await supabase.from("lm_orders").select("*").order("date",{ascending:false}); if(error) throw error; return (data||[]).map(mapOrder); },
@@ -390,6 +392,37 @@ const fARS = n => "$" + Number(n).toLocaleString("es-AR",{minimumFractionDigits:
 const genId = () => Date.now().toString(36)+Math.random().toString(36).slice(2);
 const today = () => new Date().toLocaleDateString("es-AR");
 const todayISO = () => new Date().toISOString().slice(0,10);
+
+// ─── VARIANTES DE VENTA (stock compartido, ej. docena/unidad) ───────────────
+// Palabras que hacen sospechar que un producto viene empaquetado y podría
+// necesitar venderse también fraccionado. Solo sirve para sugerir — nunca
+// fracciona nada solo.
+const PALABRAS_EMPAQUE_VENTA = ["docena","caja x","pack x","blister x","set x","estuche x"];
+const esCandidatoFraccion = (nombre) => !!nombre && PALABRAS_EMPAQUE_VENTA.some(p => nombre.toLowerCase().includes(p));
+
+// El "id de grupo" de una variante: si es hija, su sku_proveedor; si es la fila
+// original (o un producto sin variantes), su propio id.
+const grupoVarianteId = (p) => p.skuProveedor || p.id;
+
+// Aplica un cambio de stock (delta, en "unidades de la fila de pid") respetando
+// el pool físico compartido entre variantes. Si el producto no tiene variantes
+// hermanas, se comporta exactamente igual que antes (stock + delta, sin negativos).
+// Se usa tanto para altas (delta positivo) como para ventas/bajas (delta negativo).
+function applyStockDelta(products, pid, deltaFilas) {
+  const target = products.find(p => p.id === pid);
+  if(!target) return products;
+  const factor = target.factorVenta || 1;
+  const grupoId = grupoVarianteId(target);
+  const hermanas = products.filter(p => grupoVarianteId(p) === grupoId);
+  if(hermanas.length <= 1) {
+    // Producto sin variantes: comportamiento clásico, sin tocar nada más.
+    return products.map(p => p.id===pid ? {...p, stock: Math.max(0, p.stock + deltaFilas)} : p);
+  }
+  const poolFisicoActual = target.stock * factor;
+  const poolFisicoNuevo = Math.max(0, poolFisicoActual + deltaFilas * factor);
+  return products.map(p => grupoVarianteId(p)===grupoId ? {...p, stock: Math.floor(poolFisicoNuevo / (p.factorVenta||1))} : p);
+}
+
 // Parsea la fecha guardada en lm_stocklog ("DD/MM/YYYY, HH:MM:SS" o "DD/MM/YYYY")
 const parseFechaLog = (s) => {
   if(!s) return null;
@@ -1537,10 +1570,19 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       return; // ← no notifs, no log de actividad, no toca stock real
     }
 
-    // REAL: descontar stock, guardar en Supabase, notificar
-    const updatedProds = products.map(x=>{const qty=orderWithNum.items.filter(i=>i.pid===x.id).reduce((s,i)=>s+i.qty,0);return qty>0?{...x,stock:Math.max(0,x.stock-qty)}:x;});
+    // REAL: descontar stock (respetando variantes con pool compartido), guardar en Supabase, notificar
+    const qtyByPid = {};
+    orderWithNum.items.forEach(i=>{ qtyByPid[i.pid] = (qtyByPid[i.pid]||0) + i.qty; });
+    let updatedProds = products;
+    for(const [pid,qty] of Object.entries(qtyByPid)) updatedProds = applyStockDelta(updatedProds, pid, -qty);
     setProducts(updatedProds);
-    for(const p of updatedProds.filter(p=>orderWithNum.items.find(i=>i.pid===p.id))) await db.upsertProduct(p);
+    const idsAfectados = new Set();
+    Object.keys(qtyByPid).forEach(pid=>{
+      const t = products.find(p=>p.id===pid);
+      const grupoId = t ? grupoVarianteId(t) : pid;
+      updatedProds.filter(p=>grupoVarianteId(p)===grupoId).forEach(p=>idsAfectados.add(p.id));
+    });
+    for(const p of updatedProds.filter(p=>idsAfectados.has(p.id))) await db.upsertProduct(p);
     setOrders(o=>[{...orderWithNum, isSandbox: false},...o]);
     await db.upsertOrder({...orderWithNum, isSandbox: false});
     const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"NUEVO_PEDIDO",para:"admin",icono:"🛒",titulo:"Nuevo pedido registrado",cuerpo:`${orderWithNum.client} - ${fARS(orderWithNum.total)} - ${orderWithNum.docNum}`,ref:orderWithNum.id};
@@ -1753,19 +1795,19 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
         return next;
       });
     } else {
-      // Devolver stock de items originales
-      let prods = [...products];
-      ord.items.forEach(it => {
-        const idx = prods.findIndex(p=>p.id===it.pid);
-        if(idx>=0) prods[idx] = {...prods[idx], stock: prods[idx].stock + it.qty};
-      });
-      // Descontar stock de items nuevos
-      ord.editItems.forEach(it => {
-        const idx = prods.findIndex(p=>p.id===it.pid);
-        if(idx>=0) prods[idx] = {...prods[idx], stock: Math.max(0, prods[idx].stock - it.qty)};
-      });
+      // Devolver stock de items originales, descontar stock de items nuevos —
+      // todo pasando por applyStockDelta para respetar variantes con pool compartido.
+      let prods = products;
+      ord.items.forEach(it => { prods = applyStockDelta(prods, it.pid, it.qty); });
+      ord.editItems.forEach(it => { prods = applyStockDelta(prods, it.pid, -it.qty); });
       setProducts(prods);
-      for(const p of prods.filter(p=>ord.items.find(i=>i.pid===p.id)||ord.editItems.find(i=>i.pid===p.id))) await db.upsertProduct(p);
+      const idsAfectados = new Set();
+      [...ord.items, ...ord.editItems].forEach(it=>{
+        const t = products.find(p=>p.id===it.pid);
+        const grupoId = t ? grupoVarianteId(t) : it.pid;
+        prods.filter(p=>grupoVarianteId(p)===grupoId).forEach(p=>idsAfectados.add(p.id));
+      });
+      for(const p of prods.filter(p=>idsAfectados.has(p.id))) await db.upsertProduct(p);
     }
     const newTotal = ord.editItems.reduce((s,it)=>s+it.price*it.qty,0);
     const updated = orders.map(o=>o.id===id ? {...o, items:ord.editItems, total:newTotal, editStatus:"", editItems:null, editReason:"", editRejectReason:""} : o);
@@ -1793,19 +1835,17 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     if(!ord) return;
     const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
     if(!isSandboxOrder) {
-      let prods = [...products];
-      // Devolver stock de items originales
-      ord.items.forEach(it => {
-        const idx = prods.findIndex(p=>p.id===it.pid);
-        if(idx>=0) prods[idx] = {...prods[idx], stock: prods[idx].stock + it.qty};
-      });
-      // Descontar stock de items nuevos
-      newItems.forEach(it => {
-        const idx = prods.findIndex(p=>p.id===it.pid);
-        if(idx>=0) prods[idx] = {...prods[idx], stock: Math.max(0, prods[idx].stock - it.qty)};
-      });
+      let prods = products;
+      ord.items.forEach(it => { prods = applyStockDelta(prods, it.pid, it.qty); });
+      newItems.forEach(it => { prods = applyStockDelta(prods, it.pid, -it.qty); });
       setProducts(prods);
-      for(const p of prods.filter(p=>ord.items.find(i=>i.pid===p.id)||newItems.find(i=>i.pid===p.id))) await db.upsertProduct(p);
+      const idsAfectados = new Set();
+      [...ord.items, ...newItems].forEach(it=>{
+        const t = products.find(p=>p.id===it.pid);
+        const grupoId = t ? grupoVarianteId(t) : it.pid;
+        prods.filter(p=>grupoVarianteId(p)===grupoId).forEach(p=>idsAfectados.add(p.id));
+      });
+      for(const p of prods.filter(p=>idsAfectados.has(p.id))) await db.upsertProduct(p);
     }
     const newTotal = newItems.reduce((s,it)=>s+it.price*it.qty, 0);
     const updated = orders.map(o=>o.id===id ? {...o, items:newItems, total:newTotal, editStatus:"", editItems:null} : o);
@@ -1871,6 +1911,42 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     setProducts(p=>p.map(x=>x.id===upd.id?upd:x)); await db.upsertProduct(upd);
     if(prev) await logActivity("Precio/stock editado", `${upd.name} - Venta: ${fARS(upd.salePrice)} (antes ${fARS(prev.salePrice)}) - Stock: ${upd.stock}`, upd.id, "producto");
   };
+  // ── VARIANTES DE VENTA ────────────────────────────────────────────────────
+  // Switch de admin: habilita (o no) que un producto pueda generar variantes.
+  // No genera nada por sí solo — solo destraba el botón "Generar" en Stock.
+  const toggleVariantes = async (pid) => {
+    const prod = products.find(p=>p.id===pid);
+    if(!prod) return;
+    const upd = {...prod, variantesHabilitadas: !prod.variantesHabilitadas};
+    setProducts(p=>p.map(x=>x.id===pid?upd:x));
+    await db.upsertProduct(upd);
+  };
+  // Crea la variante hija (ej. "Unidad") a partir del producto original (ej. "Docena").
+  // El original pasa a tener factorVenta = factorOriginal (ej. 12) y su stock se recalcula
+  // como docenas completas; la hija nace con factorVenta = 1 y stock = pool físico total.
+  const generarVariante = async (productoBase, {sku, nombre, precioVenta, factorOriginal}) => {
+    if(products.find(p=>p.id===sku)) { toast.error("Ese SKU de venta ya existe"); return; }
+    const poolFisico = productoBase.stock * (factorOriginal||1);
+    const baseActualizado = {...productoBase, factorVenta: factorOriginal||1, stock: Math.floor(poolFisico/(factorOriginal||1))};
+    const nuevaVariante = {
+      id: sku,
+      name: nombre,
+      category: productoBase.category,
+      costPrice: +(productoBase.costPrice/(factorOriginal||1)).toFixed(2),
+      salePrice: precioVenta,
+      stock: poolFisico,
+      multiploCompra: 1,
+      barcode: "",
+      skuProveedor: productoBase.id,
+      factorVenta: 1,
+      variantesHabilitadas: false,
+    };
+    setProducts(p=>[...p.map(x=>x.id===productoBase.id?baseActualizado:x), nuevaVariante]);
+    await db.upsertProduct(baseActualizado);
+    await db.upsertProduct(nuevaVariante);
+    await logActivity("Variante de venta creada", `${nombre} (${sku}) generada a partir de ${productoBase.name} (${productoBase.id})`, sku, "producto");
+    toast.success(`Variante "${nombre}" creada`);
+  };
   // ── POR ENCARGUE: marcar manualmente como resuelto cuando llega la mercaderia ──
   const resolverEncargue = async (orderId) => {
     const ord = orders.find(o=>o.id===orderId);
@@ -1882,10 +1958,17 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
 
   const addStock = async (pid,qty,newCost) => {
     const prod=products.find(p=>p.id===pid);
-    const updatedProds=products.map(x=>{if(x.id!==pid)return x;const u={...x,stock:x.stock+qty};if(newCost){u.costPrice=newCost;u.salePrice=Math.round(newCost*1.5*100)/100;}return u;});
+    const grupoId = prod ? grupoVarianteId(prod) : pid;
+    let updatedProds = applyStockDelta(products, pid, qty);
+    if(newCost){
+      updatedProds = updatedProds.map(x => x.id===pid ? {...x, costPrice:newCost, salePrice:Math.round(newCost*1.5*100)/100} : x);
+    }
     setProducts(updatedProds);
+    // Si el producto tiene variantes hermanas, el pool se reparte entre varias filas
+    // y hay que guardar todas — no solo la que se buscó.
+    const afectadas = updatedProds.filter(p => grupoVarianteId(p)===grupoId);
+    for(const p of afectadas) await db.upsertProduct(p);
     const updProd=updatedProds.find(p=>p.id===pid);
-    if(updProd)await db.upsertProduct(updProd);
     let pendientes = [];
     if(prod){
       try {
@@ -2345,9 +2428,14 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                   </button>
                 </div>
               )}
-              <Stock products={pricedProducts} onUpd={updProd} onDel={pid=>setProducts(p=>p.filter(x=>x.id!==pid))} onAdjust={(pid,qty)=>setProducts(p=>p.map(x=>x.id===pid?{...x,stock:x.stock+qty}:x))} isAdmin={isAdmin} addLog={addLog} stockLog={stockLog} setStockLog={setStockLog} isMobile={isMobile}
+              <Stock products={pricedProducts} onUpd={updProd} onDel={pid=>setProducts(p=>p.filter(x=>x.id!==pid))} onAdjust={(pid,qty)=>setProducts(p=>applyStockDelta(p,pid,qty))} isAdmin={isAdmin} addLog={addLog} stockLog={stockLog} setStockLog={setStockLog} isMobile={isMobile} onToggleVariantes={toggleVariantes} onGenerarVariante={generarVariante}
                 onCrearOferta={(pid)=>{setDeepLinkOfertaProductId(pid);setDeepLinkAdminSection("ofertas");setTab("admin");}}
-                onPedirReposicion={(pid,qty)=>{setDeepLinkSolicitudItem({pid,qty});setTab("solicitud");}}/>
+                onPedirReposicion={(pid,qty)=>{
+                  const prod = products.find(p=>p.id===pid);
+                  const pidReal = prod?.skuProveedor || pid; // las variantes hijas se piden por el SKU del proveedor
+                  setDeepLinkSolicitudItem({pid:pidReal,qty});
+                  setTab("solicitud");
+                }}/>
             </>}
         {tab==="compras"    && <Compras products={products} onStock={addStock} isMobile={isMobile} canScan={currentUser.role==="admin"||isTestOrder(currentUser.vendedor||currentUser.name)||currentUser.barcodeEnabled} onResolverEncargue={resolverEncargue}/>}
         {tab==="solicitud"  && <SolicitudCompra products={products} currentUser={currentUser} isAdmin={isAdmin} purchaseOrders={purchaseOrders} setPurchaseOrders={setPurchaseOrders} isMobile={isMobile} onStockExternal={addStock} addLog={addLog}
@@ -4863,10 +4951,11 @@ function BajaConfirm({onConfirm,disabled}) {
   );
 }
 
-function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLog,isMobile,onCrearOferta,onPedirReposicion}) {
+function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLog,isMobile,onCrearOferta,onPedirReposicion,onToggleVariantes,onGenerarVariante}) {
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("todos");
   const [editing,setEditing]=useState(null);
+  const [fraccionando,setFraccionando]=useState(null);
   const [stockTab,setStockTab]=useState("lista");
   const [page,setPage]=useState(0);
   const PAGE_SIZE = 100;
@@ -4988,13 +5077,32 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
                         <Gift size={10} strokeWidth={2.5}/> Crear oferta
                       </button>
                     ) : null;
+                    const varianteBadge = p.skuProveedor ? (
+                      <span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"1px 7px",fontSize:10,fontWeight:700,whiteSpace:"nowrap",marginLeft:4}}>
+                        <BoxIcon size={10} strokeWidth={2.4}/> Variante de {p.skuProveedor}
+                      </span>
+                    ) : (esCandidatoFraccion(p.name) && !p.variantesHabilitadas ? (
+                      <span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fdf2e3",color:"#b7770d",border:"1px dashed #f0d080",borderRadius:20,padding:"1px 7px",fontSize:10,fontWeight:700,whiteSpace:"nowrap",marginLeft:4}}>
+                        <AlertTriangle size={10} strokeWidth={2.4}/> Candidato a fraccionar
+                      </span>
+                    ) : null);
                     return isMobile ? (
                       <tr key={p.id} style={{borderTop:"1px solid #f5f5f5"}}>
                         <td style={{padding:"10px 12px"}}>
-                          <div style={{fontWeight:600,fontSize:13}}>{p.name}{staleBadge}</div>
+                          <div style={{fontWeight:600,fontSize:13}}>{p.name}{staleBadge}{varianteBadge}</div>
                           <div style={{fontSize:10,color:"#aaa",marginTop:2}}>{p.id} · {p.category}</div>
                           {isAdmin&&<button onClick={()=>setEditing(p)} style={{padding:"3px 8px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11,fontWeight:600,marginTop:4,display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={10} strokeWidth={2.4}/>Editar</button>}
                           {crearOfertaBtn && <span style={{marginTop:4,display:"inline-block"}}>{crearOfertaBtn}</span>}
+                          {isAdmin && !p.skuProveedor && onToggleVariantes && (
+                            <button onClick={()=>onToggleVariantes(p.id)} style={{marginTop:4,marginLeft:4,padding:"3px 8px",borderRadius:6,border:`1.5px solid ${p.variantesHabilitadas?"#1e8449":"#e5e5e5"}`,background:p.variantesHabilitadas?"#eafaf1":"#fff",color:p.variantesHabilitadas?"#1e8449":"#888",cursor:"pointer",fontSize:11,fontWeight:600,display:"inline-flex",alignItems:"center",gap:4}}>
+                              <Layers size={10} strokeWidth={2.4}/>{p.variantesHabilitadas?"Variantes ON":"Habilitar variantes"}
+                            </button>
+                          )}
+                          {isAdmin && p.variantesHabilitadas && onGenerarVariante && (
+                            <button onClick={()=>setFraccionando(p)} style={{marginTop:4,marginLeft:4,padding:"3px 8px",borderRadius:6,border:`1.5px solid ${GOLD}`,background:"#fff",color:"#9a7d0a",cursor:"pointer",fontSize:11,fontWeight:600}}>
+                              Generar variante
+                            </button>
+                          )}
                         </td>
                         <td style={{padding:"10px 12px",textAlign:"right"}}><SPill n={p.stock}/></td>
                         <td style={{padding:"10px 12px",fontWeight:700,color:RED,textAlign:"right",whiteSpace:"nowrap"}}>{fARS(p.salePrice)}</td>
@@ -5007,6 +5115,7 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
                           <span>{p.name}</span>
                           {staleBadge}
                           {crearOfertaBtn}
+                          {varianteBadge}
                         </div>
                       </td>
                       <td style={{padding:"9px 12px",color:"#aaa",fontSize:11}}>{p.category}</td>
@@ -5014,7 +5123,21 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
                       <td style={{padding:"9px 12px",fontWeight:700,color:RED}}>{fARS(p.salePrice)}</td>
                       {isAdmin&&<td style={{padding:"9px 12px",color:"#666"}}>{fARS(p.costPrice)}</td>}
                       {isAdmin&&<td style={{padding:"9px 12px",fontWeight:700,color:+m>=40?"#1e8449":"#e67e22"}}>{m}%</td>}
-                      <td style={{padding:"9px 12px"}}>{isAdmin&&<button onClick={()=>setEditing(p)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11,fontWeight:600,display:"inline-flex",alignItems:"center"}}><Pencil size={11} strokeWidth={2.4}/></button>}</td>
+                      <td style={{padding:"9px 12px"}}>
+                        <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                          {isAdmin&&<button onClick={()=>setEditing(p)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:11,fontWeight:600,display:"inline-flex",alignItems:"center"}}><Pencil size={11} strokeWidth={2.4}/></button>}
+                          {isAdmin && !p.skuProveedor && onToggleVariantes && (
+                            <button onClick={()=>onToggleVariantes(p.id)} title="Habilitar/deshabilitar variantes de venta" style={{padding:"4px 8px",borderRadius:6,border:`1.5px solid ${p.variantesHabilitadas?"#1e8449":"#e5e5e5"}`,background:p.variantesHabilitadas?"#eafaf1":"#fff",color:p.variantesHabilitadas?"#1e8449":"#888",cursor:"pointer",fontSize:11,display:"inline-flex",alignItems:"center"}}>
+                              <Layers size={11} strokeWidth={2.4}/>
+                            </button>
+                          )}
+                          {isAdmin && p.variantesHabilitadas && onGenerarVariante && (
+                            <button onClick={()=>setFraccionando(p)} style={{padding:"4px 8px",borderRadius:6,border:`1.5px solid ${GOLD}`,background:"#fff",color:"#9a7d0a",cursor:"pointer",fontSize:11,fontWeight:600,whiteSpace:"nowrap"}}>
+                              Generar
+                            </button>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                     );
                   })
@@ -5067,7 +5190,79 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
         )}
 
         {editing&&<EditModal p={editing} onSave={p=>{onUpd(p);setEditing(null);}} onClose={()=>setEditing(null)}/>}
+        {fraccionando&&<VariantesModal producto={fraccionando} onClose={()=>setFraccionando(null)} onConfirm={(datos)=>{onGenerarVariante(fraccionando,datos);setFraccionando(null);}}/>}
       </>}
+    </div>
+  );
+}
+
+// ─── VARIANTES DE VENTA (docena/unidad con stock compartido) ────────────────
+function VariantesModal({producto, onClose, onConfirm}) {
+  const [factor, setFactor] = useState(12);
+  const [sku, setSku] = useState(`${producto.id}-U`);
+  const [nombre, setNombre] = useState(producto.name.replace(new RegExp(`(${PALABRAS_EMPAQUE_VENTA.join("|")})\\s*$`,"i"),"").trim());
+  const [precio, setPrecio] = useState(+(producto.salePrice/12).toFixed(2));
+  const [error, setError] = useState("");
+
+  const poolFisico = producto.stock * factor;
+
+  const confirmar = () => {
+    if(!sku.trim()) { setError("El SKU de venta es obligatorio"); return; }
+    if(!nombre.trim()) { setError("El nombre es obligatorio"); return; }
+    if(factor<=1) { setError("El factor debe ser mayor a 1 (si es 1, no hace falta fraccionar)"); return; }
+    onConfirm({sku:sku.trim(), nombre:nombre.trim(), precioVenta:precio, factorOriginal:factor});
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"#0007",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}}>
+      <div style={{background:"#fff",borderRadius:16,padding:24,width:"100%",maxWidth:440,boxShadow:"0 20px 60px #0003",maxHeight:"88vh",overflowY:"auto"}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+          <div style={{fontWeight:800,fontSize:14,color:"#1a1a1a"}}>Generar variante de venta</div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:22,color:"#aaa"}}>×</button>
+        </div>
+        <div style={{fontSize:11.5,color:"#999",marginBottom:16}}>{producto.name} · SKU proveedor {producto.id}</div>
+
+        <div style={{background:"#fef9e7",border:"1px solid #f0d080",borderRadius:10,padding:"10px 12px",marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#b7770d",display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
+            <Layers size={12} strokeWidth={2.4}/> Stock físico total
+          </div>
+          <div style={{fontSize:13,fontWeight:700,color:"#1a1a1a"}}>{poolFisico} unidades sueltas</div>
+          <div style={{fontSize:10.5,color:"#999",marginTop:2}}>= stock actual ({producto.stock}) × factor de fraccionamiento</div>
+        </div>
+
+        <label style={{fontSize:12,fontWeight:600,color:"#666",display:"block",marginBottom:4}}>¿Cuántas unidades trae? (factor)</label>
+        <input type="number" value={factor} onChange={e=>setFactor(Math.max(1,+e.target.value||1))} style={{...inputStyle,marginBottom:12}}/>
+
+        <label style={{fontSize:12,fontWeight:600,color:"#666",display:"block",marginBottom:4}}>Nombre de venta (unidad suelta)</label>
+        <input value={nombre} onChange={e=>setNombre(e.target.value)} style={{...inputStyle,marginBottom:12}}/>
+
+        <div style={{display:"flex",gap:8,marginBottom:12}}>
+          <div style={{flex:1}}>
+            <label style={{fontSize:12,fontWeight:600,color:"#666",display:"block",marginBottom:4}}>SKU de venta</label>
+            <input value={sku} onChange={e=>setSku(e.target.value)} style={inputStyle}/>
+          </div>
+          <div style={{flex:1}}>
+            <label style={{fontSize:12,fontWeight:600,color:"#666",display:"block",marginBottom:4}}>Precio unidad ($)</label>
+            <input type="number" value={precio} onChange={e=>setPrecio(+e.target.value||0)} style={inputStyle}/>
+          </div>
+        </div>
+
+        <div style={{background:"#f0fdf4",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#1e8449",marginBottom:14}}>
+          Disponibles como "{nombre||"..."}": <strong>{poolFisico}</strong> · el producto original ({producto.id}) queda con <strong>{Math.floor(poolFisico/factor)}</strong> "docenas" disponibles
+        </div>
+
+        {error && <div style={{display:"flex",alignItems:"center",gap:5,color:RED,fontSize:12,marginBottom:10,fontWeight:600}}><AlertTriangle size={11} strokeWidth={2.4}/>{error}</div>}
+
+        <div style={{background:"#fdf2e3",borderRadius:8,padding:"8px 12px",fontSize:11.5,color:"#9a7d0a",marginBottom:14,display:"flex",alignItems:"flex-start",gap:6}}>
+          <AlertCircle size={13} strokeWidth={2.3} style={{marginTop:1,flexShrink:0}}/>
+          En Compras/Alta de Mercancía vas a seguir ingresando por {producto.id} — el sistema reparte solo entre las variantes.
+        </div>
+
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+          <button onClick={onClose} style={{padding:"8px 14px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontWeight:600,color:"#666"}}>Cancelar</button>
+          <button onClick={confirmar} style={{padding:"8px 14px",borderRadius:8,border:"none",background:RED,color:"#fff",cursor:"pointer",fontWeight:700}}>Generar variante</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -5399,6 +5594,9 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
   const [notas, setNotas] = useState("");
   const [saving, setSaving] = useState(false);
   const [itemNotas, setItemNotas] = useState({});
+  // Las variantes hijas (con skuProveedor) no se le piden directo al proveedor —
+  // se pide siempre por el producto original, y el ingreso se reparte solo.
+  const productosParaProveedor = useMemo(()=>products.filter(p=>!p.skuProveedor), [products]);
 
   // Deep-link desde la consola de aprobaciones: abre directo el detalle de una solicitud puntual
   useEffect(() => {
@@ -5576,7 +5774,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
                 style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #1a5276",fontSize:13,outline:"none",marginBottom:8}}/>
               {addSearch.length>1 && (
                 <div style={{maxHeight:220,overflowY:"auto",display:"flex",flexDirection:"column",gap:5}}>
-                  {products.filter(p=>norm(p.name).includes(norm(addSearch))||normSKU(p.id).includes(normSKU(addSearch))).slice(0,20).map(p=>{
+                  {productosParaProveedor.filter(p=>norm(p.name).includes(norm(addSearch))||normSKU(p.id).includes(normSKU(addSearch))).slice(0,20).map(p=>{
                     const already = po.items.find(i=>(i.pid||i.id)===p.id);
                     return (
                       <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,background:"#fff",borderRadius:8,padding:"8px 12px",border:"1.5px solid #e5e5e5"}}>
@@ -5598,7 +5796,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
                       </div>
                     );
                   })}
-                  {products.filter(p=>norm(p.name).includes(norm(addSearch))||normSKU(p.id).includes(normSKU(addSearch))).length===0&&(
+                  {productosParaProveedor.filter(p=>norm(p.name).includes(norm(addSearch))||normSKU(p.id).includes(normSKU(addSearch))).length===0&&(
                     <div style={{textAlign:"center",color:"#aaa",fontSize:12,padding:12}}>Sin resultados</div>
                   )}
                 </div>
@@ -5723,7 +5921,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
               // handled by ProductSelector below
             }} placeholder="Usá el buscador de productos abajo" style={{...inputStyle,background:"#f9f9f9",color:"#aaa"}} readOnly/>
         </div>
-        <ProductSelector products={products} cart={cart} setCart={setCart} isMobile={isMobile} loteMode={true}/>
+        <ProductSelector products={productosParaProveedor} cart={cart} setCart={setCart} isMobile={isMobile} loteMode={true}/>
       </div>
 
       <div style={{position:isMobile?"static":"sticky",top:16,margin:isMobile?"12px":"0"}}>
