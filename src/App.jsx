@@ -5585,6 +5585,81 @@ function exportSolicitudXLSX(po) {
   XLSX.writeFile(wb, `Solicitud_${po.id.slice(-6).toUpperCase()}_${po.fecha.replace(/\//g,"-")}.xlsx`);
 }
 
+// ─── EXCEL PROVEEDOR: toma la plantilla de precios de Bariloche y la completa
+// con las cantidades de la solicitud, sin tocar el resto de la plantilla ──────
+function procesarExcelProveedor(po, file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(e.target.result, {type:"array"});
+        const sheetName = wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        const range = XLSX.utils.decode_range(ws["!ref"]);
+
+        const cellStr = (r,c) => {
+          const addr = XLSX.utils.encode_cell({r,c});
+          const cell = ws[addr];
+          if(!cell || cell.v===undefined) return "";
+          return String(cell.v).trim();
+        };
+        const norm = s => String(s).toUpperCase().trim().normalize("NFD").replace(/[̀-ͯ]/g,"");
+
+        // Encontrar la fila de encabezado (misma lógica que el import principal)
+        let headerRow = 0, headerFound = false;
+        for(let r=range.s.r; r<=Math.min(range.s.r+40, range.e.r) && !headerFound; r++){
+          for(let c=range.s.c; c<=range.e.c; c++){
+            if(norm(cellStr(r,c))==="CODIGO" || norm(cellStr(r,c))==="COD"){ headerRow=r; headerFound=true; break; }
+          }
+        }
+        if(!headerFound) throw new Error("No se encontró la columna CÓDIGO en el archivo subido. Verificá que sea la plantilla de precios de Bariloche.");
+
+        let colCodigo=-1, colCantidad=-1;
+        for(let c=range.s.c; c<=range.e.c; c++){
+          const h = norm(cellStr(headerRow,c));
+          if(colCodigo<0 && (h==="CODIGO"||h==="COD")) colCodigo=c;
+          if(colCantidad<0 && h.includes("CANTIDAD")) colCantidad=c;
+        }
+        // Si la plantilla no trae columna CANTIDAD, se agrega una nueva al final —
+        // nunca se inserta en el medio, para no correr ni romper columnas/fórmulas existentes.
+        if(colCantidad<0){
+          colCantidad = range.e.c + 1;
+          ws[XLSX.utils.encode_cell({r:headerRow,c:colCantidad})] = {t:"s", v:"CANTIDAD"};
+        }
+
+        // Mapa normSKU -> qty de la solicitud
+        const qtyPorSku = {};
+        po.items.forEach(it=>{ qtyPorSku[normSKU(it.id||it.pid||"")] = (qtyPorSku[normSKU(it.id||it.pid||"")]||0) + it.qty; });
+        const skusEncontrados = new Set();
+
+        for(let r=headerRow+1; r<=range.e.r; r++){
+          const codigo = normSKU(cellStr(r,colCodigo));
+          if(!codigo) continue;
+          if(qtyPorSku[codigo] !== undefined){
+            ws[XLSX.utils.encode_cell({r,c:colCantidad})] = {t:"n", v:qtyPorSku[codigo]};
+            skusEncontrados.add(codigo);
+          }
+        }
+        // Ajustar el rango de la hoja si agregamos columna nueva
+        if(colCantidad > range.e.c){
+          ws["!ref"] = XLSX.utils.encode_range({s:range.s, e:{r:range.e.r, c:colCantidad}});
+        }
+
+        const noEncontrados = Object.keys(qtyPorSku).filter(s=>!skusEncontrados.has(s));
+        // Traducir de vuelta los SKU normalizados a los ids originales de la solicitud, para el aviso
+        const noEncontradosLegibles = po.items
+          .filter(it=>noEncontrados.includes(normSKU(it.id||it.pid||"")))
+          .map(it=>`${it.id||it.pid} (${it.name})`);
+
+        XLSX.writeFile(wb, `Pedido_Bariloche_${po.id.slice(-6).toUpperCase()}_${po.fecha.replace(/\//g,"-")}.xlsx`);
+        resolve(noEncontradosLegibles);
+      } catch(err){ reject(err); }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
 function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchaseOrders,isMobile,onStockExternal,addLog,onCreated,autoOpenId,onConsumedAutoOpen,prefillItem,onConsumedPrefillItem,onResolverEncargue}) {
   const [view, setView] = useState("lista"); // lista | nueva | detalle
   const [selected, setSelected] = useState(null);
@@ -5597,6 +5672,26 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
   // Las variantes hijas (con skuProveedor) no se le piden directo al proveedor —
   // se pide siempre por el producto original, y el ingreso se reparte solo.
   const productosParaProveedor = useMemo(()=>products.filter(p=>!p.skuProveedor), [products]);
+  const [excelProveedorLoading, setExcelProveedorLoading] = useState(false);
+  const excelProveedorInputRef = useRef(null);
+  const handleExcelProveedorFile = async (po, e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // permite volver a elegir el mismo archivo después
+    if(!file) return;
+    setExcelProveedorLoading(true);
+    try {
+      const noEncontrados = await procesarExcelProveedor(po, file);
+      if(noEncontrados.length){
+        toast.error(`Se descargó igual, pero ${noEncontrados.length} producto(s) no se encontraron en la plantilla: ${noEncontrados.join(", ")}`);
+      } else {
+        toast.success("Excel del proveedor generado con las cantidades completas");
+      }
+    } catch(err){
+      toast.error(err.message || "No se pudo procesar el archivo");
+    } finally {
+      setExcelProveedorLoading(false);
+    }
+  };
 
   // Deep-link desde la consola de aprobaciones: abre directo el detalle de una solicitud puntual
   useEffect(() => {
@@ -5883,6 +5978,14 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
           {isAdmin && po.estado==="revisando" && <button onClick={()=>changeEstado(po,"cerrada")} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:"#1e8449",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}><><CheckCircle size={12} strokeWidth={2.4}/> Cerrar</> solicitud</button>}
           <button onClick={()=>printSolicitudPDF(po, PDF_LOGO_BANNER)} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #1a5276",background:"#fff",color:"#1a5276",fontWeight:700,fontSize:13,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Printer size={13} strokeWidth={2.4}/> PDF</button>
           <button onClick={()=>exportSolicitudXLSX(po)} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #1e8449",background:"#fff",color:"#1e8449",fontWeight:700,fontSize:13,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><BarChart size={13} strokeWidth={2.4}/> Excel</button>
+          <button
+            onClick={()=>excelProveedorInputRef.current?.click()}
+            disabled={excelProveedorLoading}
+            title="Subí la plantilla de precios de Bariloche y te devuelve la misma plantilla con las cantidades de esta solicitud ya cargadas"
+            style={{flex:1,padding:"11px",borderRadius:10,border:`1.5px solid ${GOLD}`,background:"#fff",color:"#9a7d0a",fontWeight:700,fontSize:13,cursor:excelProveedorLoading?"default":"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6,opacity:excelProveedorLoading?0.6:1}}>
+            <BoxIcon size={13} strokeWidth={2.4}/> {excelProveedorLoading?"Procesando...":"Excel Proveedor"}
+          </button>
+          <input ref={excelProveedorInputRef} type="file" accept=".xlsx,.xls" onChange={(e)=>handleExcelProveedorFile(po,e)} style={{display:"none"}}/>
           {isAdmin&&<button onClick={()=>deletePO(po.id)} style={{padding:"11px 16px",borderRadius:10,border:"1.5px solid #fcc",background:"#fff",color:"#c0392b",fontWeight:700,fontSize:13,cursor:"pointer",display:"inline-flex",alignItems:"center"}}><Trash size={13} strokeWidth={2.4}/></button>}
         </div>
 
