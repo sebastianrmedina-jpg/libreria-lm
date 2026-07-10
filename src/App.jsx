@@ -255,7 +255,7 @@ async function uploadProductImage(productId, file) {
 }
 
 const db = {
-  getUsers:     async () => { const {data,error} = await supabase.from("lm_users").select("*").order("name"); if(error) throw error; return (data||[]).map(u=>({...u,priceList:u.price_list||"default",vendedor:u.vendedor||"",canSeeAll:u.can_see_all!==false,phone:u.phone||"",cargo:u.cargo||"",avatar:u.avatar||"",barcodeEnabled:u.barcode_enabled||false})); },
+  getUsers:     async () => { const {data,error} = await supabase.from("lm_users").select("*").order("name"); if(error) throw error; return (data||[]).map(u=>({...u,priceList:u.price_list||"default",vendedor:u.vendedor||"",canSeeAll:u.can_see_all!==false,phone:u.phone||"",cargo:u.cargo||"",avatar:u.avatar||"",barcodeEnabled:u.barcode_enabled||false,tabsDeshabilitados:u.tabs_deshabilitados||[]})); },
   saveUser:     async (u) => {
     const {error} = await supaAdmin.from("lm_users").upsert({
       id: u.id,
@@ -271,6 +271,7 @@ const db = {
       cargo: u.cargo||"",
       avatar: u.avatar||"",
       barcode_enabled: u.barcodeEnabled||false,
+      tabs_deshabilitados: u.tabsDeshabilitados||[],
     });
     if(error) { console.error("saveUser error:", error); throw error; }
   },
@@ -403,6 +404,18 @@ const esCandidatoFraccion = (nombre) => !!nombre && PALABRAS_EMPAQUE_VENTA.some(
 // El "id de grupo" de una variante: si es hija, su sku_proveedor; si es la fila
 // original (o un producto sin variantes), su propio id.
 const grupoVarianteId = (p) => p.skuProveedor || p.id;
+
+// Secciones del menú que el admin puede ocultar por usuario (vendedor). "Central" queda
+// siempre visible (es la pantalla base de trabajo) y "Admin" ya se filtra solo por rol.
+const TABS_TOGGLEABLES = [
+  {k:"nuevo",      label:"Nuevo Pedido"},
+  {k:"clientes",   label:"Clientes"},
+  {k:"cotizacion", label:"Cotizaciones"},
+  {k:"precios",    label:"Precios"},
+  {k:"stock",      label:"Stock"},
+  {k:"compras",    label:"Alta Mercancía"},
+  {k:"solicitud",  label:"Solicitudes"},
+];
 
 // Aplica un cambio de stock (delta, en "unidades de la fila de pid") respetando
 // el pool físico compartido entre variantes. Si el producto no tiene variantes
@@ -2009,7 +2022,14 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     {k:"compras",   label:"Alta Mercancía",icon:Store,        roles:["admin","vendedor"]},
     {k:"solicitud",  label:"Solicitudes", icon:ListChecks,    roles:["admin","vendedor"]},
     {k:"admin",     label:"Admin",     icon:Star,        roles:["admin"]},
-  ].filter(t=>t.roles.includes(currentUser.role));
+  ].filter(t=>t.roles.includes(currentUser.role) && !(currentUser.tabsDeshabilitados||[]).includes(t.k));
+
+  // Protección real (no solo visual): si por deep-link, notificación, o cualquier otro
+  // camino se intenta entrar a una sección que este usuario tiene deshabilitada,
+  // se lo manda de vuelta a Central en lugar de dejarlo pasar.
+  useEffect(() => {
+    if(tab !== "central" && !TABS.find(t=>t.k===tab)) setTab("central");
+  }, [tab, currentUser.id]);
 
   // ── CLIENT FUNCTIONS ──────────────────────────────────────────────────────
   const saveClient = async (client) => {
@@ -8145,17 +8165,17 @@ function VendorsPanel({vendors,setVendors}) {
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 function UsersPanel({users,setUsers,vendors,priceLists}) {
-  const [form, setForm] = useState({username:"",password:"",name:"",role:"vendedor",vendedor:"",priceList:"default",canSeeAll:true,email:"",phone:"",cargo:"",avatar:"",barcodeEnabled:false});
+  const [form, setForm] = useState({username:"",password:"",name:"",role:"vendedor",vendedor:"",priceList:"default",canSeeAll:true,email:"",phone:"",cargo:"",avatar:"",barcodeEnabled:false,tabsDeshabilitados:[]});
   const [editing, setEditing] = useState(null);
   const [showPass, setShowPass] = useState({});
   const [avatarPreview, setAvatarPreview] = useState("");
 
   const startEdit = (u) => {
     setEditing(u.id);
-    setForm({username:u.username,password:u.password,name:u.name,role:u.role,email:u.email||"",phone:u.phone||"",cargo:u.cargo||"",vendedor:u.vendedor||"",priceList:u.priceList||"default",canSeeAll:u.canSeeAll!==false,avatar:u.avatar||"",barcodeEnabled:u.barcodeEnabled||false});
+    setForm({username:u.username,password:u.password,name:u.name,role:u.role,email:u.email||"",phone:u.phone||"",cargo:u.cargo||"",vendedor:u.vendedor||"",priceList:u.priceList||"default",canSeeAll:u.canSeeAll!==false,avatar:u.avatar||"",barcodeEnabled:u.barcodeEnabled||false,tabsDeshabilitados:u.tabsDeshabilitados||[]});
     setAvatarPreview(u.avatar||"");
   };
-  const cancelEdit = () => { setEditing(null); setForm({username:"",password:"",name:"",role:"vendedor",vendedor:"",priceList:"default",canSeeAll:true,email:"",phone:"",cargo:"",avatar:"",barcodeEnabled:false}); setAvatarPreview(""); };
+  const cancelEdit = () => { setEditing(null); setForm({username:"",password:"",name:"",role:"vendedor",vendedor:"",priceList:"default",canSeeAll:true,email:"",phone:"",cargo:"",avatar:"",barcodeEnabled:false,tabsDeshabilitados:[]}); setAvatarPreview(""); };
 
   const handleAvatar = (e) => {
     const file = e.target.files[0];
@@ -8173,12 +8193,12 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
     if(!form.username.trim()||!form.password.trim()||!form.name.trim()){toast.error("Completá nombre, usuario y contraseña");return;}
     try {
       if(editing) {
-        const updated = {...users.find(u=>u.id===editing), ...form, priceList:form.priceList||"default", canSeeAll:form.canSeeAll!==false};
+        const updated = {...users.find(u=>u.id===editing), ...form, priceList:form.priceList||"default", canSeeAll:form.canSeeAll!==false, tabsDeshabilitados:form.role==="vendedor"?(form.tabsDeshabilitados||[]):[]};
         setUsers(us=>us.map(u=>u.id===editing?updated:u));
         await db.saveUser(updated);
       } else {
         if(users.find(u=>u.username===form.username.trim())){toast.error("Ese usuario ya existe");return;}
-        const newUser = {id:genId(),username:form.username.trim(),password:form.password,name:form.name.trim(),role:form.role||"vendedor",email:form.email||"",phone:form.phone||"",cargo:form.cargo||"",vendedor:form.vendedor||"",priceList:form.priceList||"default",canSeeAll:form.canSeeAll!==false,avatar:form.avatar||"",barcodeEnabled:form.barcodeEnabled||false};
+        const newUser = {id:genId(),username:form.username.trim(),password:form.password,name:form.name.trim(),role:form.role||"vendedor",email:form.email||"",phone:form.phone||"",cargo:form.cargo||"",vendedor:form.vendedor||"",priceList:form.priceList||"default",canSeeAll:form.canSeeAll!==false,avatar:form.avatar||"",barcodeEnabled:form.barcodeEnabled||false,tabsDeshabilitados:form.role==="vendedor"?(form.tabsDeshabilitados||[]):[]};
         setUsers(us=>[...us,newUser]);
         await db.saveUser(newUser);
       }
@@ -8235,6 +8255,7 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
                     {u.vendedor&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:"#f5eef8",color:"#6c3483",borderRadius:6,padding:"1px 8px",fontWeight:700,fontSize:10}}><Users size={9} strokeWidth={2.5}/>{u.vendedor}</span>}
                     {u.barcodeEnabled&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:"#eaf4fc",color:"#1a5276",borderRadius:6,padding:"1px 8px",fontWeight:700,fontSize:10}}><Camera size={9} strokeWidth={2.5}/>Lector</span>}
                     {u.canSeeAll===false&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:"#fef9e7",color:"#b7770d",borderRadius:6,padding:"1px 8px",fontWeight:700,fontSize:10}}><Lock size={9} strokeWidth={2.5}/>Solo suyos</span>}
+                    {(u.tabsDeshabilitados||[]).length>0&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:"#fdf2e3",color:"#9a7d0a",borderRadius:6,padding:"1px 8px",fontWeight:700,fontSize:10}}><Lock size={9} strokeWidth={2.5}/>{u.tabsDeshabilitados.length} sección{u.tabsDeshabilitados.length>1?"es":""} oculta{u.tabsDeshabilitados.length>1?"s":""}</span>}
                   </div>
                   {(u.phone||u.email)&&<div style={{fontSize:11,color:"#aaa",marginTop:4,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>{u.phone&&<span style={{display:"inline-flex",alignItems:"center",gap:3}}><Phone size={9} strokeWidth={2.4}/>{u.phone}</span>}{u.phone&&u.email&&"·"}{u.email&&<span style={{display:"inline-flex",alignItems:"center",gap:3}}><Mail size={9} strokeWidth={2.4}/>{u.email}</span>}</div>}
                 </div>
@@ -8294,6 +8315,25 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
           </Field>
           <Toggle label="Ver todos los pedidos" sub={form.canSeeAll?"Ve todos los pedidos":"Solo sus propios pedidos"} val={form.canSeeAll} onChange={()=>setForm(f=>({...f,canSeeAll:!f.canSeeAll}))}/>
           <Toggle label={<><Camera size={12} strokeWidth={2.4} style={{display:"inline",verticalAlign:"-2px",marginRight:5}}/>Lector de código de barras</>} sub={form.barcodeEnabled?"Puede usar el lector":"Sin acceso al lector"} val={form.barcodeEnabled} onChange={()=>setForm(f=>({...f,barcodeEnabled:!f.barcodeEnabled}))}/>
+          {form.role==="vendedor" && (
+            <div style={{marginTop:4,border:"1.5px solid #e5e5e5",borderRadius:10,padding:12}}>
+              <div style={{fontSize:11.5,fontWeight:700,color:"#666",marginBottom:8,display:"flex",alignItems:"center",gap:5}}>
+                <Lock size={12} strokeWidth={2.4}/> Secciones del menú visibles para este usuario
+              </div>
+              {TABS_TOGGLEABLES.map(t=>{
+                const deshabilitado = (form.tabsDeshabilitados||[]).includes(t.k);
+                return (
+                  <Toggle key={t.k} label={t.label} sub={deshabilitado?"Oculta para este usuario":"Visible en el menú"}
+                    val={!deshabilitado}
+                    onChange={()=>setForm(f=>{
+                      const actuales = f.tabsDeshabilitados||[];
+                      const nuevos = deshabilitado ? actuales.filter(k=>k!==t.k) : [...actuales, t.k];
+                      return {...f, tabsDeshabilitados:nuevos};
+                    })}/>
+                );
+              })}
+            </div>
+          )}
           <div style={{display:"flex",gap:8,marginTop:8}}>
             <button onClick={save} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:RED,color:"#fff",fontWeight:800,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>{editing?<><Save size={14} strokeWidth={2.3}/>Guardar cambios</>:<><CheckCircle size={14} strokeWidth={2.3}/>Crear usuario</>}</button>
             <button onClick={()=>{cancelEdit();setView("lista");}} style={{padding:"11px 16px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontWeight:600,color:"#666"}}>Cancelar</button>
