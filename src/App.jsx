@@ -344,7 +344,9 @@ const db = {
   deletePurchaseOrder: async (id) => { const {error} = await supaAdmin.from("lm_purchase_orders").delete().eq("id",id); if(error) throw error; },
   // Activity log
   // SQL: CREATE TABLE lm_activity (id TEXT PRIMARY KEY, fecha TEXT, usuario TEXT, rol TEXT, accion TEXT, detalle TEXT, ref_id TEXT, ref_tipo TEXT);
-  getActivity:  async () => { const {data,error} = await supabase.from("lm_activity").select("*").order("fecha",{ascending:false}).limit(500); if(error) throw error; return data||[]; },
+  // NOTA: "fecha" es texto formateado (es-AR) solo para mostrar — nunca ordenar por ahí,
+  // ordenar como texto no da orden cronológico real. Se ordena por created_at (timestamp real).
+  getActivity:  async () => { const {data,error} = await supabase.from("lm_activity").select("*").order("created_at",{ascending:false}).limit(500); if(error) throw error; return data||[]; },
   addActivity:  async (a) => { try { await supaAdmin.from("lm_activity").insert(a); } catch(e) {} }, // silent fail - non critical
   clearActivity: async () => { const {error} = await supaAdmin.from("lm_activity").delete().neq("id","none"); if(error) throw error; },
   // Ofertas y combos (promos)
@@ -2433,7 +2435,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
           currentUser={currentUser} isMobile={isMobile}/>}
         {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} promos={promos} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={setPreviewListId}/>}
         {tab==="clientes"   && <ClientesPanel clients={clients} onSave={saveClient} onDelete={deleteClient} onRequestDelete={requestDeleteClient} onRejectDelete={rejectDeleteClient} currentUser={currentUser} isMobile={isMobile} orders={orders}/>}
-        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} orders={orders}/>}
+        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={setPreviewListId}/>}
         {tab==="precios"    && <Precios products={pricedProducts} canScan={currentUser.role==="admin"||isTestOrder(currentUser.vendedor||currentUser.name)||currentUser.barcodeEnabled}/>}
         {tab==="stock"      && <>
               {isTestUser && (
@@ -4307,7 +4309,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
   );
 }
 
-function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,onTabChange,currentUser,isMobile,clients,onSaveClient,orders}) {
+function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,onTabChange,currentUser,isMobile,clients,onSaveClient,orders,priceLists,previewListId,onChangeList}) {
   const [view,setView]=useState("lista");
   const [expanded,setExpanded]=useState(null);
   const getP=id=>products.find(p=>p.id===id);
@@ -4317,7 +4319,7 @@ function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,on
         <button onClick={()=>setView("lista")} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="lista"?`linear-gradient(135deg,${REDD},${RED})`:"transparent",color:view==="lista"?"#fff":"#555",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}><FileText size={13} strokeWidth={2.3}/>Lista de Cotizaciones ({quotes.filter(q=>!q.convertida).length})</button>
         <button onClick={()=>setView("nueva")} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="nueva"?`linear-gradient(135deg,${REDD},${RED})`:"transparent",color:view==="nueva"?"#fff":"#555",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}><Plus size={13} strokeWidth={2.4}/>Nueva Cotización</button>
       </div>
-      {view==="nueva" && <NuevaCotizacion products={products} vendors={vendors} onAdd={async(q)=>{await onAdd(q);setView("lista");}} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={onSaveClient} orders={orders}/>}
+      {view==="nueva" && <NuevaCotizacion products={products} vendors={vendors} onAdd={async(q)=>{await onAdd(q);setView("lista");}} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={onSaveClient} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={onChangeList}/>}
       {view==="lista" && (quotes.length===0
         ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{display:"flex",justifyContent:"center"}}><FileText size={42} color="#ddd" strokeWidth={1.7}/></div><div style={{marginTop:8}}>No hay cotizaciones aún</div></div>
         : quotes.map(q=><QuoteCard key={q.id} q={q} exp={expanded===q.id} toggle={()=>setExpanded(expanded===q.id?null:q.id)} getP={getP} onDel={onDel} onConvert={async(qt)=>{await onConvert(qt);onTabChange("central");}} onExtend={onExtend}/>)
@@ -4462,7 +4464,7 @@ function QuoteDelBtn({onConfirm}) {
   return <button onClick={()=>setC(true)} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>🗑 Eliminar</button>;
 }
 
-function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,onSaveClient,orders}) {
+function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,onSaveClient,orders,priceLists,previewListId,onChangeList}) {
   const PURPLE="#6c3483"; const PURPLEG="linear-gradient(135deg,#6c3483,#9b59b6)";
   const [selectedClient,setSelectedClient]=useState(null);
   const [notes,setNotes]=useState("");
@@ -4525,6 +4527,12 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,on
             : <ClientSelector clients={clients||[]} onSelect={setSelectedClient} onSaveClient={onSaveClient} currentUser={currentUser}/>
           }
           {currentUser?.role==="admin"&&<Field label="Vendedor"><select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,cursor:"pointer"}}><option value="">- Sin asignar -</option>{vendors.map(v=><option key={v} value={v}>{v}</option>)}</select></Field>}
+          {currentUser?.role==="admin"&&priceLists?.length>1&&<Field label="Lista de precios">
+            <select value={previewListId||"default"} onChange={e=>onChangeList&&onChangeList(e.target.value==="default"?null:e.target.value)} style={{...inputStyle,cursor:"pointer"}}>
+              {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}{pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
+            </select>
+            {previewListId&&previewListId!=="default"&&<div style={{fontSize:11,color:"#b7770d",marginTop:4,fontWeight:600}}>⚠️ Los precios ya muestran el descuento aplicado</div>}
+          </Field>}
           <Field label="Válida hasta"><input value={validity} onChange={e=>setValidity(e.target.value)} placeholder="Ej: 48 horas" style={inputStyle}/></Field>
           <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones, condiciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
           <button onClick={()=>{if(!selectedClient){toast.error("Seleccioná un cliente");return;}setMStep(2);}}
@@ -4629,6 +4637,12 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,on
                 <span style={{fontWeight:700}}>{vendedor||currentUser?.name}</span>
               </div>
           }
+          {currentUser?.role==="admin"&&priceLists?.length>1&&<Field label="Lista de precios">
+            <select value={previewListId||"default"} onChange={e=>onChangeList&&onChangeList(e.target.value==="default"?null:e.target.value)} style={{...inputStyle,cursor:"pointer"}}>
+              {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}{pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
+            </select>
+            {previewListId&&previewListId!=="default"&&<div style={{fontSize:11,color:"#b7770d",marginTop:4,fontWeight:600}}>⚠️ Los precios ya muestran el descuento aplicado</div>}
+          </Field>}
           <Field label="Válida hasta"><input value={validity} onChange={e=>setValidity(e.target.value)} placeholder="Ej: 48 horas" style={inputStyle}/></Field>
           <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones, condiciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
           <div style={{borderTop:"1px solid #f5f5f5",margin:"4px 0 8px",paddingTop:10}}>
@@ -6009,8 +6023,8 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
           {isAdmin&&<button onClick={()=>deletePO(po.id)} style={{padding:"11px 16px",borderRadius:10,border:"1.5px solid #fcc",background:"#fff",color:"#c0392b",fontWeight:700,fontSize:13,cursor:"pointer",display:"inline-flex",alignItems:"center"}}><Trash size={13} strokeWidth={2.4}/></button>}
         </div>
 
-        {/* Ingresar mercadería desde solicitud */}
-        {isAdmin && po.estado==="cerrada" && (
+        {/* Ingresar mercadería desde solicitud — solo si todavía no se ingresó, para no duplicar stock */}
+        {isAdmin && po.estado==="cerrada" && !po.fechaRecibido && (
           <div style={{background:"#d5f5e3",border:"2px solid #1e8449",borderRadius:12,padding:16,marginTop:12,margin:isMobile?"12px 12px 0":"12px 0 0"}}>
             <div style={{fontWeight:800,fontSize:14,color:"#1e8449",marginBottom:8,display:"flex",alignItems:"center",gap:6}}><Package size={14} strokeWidth={2.3}/>¿Llegó la mercadería?</div>
             <div style={{fontSize:12,color:"#1e8449",marginBottom:12,lineHeight:1.5}}>
@@ -6024,6 +6038,12 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
                 setSelected(updated);
                 await db.savePurchaseOrder(updated);
               }}/>
+          </div>
+        )}
+        {isAdmin && po.estado==="cerrada" && po.fechaRecibido && (
+          <div style={{background:"#f0fdf4",border:"1.5px solid #1e8449",borderRadius:12,padding:14,marginTop:12,margin:isMobile?"12px 12px 0":"12px 0 0",display:"flex",alignItems:"center",gap:8}}>
+            <CheckCircle size={16} color="#1e8449" strokeWidth={2.3}/>
+            <div style={{fontSize:12.5,color:"#1e8449",fontWeight:600}}>Mercadería ya ingresada al stock el {po.fechaRecibido}. No se puede volver a ingresar (evita duplicar stock).</div>
           </div>
         )}
       </div>
