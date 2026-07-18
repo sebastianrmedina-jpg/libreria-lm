@@ -968,10 +968,15 @@ ${doc.isTest ? `<div class="watermark">PRUEBA</div>` : ""}
 
     const w = window.open("","_blank","width=820,height=750");
     if(w){ w.document.write(html); w.document.close(); }
+    else { alert("DIAGNÓSTICO: window.open() devolvió null/undefined — el navegador está bloqueando la apertura de la ventana a nivel del sistema, no es un bloqueador de pop-ups normal."); } // eslint-disable-line no-alert
   };
 
   // Banner incrustado como base64 — siempre disponible sin depender del servidor
-  doRender(PDF_LOGO_BANNER);
+  try {
+    doRender(PDF_LOGO_BANNER);
+  } catch(e) {
+    alert("DIAGNÓSTICO — error real al generar el documento:\n\n" + (e && e.message ? e.message : e) + "\n\n" + (e && e.stack ? e.stack.slice(0,300) : "")); // eslint-disable-line no-alert
+  }
 }
 
 
