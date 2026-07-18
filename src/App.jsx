@@ -768,7 +768,22 @@ function sendLocalNotif(title, body, tag = "lm") {
 // ─── PDF / PRINT ──────────────────────────────────────────────────────────────
 // tipo: "reserva" | "confirmado" | "cotizacion"
 // doc must have: docNum, compNum (orders), client, vendedor, date, items, total, notes, validity
+// DIAGNÓSTICO TEMPORAL — dibuja un recuadro en pantalla en vez de usar alert(),
+// porque alert()/confirm()/prompt() pueden estar deshabilitados dentro de una PWA instalada.
+function showDebugBox(msg) {
+  const div = document.createElement("div");
+  div.style.cssText = "position:fixed;top:8px;left:8px;right:8px;background:#c0392b;color:#fff;padding:16px;border-radius:10px;z-index:999999;font-size:13px;white-space:pre-wrap;max-height:80vh;overflow:auto;box-shadow:0 4px 24px #0008;font-family:monospace;";
+  div.textContent = msg;
+  const btn = document.createElement("button");
+  btn.textContent = "Cerrar";
+  btn.style.cssText = "display:block;margin-top:12px;padding:8px 16px;background:#fff;color:#c0392b;border:none;border-radius:6px;font-weight:700;font-size:13px;";
+  btn.onclick = () => div.remove();
+  div.appendChild(btn);
+  document.body.appendChild(div);
+}
+
 function printDoc(doc, tipo, products=[]) {
+  showDebugBox("DIAGNÓSTICO: printDoc() se ejecutó. tipo=" + tipo + " items=" + (doc.items?doc.items.length:"?"));
   const doRender = (logoSrc) => {
     // Determine display number and badge
     let docLabel, badgeColor, docNumDisplay;
@@ -982,7 +997,7 @@ ${doc.isTest ? `<div class="watermark">PRUEBA</div>` : ""}
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
     } catch(e) {
-      alert("DIAGNÓSTICO — error al abrir el documento:\n\n" + (e && e.message ? e.message : e)); // eslint-disable-line no-alert
+      showDebugBox("DIAGNÓSTICO — error al abrir el documento:\n\n" + (e && e.message ? e.message : e)); // eslint-disable-line no-alert
     }
   };
 
@@ -990,7 +1005,7 @@ ${doc.isTest ? `<div class="watermark">PRUEBA</div>` : ""}
   try {
     doRender(PDF_LOGO_BANNER);
   } catch(e) {
-    alert("DIAGNÓSTICO — error real al generar el documento:\n\n" + (e && e.message ? e.message : e) + "\n\n" + (e && e.stack ? e.stack.slice(0,300) : "")); // eslint-disable-line no-alert
+    showDebugBox("DIAGNÓSTICO — error real al generar el documento:\n\n" + (e && e.message ? e.message : e) + "\n\n" + (e && e.stack ? e.stack.slice(0,300) : "")); // eslint-disable-line no-alert
   }
 }
 
@@ -5561,6 +5576,7 @@ const ESTADO_CFG = {
 };
 
 function printSolicitudPDF(po, logoSrc) {
+  showDebugBox("DIAGNÓSTICO: printSolicitudPDF() se ejecutó.");
   const rows = po.items.map(it=>`
     <tr>
       <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;font-size:14px;">${it.name}</td>
@@ -5647,7 +5663,7 @@ function printSolicitudPDF(po, logoSrc) {
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
   } catch(e) {
-    alert("DIAGNÓSTICO — error al abrir el documento:\n\n" + (e && e.message ? e.message : e)); // eslint-disable-line no-alert
+    showDebugBox("DIAGNÓSTICO — error al abrir el documento:\n\n" + (e && e.message ? e.message : e)); // eslint-disable-line no-alert
   }
 }
 
