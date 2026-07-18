@@ -966,9 +966,24 @@ ${doc.isTest ? `<div class="watermark">PRUEBA</div>` : ""}
 </div>
 </body></html>`;
 
-    const w = window.open("","_blank","width=820,height=750");
-    if(w){ w.document.write(html); w.document.close(); }
-    else { alert("DIAGNÓSTICO: window.open() devolvió null/undefined — el navegador está bloqueando la apertura de la ventana a nivel del sistema, no es un bloqueador de pop-ups normal."); } // eslint-disable-line no-alert
+    // En una PWA instalada (modo standalone) no hay dónde mostrar una ventana nueva
+    // con tamaño fijo — window.open("", "_blank", "width=...") no hace nada, sin error
+    // ni aviso. Usamos un Blob + link real, el mismo mecanismo que ya funciona bien
+    // para abrir WhatsApp, en vez de window.open + document.write.
+    try {
+      const blob = new Blob([html], {type: "text/html"});
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.target = "_blank";
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    } catch(e) {
+      alert("DIAGNÓSTICO — error al abrir el documento:\n\n" + (e && e.message ? e.message : e)); // eslint-disable-line no-alert
+    }
   };
 
   // Banner incrustado como base64 — siempre disponible sin depender del servidor
@@ -5618,8 +5633,22 @@ function printSolicitudPDF(po, logoSrc) {
 </div>
 </body></html>`;
 
-  const w = window.open("","_blank","width=820,height=750");
-  if(w){ w.document.write(html); w.document.close(); }
+  // Mismo arreglo que en printDoc: Blob + link real, en vez de window.open+document.write,
+  // que no funciona dentro de una PWA instalada (modo standalone).
+  try {
+    const blob = new Blob([html], {type: "text/html"});
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.target = "_blank";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+  } catch(e) {
+    alert("DIAGNÓSTICO — error al abrir el documento:\n\n" + (e && e.message ? e.message : e)); // eslint-disable-line no-alert
+  }
 }
 
 function exportSolicitudXLSX(po) {
