@@ -768,7 +768,7 @@ function sendLocalNotif(title, body, tag = "lm") {
 // ─── PDF / PRINT ──────────────────────────────────────────────────────────────
 // tipo: "reserva" | "confirmado" | "cotizacion"
 // doc must have: docNum, compNum (orders), client, vendedor, date, items, total, notes, validity
-function printDoc(doc, tipo) {
+function printDoc(doc, tipo, products=[]) {
   const doRender = (logoSrc) => {
     // Determine display number and badge
     let docLabel, badgeColor, docNumDisplay;
@@ -787,12 +787,25 @@ function printDoc(doc, tipo) {
       docNumDisplay = doc.docNum || "Reserva-------";
     }
 
+    // Fotos: solo en cotizaciones, buscando la imagen ACTUAL del producto (no la
+    // que tenía al momento de cotizar) para que presupuestos viejos también se
+    // beneficien si más adelante se le carga foto a ese producto.
+    const conFotos = tipo === "cotizacion";
+    const fotoCell = (it) => {
+      if(!conFotos) return "";
+      const prod = products.find(p=>p.id===(it.pid||it.id));
+      const url = prod?.imageUrl || "";
+      if(!url) return `<td class="foto-cell"><div class="foto-placeholder">sin<br/>foto</div></td>`;
+      return `<td class="foto-cell"><a class="foto-link" href="${url}" target="_blank" title="Ver foto completa"><img src="${url}" alt=""/><span class="foto-hint">Ver</span></a></td>`;
+    };
+
     const itemRows = doc.items.map(it => {
       const hasDisc = it.disc && parseFloat(it.disc.value) > 0;
       const lineTotal = applyItemDiscount(it.price, it.qty, it.disc);
       const originalTotal = it.price * it.qty;
       const discLabel = hasDisc ? fmtDisc(it.disc) : "";
       return `<tr>
+        ${fotoCell(it)}
         <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;font-size:15px;">${it.name||""}</td>
         <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;text-align:center;font-size:15px;">${it.qty}</td>
         <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;text-align:right;font-size:15px;">
@@ -872,6 +885,13 @@ function printDoc(doc, tipo) {
   tbody tr:nth-child(even){background:#fdfbf7;}
   tbody tr:last-child td{border-bottom:none;}
 
+  /* FOTO — solo se usa en cotizaciones */
+  .foto-cell{width:56px;padding:9px 6px 9px 12px!important;}
+  .foto-link{display:block;width:48px;height:48px;border-radius:8px;overflow:hidden;border:1px solid #e5ddd0;text-decoration:none;position:relative;}
+  .foto-link img{width:100%;height:100%;object-fit:cover;display:block;}
+  .foto-hint{position:absolute;bottom:0;left:0;right:0;background:#0007;color:#fff;font-size:7px;text-align:center;padding:1px 0;letter-spacing:.3px;}
+  .foto-placeholder{width:48px;height:48px;border-radius:8px;background:#f0ece2;display:flex;align-items:center;justify-content:center;font-size:8px;color:#bbb;text-align:center;border:1px dashed #ddd;}
+
   /* TOTAL */
   .total-wrap{display:flex;justify-content:flex-end;margin-bottom:14px;}
   .total-box{background:${tipo==="cotizacion"?"#f5eef8":"#fdf3f1"};border-radius:10px;padding:14px 22px;min-width:280px;border:1px solid ${badgeColor}22;}
@@ -920,7 +940,8 @@ ${doc.isTest ? `<div class="watermark">PRUEBA</div>` : ""}
     ${validityHtml}
     <table>
       <thead><tr>
-        <th style="width:48%">Descripción</th>
+        ${conFotos?`<th style="width:9%"></th>`:""}
+        <th style="width:${conFotos?"39%":"48%"}">Descripción</th>
         <th class="c" style="width:10%">Cant.</th>
         <th class="r" style="width:21%">P. Unit.</th>
         <th class="r" style="width:21%">Subtotal</th>
@@ -4432,7 +4453,7 @@ function QuoteCard({q,exp,toggle,getP,onDel,onConvert,onExtend}) {
           <div style={{display:"flex",justifyContent:"flex-end",fontWeight:800,fontSize:16,color:PURPLE,margin:"8px 0 12px"}}>{fARS(q.total)}</div>
           {q.notes&&<div style={{background:"#f9f9f9",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#555",marginBottom:12}}>{q.notes}</div>}
           <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-            <button onClick={()=>printDoc(q,"cotizacion")} style={{padding:"8px 12px",borderRadius:8,border:`1.5px solid ${PURPLEBG}`,cursor:"pointer",background:"#fff",color:PURPLE,fontWeight:600,fontSize:13,display:"flex",alignItems:"center",gap:6}}><Printer size={13} strokeWidth={2.3}/>Imprimir</button>
+            <button onClick={()=>printDoc(q,"cotizacion",products)} style={{padding:"8px 12px",borderRadius:8,border:`1.5px solid ${PURPLEBG}`,cursor:"pointer",background:"#fff",color:PURPLE,fontWeight:600,fontSize:13,display:"flex",alignItems:"center",gap:6}}><Printer size={13} strokeWidth={2.3}/>Imprimir</button>
             <button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(buildWAQuote(q))}`, "_blank")}
               style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #25D366",cursor:"pointer",background:"#25D366",color:"#fff",fontWeight:700,fontSize:13,display:"flex",alignItems:"center",gap:5}}>
               <MessageCircle size={14} strokeWidth={2.3}/> Enviar por WhatsApp
