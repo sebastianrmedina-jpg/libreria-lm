@@ -768,22 +768,7 @@ function sendLocalNotif(title, body, tag = "lm") {
 // ─── PDF / PRINT ──────────────────────────────────────────────────────────────
 // tipo: "reserva" | "confirmado" | "cotizacion"
 // doc must have: docNum, compNum (orders), client, vendedor, date, items, total, notes, validity
-// DIAGNÓSTICO TEMPORAL — dibuja un recuadro en pantalla en vez de usar alert(),
-// porque alert()/confirm()/prompt() pueden estar deshabilitados dentro de una PWA instalada.
-function showDebugBox(msg) {
-  const div = document.createElement("div");
-  div.style.cssText = "position:fixed;top:8px;left:8px;right:8px;background:#c0392b;color:#fff;padding:16px;border-radius:10px;z-index:999999;font-size:13px;white-space:pre-wrap;max-height:80vh;overflow:auto;box-shadow:0 4px 24px #0008;font-family:monospace;";
-  div.textContent = msg;
-  const btn = document.createElement("button");
-  btn.textContent = "Cerrar";
-  btn.style.cssText = "display:block;margin-top:12px;padding:8px 16px;background:#fff;color:#c0392b;border:none;border-radius:6px;font-weight:700;font-size:13px;";
-  btn.onclick = () => div.remove();
-  div.appendChild(btn);
-  document.body.appendChild(div);
-}
-
 function printDoc(doc, tipo, products=[]) {
-  showDebugBox("DIAGNÓSTICO: printDoc() se ejecutó. tipo=" + tipo + " items=" + (doc.items?doc.items.length:"?"));
   const doRender = (logoSrc) => {
     // Determine display number and badge
     let docLabel, badgeColor, docNumDisplay;
@@ -996,17 +981,11 @@ ${doc.isTest ? `<div class="watermark">PRUEBA</div>` : ""}
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-    } catch(e) {
-      showDebugBox("DIAGNÓSTICO — error al abrir el documento:\n\n" + (e && e.message ? e.message : e)); // eslint-disable-line no-alert
-    }
+    } catch(e) { /* silent fail - no critico */ }
   };
 
   // Banner incrustado como base64 — siempre disponible sin depender del servidor
-  try {
-    doRender(PDF_LOGO_BANNER);
-  } catch(e) {
-    showDebugBox("DIAGNÓSTICO — error real al generar el documento:\n\n" + (e && e.message ? e.message : e) + "\n\n" + (e && e.stack ? e.stack.slice(0,300) : "")); // eslint-disable-line no-alert
-  }
+  doRender(PDF_LOGO_BANNER);
 }
 
 
@@ -1511,21 +1490,7 @@ class ErrorBoundary extends React.Component {
 // ─── Wrapper raiz: monta los hosts de toasts/confirmacion una sola vez, ──────
 // sin importar el estado de auth (loading/error/login/app), y sin necesitar
 // pasar props a traves de toda la app (toast.success(...) y confirmDialog(...) funcionan desde cualquier componente)
-// DIAGNÓSTICO TEMPORAL — consola de desarrollador para el celular, sin necesitar compu.
-// Dibuja un botón flotante que abre una consola completa (Console/Elements/Network).
-// SACAR esto una vez resuelto el problema de impresión.
-function useMobileDebugConsole() {
-  React.useEffect(() => {
-    if(window.eruda) return;
-    const script = document.createElement("script");
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/eruda/3.0.1/eruda.min.js";
-    script.onload = () => { window.eruda && window.eruda.init(); };
-    document.body.appendChild(script);
-  }, []);
-}
-
 export default function App() {
-  useMobileDebugConsole();
   return (
     <ErrorBoundary>
       <AppInner/>
@@ -4392,14 +4357,14 @@ function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,on
       {view==="nueva" && <NuevaCotizacion products={products} vendors={vendors} onAdd={async(q)=>{await onAdd(q);setView("lista");}} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={onSaveClient} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={onChangeList}/>}
       {view==="lista" && (quotes.length===0
         ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{display:"flex",justifyContent:"center"}}><FileText size={42} color="#ddd" strokeWidth={1.7}/></div><div style={{marginTop:8}}>No hay cotizaciones aún</div></div>
-        : quotes.map(q=><QuoteCard key={q.id} q={q} exp={expanded===q.id} toggle={()=>setExpanded(expanded===q.id?null:q.id)} getP={getP} onDel={onDel} onConvert={async(qt)=>{await onConvert(qt);onTabChange("central");}} onExtend={onExtend}/>)
+        : quotes.map(q=><QuoteCard key={q.id} q={q} exp={expanded===q.id} toggle={()=>setExpanded(expanded===q.id?null:q.id)} getP={getP} onDel={onDel} onConvert={async(qt)=>{await onConvert(qt);onTabChange("central");}} onExtend={onExtend} products={products}/>)
       )}
     </div>
   );
 }
 
 
-function QuoteCard({q,exp,toggle,getP,onDel,onConvert,onExtend}) {
+function QuoteCard({q,exp,toggle,getP,onDel,onConvert,onExtend,products}) {
   const PURPLE = "#6c3483"; const PURPLEBG = "#e8daef";
   const [showExtForm, setShowExtForm] = useState(false);
   const [extReason, setExtReason] = useState("");
@@ -5590,7 +5555,6 @@ const ESTADO_CFG = {
 };
 
 function printSolicitudPDF(po, logoSrc) {
-  showDebugBox("DIAGNÓSTICO: printSolicitudPDF() se ejecutó.");
   const rows = po.items.map(it=>`
     <tr>
       <td style="padding:9px 12px;border-bottom:1px solid #f0f0f0;font-size:14px;">${it.name}</td>
@@ -5676,9 +5640,7 @@ function printSolicitudPDF(po, logoSrc) {
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-  } catch(e) {
-    showDebugBox("DIAGNÓSTICO — error al abrir el documento:\n\n" + (e && e.message ? e.message : e)); // eslint-disable-line no-alert
-  }
+  } catch(e) { /* silent fail - no critico */ }
 }
 
 function exportSolicitudXLSX(po) {
