@@ -1511,7 +1511,21 @@ class ErrorBoundary extends React.Component {
 // ─── Wrapper raiz: monta los hosts de toasts/confirmacion una sola vez, ──────
 // sin importar el estado de auth (loading/error/login/app), y sin necesitar
 // pasar props a traves de toda la app (toast.success(...) y confirmDialog(...) funcionan desde cualquier componente)
+// DIAGNÓSTICO TEMPORAL — consola de desarrollador para el celular, sin necesitar compu.
+// Dibuja un botón flotante que abre una consola completa (Console/Elements/Network).
+// SACAR esto una vez resuelto el problema de impresión.
+function useMobileDebugConsole() {
+  React.useEffect(() => {
+    if(window.eruda) return;
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/eruda/3.0.1/eruda.min.js";
+    script.onload = () => { window.eruda && window.eruda.init(); };
+    document.body.appendChild(script);
+  }, []);
+}
+
 export default function App() {
+  useMobileDebugConsole();
   return (
     <ErrorBoundary>
       <AppInner/>
