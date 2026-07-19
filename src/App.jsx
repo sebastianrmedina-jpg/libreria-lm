@@ -2050,7 +2050,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   const addQuote = async (quote) => {
     const test = isTestOrder(quote.vendedor);
     const n = test ? 0 : await db.nextCounter("presu");
-    const quoteWithNum = {...quote, docNum: test ? `TEST-${genId().slice(-6).toUpperCase()}` : fmtDocNum("Presu", n), isTest: test, shareToken: genShareToken()};
+    const quoteWithNum = {...quote, docNum: test ? `TEST-${genId().slice(-6).toUpperCase()}` : fmtDocNum("Presu", n), isTest: test};
     setQuotes(q=>[quoteWithNum,...q]);
     if(!test) {
       await db.upsertQuote(quoteWithNum);
