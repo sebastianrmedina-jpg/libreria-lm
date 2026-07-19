@@ -4691,9 +4691,14 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,on
     if(!cart.length){toast.error("Agregá productos");return;}
     setSaving(true);
     const q={id:genId(),client:selectedClient.name,clientId:selectedClient.id,notes,vendedor,validity,items:cart,total,subtotal,globalDisc,date:today()};
-    await onAdd(q);
-    setSaving(false);
-    setOk(true);
+    try {
+      await onAdd(q);
+      setOk(true);
+    } catch(e) {
+      toast.error("No se pudo guardar la cotización: " + (e && e.message ? e.message : "error desconocido"));
+    } finally {
+      setSaving(false);
+    }
   };
 
   if(saving) return <SaveSpinner label="Guardando cotización..." color={PURPLE}/>;
