@@ -307,7 +307,7 @@ const db = {
   deleteOrder:  async (id) => { const {error} = await supaAdmin.from("lm_orders").delete().eq("id",id); if(error) throw error; },
 
   getQuotes:    async () => { const {data,error} = await supabase.from("lm_quotes").select("*").order("date",{ascending:false}); if(error) throw error; return (data||[]).map(mapQuote); },
-  upsertQuote:  async (q) => { const {error} = await supaAdmin.from("lm_quotes").upsert({id:q.id,client:q.client,vendedor:q.vendedor||"",notes:q.notes||"",total:q.total,date:q.date,items:q.items,validity:q.validity||"",doc_num:q.docNum||"",convertida:q.convertida||false,orden_id:q.ordenId||"",extendida:q.extendida||false,extend_reason:q.extendReason||"",extend_date:q.extendDate||"",global_disc:q.globalDisc||null,subtotal:q.subtotal||0,share_token:q.shareToken||""}); if(error) throw error; },
+  upsertQuote:  async (q) => { const {error} = await supaAdmin.from("lm_quotes").upsert({id:q.id,client:q.client,vendedor:q.vendedor||"",notes:q.notes||"",total:q.total,date:q.date,items:q.items,validity:q.validity||"",doc_num:q.docNum||"",convertida:q.convertida||false,orden_id:q.ordenId||"",extendida:q.extendida||false,extend_reason:q.extendReason||"",extend_date:q.extendDate||"",global_disc:q.globalDisc||null,subtotal:q.subtotal||0,share_token:q.shareToken||null}); if(error) throw error; },
   deleteQuote:  async (id) => { const {error} = await supaAdmin.from("lm_quotes").delete().eq("id",id); if(error) throw error; },
 
   getStockLog:  async () => { const {data,error} = await supabase.from("lm_stocklog").select("*").order("fecha",{ascending:false}); if(error) throw error; return (data||[]).map(r=>({...r,productoId:r.producto_id,stockAntes:r.stock_antes,stockDespues:r.stock_despues})); },
@@ -2070,6 +2070,22 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       await db.upsertQuote(quo);
     }
   };
+  // Genera el shareToken al toque para cotizaciones creadas antes de esta feature.
+  // Devuelve el token (nuevo o existente) o null si es una cotización de prueba/sin persistir.
+  const ensureShareToken = async (quote) => {
+    if(quote.shareToken) return quote.shareToken;
+    if(isTestOrder(quote.vendedor)) { toast.error("Las cotizaciones de prueba no se pueden compartir"); return null; }
+    const tok = genShareToken();
+    const updated = {...quote, shareToken: tok};
+    setQuotes(qs => qs.map(x => x.id===quote.id ? updated : x));
+    try {
+      await db.upsertQuote(updated);
+    } catch(e) {
+      toast.error("No se pudo guardar el link: " + (e && e.message ? e.message : "error desconocido"));
+      return null;
+    }
+    return tok;
+  };
 
   // Convierte una cotización en reserva — descuenta stock y arranca el circuito de ventas
   const convertQuoteToOrder = async (quote) => {
@@ -2612,7 +2628,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
           currentUser={currentUser} isMobile={isMobile}/>}
         {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} promos={promos} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={setPreviewListId}/>}
         {tab==="clientes"   && <ClientesPanel clients={clients} onSave={saveClient} onDelete={deleteClient} onRequestDelete={requestDeleteClient} onRejectDelete={rejectDeleteClient} currentUser={currentUser} isMobile={isMobile} orders={orders}/>}
-        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={setPreviewListId}/>}
+        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onEnsureShareToken={ensureShareToken} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={setPreviewListId}/>}
         {tab==="precios"    && <Precios products={pricedProducts} canScan={currentUser.role==="admin"||isTestOrder(currentUser.vendedor||currentUser.name)||currentUser.barcodeEnabled}/>}
         {tab==="stock"      && <>
               {isTestUser && (
@@ -4486,7 +4502,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
   );
 }
 
-function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,onTabChange,currentUser,isMobile,clients,onSaveClient,orders,priceLists,previewListId,onChangeList}) {
+function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,onEnsureShareToken,onTabChange,currentUser,isMobile,clients,onSaveClient,orders,priceLists,previewListId,onChangeList}) {
   const [view,setView]=useState("lista");
   const [expanded,setExpanded]=useState(null);
   const getP=id=>products.find(p=>p.id===id);
@@ -4499,14 +4515,14 @@ function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,on
       {view==="nueva" && <NuevaCotizacion products={products} vendors={vendors} onAdd={async(q)=>{await onAdd(q);setView("lista");}} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={onSaveClient} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={onChangeList}/>}
       {view==="lista" && (quotes.length===0
         ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{display:"flex",justifyContent:"center"}}><FileText size={42} color="#ddd" strokeWidth={1.7}/></div><div style={{marginTop:8}}>No hay cotizaciones aún</div></div>
-        : quotes.map(q=><QuoteCard key={q.id} q={q} exp={expanded===q.id} toggle={()=>setExpanded(expanded===q.id?null:q.id)} getP={getP} onDel={onDel} onConvert={async(qt)=>{await onConvert(qt);onTabChange("central");}} onExtend={onExtend} products={products}/>)
+        : quotes.map(q=><QuoteCard key={q.id} q={q} exp={expanded===q.id} toggle={()=>setExpanded(expanded===q.id?null:q.id)} getP={getP} onDel={onDel} onConvert={async(qt)=>{await onConvert(qt);onTabChange("central");}} onExtend={onExtend} products={products} onEnsureShareToken={onEnsureShareToken}/>)
       )}
     </div>
   );
 }
 
 
-function QuoteCard({q,exp,toggle,getP,onDel,onConvert,onExtend,products}) {
+function QuoteCard({q,exp,toggle,getP,onDel,onConvert,onExtend,products,onEnsureShareToken}) {
   const PURPLE = "#6c3483"; const PURPLEBG = "#e8daef";
   const [showExtForm, setShowExtForm] = useState(false);
   const [extReason, setExtReason] = useState("");
@@ -4610,19 +4626,19 @@ function QuoteCard({q,exp,toggle,getP,onDel,onConvert,onExtend,products}) {
           {q.notes&&<div style={{background:"#f9f9f9",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#555",marginBottom:12}}>{q.notes}</div>}
           <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
             <button onClick={()=>printDoc(q,"cotizacion",products)} style={{padding:"8px 12px",borderRadius:8,border:`1.5px solid ${PURPLEBG}`,cursor:"pointer",background:"#fff",color:PURPLE,fontWeight:600,fontSize:13,display:"flex",alignItems:"center",gap:6}}><Printer size={13} strokeWidth={2.3}/>Imprimir</button>
-            {q.shareToken && (
-              <button onClick={async()=>{
-                const url = `${window.location.origin}/c/${q.shareToken}`;
-                if(navigator.share) {
-                  try { await navigator.share({title:`Cotización ${q.docNum}`, url}); } catch(e){ /* usuario canceló */ }
-                } else {
-                  await navigator.clipboard.writeText(url);
-                  toast.success("Link copiado al portapapeles");
-                }
-              }} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #25d36688",cursor:"pointer",background:"#fff",color:"#1e9e56",fontWeight:600,fontSize:13,display:"flex",alignItems:"center",gap:6}}>
-                <Share2 size={13} strokeWidth={2.3}/>Compartir link
-              </button>
-            )}
+            <button onClick={async()=>{
+              let tok = q.shareToken;
+              if(!tok) { tok = await onEnsureShareToken(q); if(!tok) return; }
+              const url = `${window.location.origin}/c/${tok}`;
+              if(navigator.share) {
+                try { await navigator.share({title:`Cotización ${q.docNum}`, url}); } catch(e){ /* usuario canceló */ }
+              } else {
+                await navigator.clipboard.writeText(url);
+                toast.success("Link copiado al portapapeles");
+              }
+            }} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #25d36688",cursor:"pointer",background:"#fff",color:"#1e9e56",fontWeight:600,fontSize:13,display:"flex",alignItems:"center",gap:6}}>
+              <Share2 size={13} strokeWidth={2.3}/>Compartir link
+            </button>
             <button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(buildWAQuote(q))}`, "_blank")}
               style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #25D366",cursor:"pointer",background:"#25D366",color:"#fff",fontWeight:700,fontSize:13,display:"flex",alignItems:"center",gap:5}}>
               <MessageCircle size={14} strokeWidth={2.3}/> Enviar por WhatsApp
