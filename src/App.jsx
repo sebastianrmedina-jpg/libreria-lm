@@ -1274,12 +1274,61 @@ function PublicQuoteView({token}) {
     })();
   }, [token]);
 
+  // Mismo CSS literal que usa printDoc para "cotizacion" — así el link público
+  // es una réplica exacta del PDF, no una aproximación.
+  const css = `
+    *{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;}
+    html,body{background:#fdfbf7;color:#1a1a1a;}
+    .pub-page{max-width:210mm;margin:0 auto;background:#fdfbf7;min-height:100vh;box-shadow:0 0 20px #0002;}
+    .header-img{width:100%;height:auto;display:block;}
+    .gold-line{height:3px;background:linear-gradient(90deg,#c9a96a,#e8d4a8,#c9a96a);}
+    .content{padding:14px 18px 18px;}
+    .doc-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:12px;border-bottom:2px solid #f0ece2;}
+    .doc-type-label{font-size:10px;color:#999;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:5px;font-weight:700;}
+    .doc-badge{display:inline-block;padding:5px 16px;border-radius:6px;font-size:13px;font-weight:800;letter-spacing:1px;background:#6c3483;color:#fff;}
+    .doc-right{text-align:right;}
+    .doc-num{font-size:23px;font-weight:700;color:#1a1a1a;letter-spacing:0.3px;font-family:Georgia,'Times New Roman',serif;}
+    .doc-date{font-size:11px;color:#888;margin-top:3px;}
+    .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px 16px;margin-bottom:14px;}
+    .info-box{background:#fdfbf7;border-radius:6px;padding:8px 12px;border-left:3px solid #e5ddd0;}
+    .info-box.hl{border-left-color:#6c3483;}
+    .info-label{font-size:8px;color:#999;text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px;font-weight:700;}
+    .info-value{font-size:13px;font-weight:700;color:#1a1a1a;}
+    .validity-bar{background:#fef9e7;border-left:3px solid #c9a96a;padding:6px 12px;border-radius:0 6px 6px 0;font-size:12px;color:#7d6608;margin-bottom:10px;}
+    table{width:100%;border-collapse:collapse;margin-bottom:14px;}
+    thead tr{background:#fdfbf7;}
+    th{padding:9px 10px;text-align:left;font-size:10px;color:#999;text-transform:uppercase;letter-spacing:.6px;font-weight:700;border-bottom:2px solid #f0ece2;}
+    th.r{text-align:right;}th.c{text-align:center;}
+    td{padding:9px 10px;border-bottom:1px solid #f5f1ea;font-size:15px;color:#1a1a1a;vertical-align:middle;}
+    td.r{text-align:right;}td.c{text-align:center;}
+    tbody tr:nth-child(even){background:#fdfbf7;}
+    tbody tr:last-child td{border-bottom:none;}
+    .foto-cell{width:56px;padding:9px 6px 9px 12px!important;}
+    .foto-link{display:block;width:48px;height:48px;border-radius:8px;overflow:hidden;border:1px solid #e5ddd0;position:relative;cursor:pointer;background:none;padding:0;}
+    .foto-link img{width:100%;height:100%;object-fit:cover;display:block;}
+    .foto-hint{position:absolute;bottom:0;left:0;right:0;background:#0007;color:#fff;font-size:7px;text-align:center;padding:1px 0;letter-spacing:.3px;}
+    .foto-placeholder{width:48px;height:48px;border-radius:8px;background:#f0ece2;display:flex;align-items:center;justify-content:center;font-size:8px;color:#bbb;text-align:center;border:1px dashed #ddd;}
+    .total-wrap{display:flex;justify-content:flex-end;margin-bottom:14px;}
+    .total-box{background:#f5eef8;border-radius:10px;padding:14px 22px;min-width:280px;border:1px solid #6c348322;}
+    .disc-row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;}
+    .disc-row.green{color:#1e8449;}
+    .disc-row.grey{color:#888;}
+    .disc-divider{border:none;border-top:1px solid #e5ddd0;margin:6px 0;}
+    .total-final{display:flex;justify-content:space-between;align-items:center;margin-top:4px;}
+    .total-label{font-size:14px;color:#555;font-weight:600;}
+    .total-amount{font-size:28px;font-weight:700;color:#6c3483;font-family:Georgia,'Times New Roman',serif;}
+    .notes{background:#fdfbf7;border-left:3px solid #6c3483;padding:9px 12px;border-radius:0 6px 6px 0;font-size:13px;color:#555;margin-bottom:14px;}
+    .footer{border-top:1px solid #f0ece2;padding-top:9px;margin:0 0;font-size:10px;color:#bbb;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;}
+    .footer-brand{color:#7b1a1a;font-weight:700;font-family:Georgia,serif;}
+    .vencida-bar{background:#fdecea;border-left:3px solid #c0392b;padding:8px 14px;border-radius:0 8px 8px 0;font-size:13px;color:#c0392b;margin-bottom:16px;}
+  `;
+
   if(loading) {
-    return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:IVORY,fontFamily:"-apple-system,sans-serif",color:"#999",fontSize:14}}>Cargando cotización...</div>;
+    return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#fdfbf7",fontFamily:"-apple-system,sans-serif",color:"#999",fontSize:14}}>Cargando cotización...</div>;
   }
   if(error || !quote) {
     return (
-      <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:IVORY,fontFamily:"-apple-system,sans-serif",padding:24,textAlign:"center"}}>
+      <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#fdfbf7",fontFamily:"-apple-system,sans-serif",padding:24,textAlign:"center"}}>
         <div style={{fontSize:40,marginBottom:12}}>📄</div>
         <div style={{fontWeight:800,fontSize:16,color:"#1a1a1a",marginBottom:6}}>No pudimos encontrar esta cotización</div>
         <div style={{fontSize:13,color:"#888"}}>El link puede haber vencido o ser incorrecto.</div>
@@ -1289,75 +1338,101 @@ function PublicQuoteView({token}) {
 
   const st = quoteStatus(quote);
   const vencida = st.status === "vencida";
-  const applyDisc = (price, qty, disc) => applyItemDiscount(price, qty, disc);
+  const subtotalVal = quote.items.reduce((s,it)=>s+applyItemDiscount(it.price,it.qty,it.disc),0);
+  const hasItemDiscs = quote.items.some(it=>it.disc && parseFloat(it.disc.value)>0);
+  const hasGlobalDisc = quote.globalDisc && parseFloat(quote.globalDisc.value)>0;
+  const globalDiscAmt = subtotalVal - quote.total;
 
   return (
-    <div style={{minHeight:"100vh",background:"#e8e2d5",fontFamily:"-apple-system,sans-serif"}}>
-      <div style={{maxWidth:480,margin:"0 auto",background:IVORY,minHeight:"100vh",boxShadow:"0 0 24px #0002"}}>
-        <div style={{width:"100%",height:100,display:"flex",alignItems:"center",justifyContent:"center",background:`linear-gradient(135deg,${VINO},${REDD})`,color:IVORY,fontFamily:"Georgia,serif",fontSize:24,fontWeight:700,letterSpacing:1}}>
-          Librería Madrid
-        </div>
-        <div style={{height:3,background:`linear-gradient(90deg,${GOLD},#e8d4a8,${GOLD})`}}/>
-
-        <div style={{padding:16}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,paddingBottom:12,borderBottom:"2px solid #f0ece2"}}>
+    <div style={{background:"#e8e2d5",minHeight:"100vh",fontFamily:"'Segoe UI',Arial,sans-serif"}}>
+      <style dangerouslySetInnerHTML={{__html: css}}/>
+      <div className="pub-page">
+        <img className="header-img" src={PDF_LOGO_BANNER} alt="Librería Madrid" onError={(e)=>{e.target.style.display="none";}}/>
+        <div className="gold-line"/>
+        <div className="content">
+          <div className="doc-meta">
             <div>
-              <div style={{display:"inline-block",padding:"5px 16px",borderRadius:6,fontSize:13,fontWeight:800,letterSpacing:1,background:"#6c3483",color:"#fff",marginBottom:5}}>COTIZACIÓN</div>
-              <div style={{fontSize:22,fontWeight:700,color:"#1a1a1a",fontFamily:"Georgia,serif"}}>{quote.docNum}</div>
+              <div className="doc-type-label">Comprobante de</div>
+              <div className="doc-badge">COTIZACIÓN</div>
             </div>
-            <div style={{fontSize:11,color:"#888",textAlign:"right"}}>{quote.date}</div>
-          </div>
-
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"7px 12px",marginBottom:14}}>
-            <div style={{background:IVORY,borderRadius:6,padding:"8px 12px",border:"1px solid #f0ece2",borderLeft:"3px solid #6c3483"}}>
-              <div style={{fontSize:8,color:"#999",textTransform:"uppercase",letterSpacing:.7,marginBottom:3,fontWeight:700}}>Cliente</div>
-              <div style={{fontSize:13,fontWeight:700,color:"#1a1a1a"}}>{quote.client}</div>
-            </div>
-            <div style={{background:IVORY,borderRadius:6,padding:"8px 12px",border:"1px solid #f0ece2",borderLeft:"3px solid #e5ddd0"}}>
-              <div style={{fontSize:8,color:"#999",textTransform:"uppercase",letterSpacing:.7,marginBottom:3,fontWeight:700}}>Vendedor</div>
-              <div style={{fontSize:13,fontWeight:700,color:"#1a1a1a"}}>{quote.vendedor||"-"}</div>
+            <div className="doc-right">
+              <div className="doc-num">{quote.docNum}</div>
+              <div className="doc-date">{quote.date}</div>
             </div>
           </div>
 
-          <div style={{background:vencida?"#fdecea":"#eafaf1",borderLeft:`3px solid ${vencida?"#c0392b":"#1e8449"}`,padding:"8px 12px",borderRadius:"0 6px 6px 0",fontSize:12.5,color:vencida?"#c0392b":"#1e8449",marginBottom:16,fontWeight:600}}>
-            {vencida ? "⏳ Esta cotización venció" : `✅ Vigente — ${st.hoursLeft} hs restantes`}
+          <div className="info-grid">
+            <div className="info-box hl"><div className="info-label">Cliente</div><div className="info-value">{quote.client}</div></div>
+            <div className="info-box"><div className="info-label">Vendedor</div><div className="info-value">{quote.vendedor||"—"}</div></div>
+            <div className="info-box"><div className="info-label">Fecha</div><div className="info-value">{quote.date}</div></div>
+            {quote.validity && <div className="info-box"><div className="info-label">Válida hasta</div><div className="info-value" style={{color:"#7d6608"}}>{quote.validity}</div></div>}
           </div>
 
-          {quote.items.map((it,i) => {
-            const hasDisc = it.disc && parseFloat(it.disc.value) > 0;
-            const lineTotal = applyDisc(it.price, it.qty, it.disc);
-            return (
-              <div key={i} style={{display:"flex",gap:12,alignItems:"center",padding:"12px 0",borderBottom:"1px solid #f0ece2"}}>
-                {it.imageUrl ? (
-                  <div onClick={()=>setLightbox(it.imageUrl)} style={{width:64,height:64,borderRadius:10,overflow:"hidden",flexShrink:0,position:"relative",cursor:"pointer",border:"1px solid #e5ddd0"}}>
-                    <img src={it.imageUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
-                    <span style={{position:"absolute",bottom:2,right:2,background:"#0008",color:"#fff",borderRadius:"50%",width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10}}>🔍</span>
-                  </div>
-                ) : (
-                  <div style={{width:64,height:64,borderRadius:10,flexShrink:0,background:"#f0ece2",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#bbb",textAlign:"center",border:"1px dashed #ddd"}}>sin<br/>foto</div>
-                )}
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:14,fontWeight:600,color:"#1a1a1a"}}>{it.name}</div>
-                  <div style={{fontSize:12,color:"#888",marginTop:2}}>{it.qty} unidad{it.qty!==1?"es":""} × {fARS(it.price)}{hasDisc?` (${fmtDisc(it.disc)})`:""}</div>
-                </div>
-                <div style={{textAlign:"right",fontWeight:700,color:"#6c3483",fontSize:14,whiteSpace:"nowrap"}}>{fARS(lineTotal)}</div>
-              </div>
-            );
-          })}
-
-          <div style={{background:"#f5eef8",borderRadius:10,padding:16,margin:"16px 0",border:"1px solid #6c348322",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{fontSize:13,color:"#555",fontWeight:600}}>Total</span>
-            <span style={{fontSize:26,fontWeight:700,color:"#6c3483",fontFamily:"Georgia,serif"}}>{fARS(quote.total)}</span>
-          </div>
-
-          {quote.notes && (
-            <div style={{background:IVORY,borderLeft:"3px solid #6c3483",padding:"9px 12px",borderRadius:"0 6px 6px 0",fontSize:12.5,color:"#555",marginBottom:16,border:"1px solid #f0ece2"}}>
-              <strong>Notas:</strong> {quote.notes}
-            </div>
+          {vencida ? (
+            <div className="vencida-bar">⏳ Esta cotización venció</div>
+          ) : (
+            quote.validity && <div className="validity-bar">⏳ <strong>Válida hasta:</strong> {quote.validity} ({st.hoursLeft} hs restantes)</div>
           )}
 
-          <div style={{fontSize:10,color:"#bbb",textAlign:"center",padding:"12px 0",borderTop:"1px solid #f0ece2"}}>
-            Librería Madrid — este link deja de estar disponible al vencer la cotización
+          <table>
+            <thead><tr>
+              <th style={{width:"9%"}}></th>
+              <th style={{width:"39%"}}>Descripción</th>
+              <th className="c" style={{width:"10%"}}>Cant.</th>
+              <th className="r" style={{width:"21%"}}>P. Unit.</th>
+              <th className="r" style={{width:"21%"}}>Subtotal</th>
+            </tr></thead>
+            <tbody>
+              {quote.items.map((it,i) => {
+                const hasDisc = it.disc && parseFloat(it.disc.value) > 0;
+                const lineTotal = applyItemDiscount(it.price, it.qty, it.disc);
+                const originalTotal = it.price * it.qty;
+                return (
+                  <tr key={i}>
+                    <td className="foto-cell">
+                      {it.imageUrl ? (
+                        <button className="foto-link" onClick={()=>setLightbox(it.imageUrl)} title="Ver foto completa">
+                          <img src={it.imageUrl} alt=""/>
+                          <span className="foto-hint">Ver</span>
+                        </button>
+                      ) : (
+                        <div className="foto-placeholder">sin<br/>foto</div>
+                      )}
+                    </td>
+                    <td>{it.name}</td>
+                    <td className="c">{it.qty}</td>
+                    <td className="r">
+                      {fARS(it.price)}
+                      {hasDisc && <div style={{fontSize:11,color:"#1e8449",fontWeight:700}}>{fmtDisc(it.disc)}</div>}
+                    </td>
+                    <td className="r" style={{fontWeight:700}}>
+                      {hasDisc && <div style={{fontSize:11,color:"#aaa",textDecoration:"line-through"}}>{fARS(originalTotal)}</div>}
+                      <span style={{color:hasDisc?"#1e8449":"inherit"}}>{fARS(lineTotal)}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          <div className="total-wrap">
+            <div className="total-box">
+              {(hasItemDiscs || hasGlobalDisc) && <div className="disc-row grey"><span>Subtotal sin dto.</span><span>{fARS(quote.items.reduce((s,it)=>s+it.price*it.qty,0))}</span></div>}
+              {hasItemDiscs && <div className="disc-row green"><span>Dto. por ítem</span><span>-{fARS(quote.items.reduce((s,it)=>s+it.price*it.qty,0)-subtotalVal)}</span></div>}
+              {hasGlobalDisc && <div className="disc-row green"><span>Dto. global ({fmtDisc(quote.globalDisc)})</span><span>-{fARS(globalDiscAmt)}</span></div>}
+              {(hasItemDiscs || hasGlobalDisc) && <hr className="disc-divider"/>}
+              <div className="total-final">
+                <span className="total-label">TOTAL</span>
+                <span className="total-amount">{fARS(quote.total)}</span>
+              </div>
+            </div>
+          </div>
+
+          {quote.notes && <div className="notes"><strong>Notas:</strong> {quote.notes}</div>}
+
+          <div className="footer">
+            <span><span className="footer-brand">Libreria Madrid</span> — madrid.libreria · +54 9 11 2502-0640</span>
+            <span>Link generado por Librería Madrid</span>
           </div>
         </div>
       </div>
