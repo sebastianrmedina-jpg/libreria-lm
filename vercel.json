@@ -1,6 +1,6 @@
 {
   "outputDirectory": "build",
   "rewrites": [
-    { "source": "/c/:token", "destination": "/index.html" }
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
