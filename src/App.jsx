@@ -4124,6 +4124,35 @@ function Precios({products,canScan}) {
 }
 
 // ─── NUEVO PEDIDO ─────────────────────────────────────────────────────────────
+// Cantidad tocable: toca el número para escribirlo directo, en vez de tener que
+// usar +/- muchas veces para llegar a números altos.
+function EditableQty({qty, onChange, small}) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(qty);
+  useEffect(()=>{ if(!editing) setVal(qty); }, [qty, editing]);
+  if(editing) {
+    return (
+      <input
+        type="number"
+        autoFocus
+        value={val}
+        onChange={e=>setVal(e.target.value)}
+        onFocus={e=>e.target.select()}
+        onBlur={()=>{ onChange(Math.max(0, +val||0)); setEditing(false); }}
+        onKeyDown={e=>{ if(e.key==="Enter") e.target.blur(); }}
+        style={{width:small?36:44,textAlign:"center",padding:"3px 2px",borderRadius:6,border:`1.5px solid ${RED}`,fontWeight:700,fontSize:13,outline:"none"}}
+      />
+    );
+  }
+  return (
+    <span
+      onClick={()=>setEditing(true)}
+      title="Tocá para escribir la cantidad"
+      style={{minWidth:small?24:30,textAlign:"center",fontWeight:800,fontSize:14,cursor:"pointer",borderBottom:"1.5px dashed #ccc",padding:"0 2px"}}
+    >{qty}</span>
+  );
+}
+
 function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=false,orders=[],sortByPopularity=false}) {
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("todos");
@@ -4296,6 +4325,7 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
                   <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",lineHeight:1.3,marginBottom:2}}>{p.name}</div>
                   <div style={{fontSize:11,color:"#666"}}>{p.id} · {p.category}</div>
                   {loteMode && p.multiploCompra>1 && <span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"1.5px 8px",fontSize:10,fontWeight:700,marginTop:3}}><BoxIcon size={10} strokeWidth={2.4}/>Caja de {p.multiploCompra}</span>}
+                  {!loteMode && p.multiploCompra>1 && <span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"1.5px 8px",fontSize:10,fontWeight:700,marginTop:3}}><BoxIcon size={10} strokeWidth={2.4}/>Paquete cerrado: {p.multiploCompra} unidades</span>}
                   <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4,flexWrap:"wrap"}}>
                     {isDesc&&<span style={{fontSize:11,color:"#aaa",textDecoration:"line-through"}}>{fARS(p.salePrice)}</span>}
                     <span style={{fontSize:15,fontWeight:800,color:RED}}>{fARS(finalPrice)}</span>
@@ -4306,7 +4336,7 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
                 {ic
                   ? <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
                       <button onClick={()=>setQ(p.id,ic.qty-step(p))} style={{width:30,height:30,borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:16,fontWeight:700}}>−</button>
-                      <span style={{minWidth:24,textAlign:"center",fontWeight:800,fontSize:14}}>{ic.qty}</span>
+                      <EditableQty qty={ic.qty} onChange={v=>setQ(p.id,v)}/>
                       <button onClick={()=>setQ(p.id,ic.qty+step(p))} style={{width:30,height:30,borderRadius:7,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:16,fontWeight:700}}>+</button>
                     </div>
                   : <button onClick={()=>addC(p)} style={{padding:"7px 12px",borderRadius:7,border:"none",cursor:"pointer",background:RED,color:"#fff",fontWeight:700,fontSize:12,flexShrink:0}}>+ Agregar</button>
@@ -4342,6 +4372,7 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
               <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",marginBottom:3,lineHeight:1.3}}>{p.name}</div>
               <div style={{fontSize:12,color:"#666",marginBottom:7,fontWeight:500}}>{p.id} · {p.category}</div>
               {loteMode && p.multiploCompra>1 && <div style={{marginBottom:7}}><span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"1.5px 8px",fontSize:10,fontWeight:700}}><BoxIcon size={10} strokeWidth={2.4}/>Caja de {p.multiploCompra}</span></div>}
+              {!loteMode && p.multiploCompra>1 && <div style={{marginBottom:7}}><span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"1.5px 8px",fontSize:10,fontWeight:700}}><BoxIcon size={10} strokeWidth={2.4}/>Paquete cerrado: {p.multiploCompra} unidades</span></div>}
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                 <span>{isDesc&&<span style={{fontSize:11,color:"#aaa",textDecoration:"line-through",marginRight:5}}>{fARS(p.salePrice)}</span>}<span style={{fontSize:17,fontWeight:800,color:RED}}>{fARS(finalPrice)}</span></span><SPill n={p.stock}/>
               </div>
