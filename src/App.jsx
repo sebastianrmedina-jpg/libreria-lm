@@ -257,11 +257,13 @@ async function uploadProductImage(productId, file) {
 
 const db = {
   getUsers:     async () => { const {data,error} = await supabase.from("lm_users").select("*").order("name"); if(error) throw error; return (data||[]).map(u=>({...u,priceList:u.price_list||"default",vendedor:u.vendedor||"",canSeeAll:u.can_see_all!==false,phone:u.phone||"",cargo:u.cargo||"",avatar:u.avatar||"",barcodeEnabled:u.barcode_enabled||false,tabsDeshabilitados:u.tabs_deshabilitados||[]})); },
+  // No escribe password acá a propósito — desde la migración a Supabase Auth,
+  // las contraseñas viven en auth.users y se manejan solo vía las funciones
+  // serverless en api/admin/* (crear usuario, resetear contraseña).
   saveUser:     async (u) => {
     const {error} = await supaAdmin.from("lm_users").upsert({
       id: u.id,
       username: u.username,
-      password: u.password,
       name: u.name,
       role: u.role||"vendedor",
       email: u.email||"",
@@ -276,8 +278,6 @@ const db = {
     });
     if(error) { console.error("saveUser error:", error); throw error; }
   },
-  deleteUser:   async (id) => { const {error} = await supaAdmin.from("lm_users").delete().eq("id",id); if(error) throw error; },
-
   getVendors:   async () => { const {data,error} = await supabase.from("lm_vendors").select("name").order("name"); if(error) throw error; return (data||[]).map(v=>v.name); },
   addVendor:    async (name) => { const {error} = await supaAdmin.from("lm_vendors").insert({name}); if(error) throw error; },
   deleteVendor: async (name) => { const {error} = await supaAdmin.from("lm_vendors").delete().eq("name",name); if(error) throw error; },
@@ -496,8 +496,6 @@ function computeAutoDisc(promo, qty) {
   }
   return {disc:null,label:null};
 }
-
-const DEFAULT_USERS = [{id:"u1",username:"admin",password:"admin123",role:"admin",name:"Administrador"}];
 
 function useLocalData(key, initial) {
   const [data, setData] = useState(() => {
@@ -1202,7 +1200,10 @@ function NotifConfig({users,setUsers,notifs,setNotifs}) {
 }
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
-function Login({users, onLogin}) {
+// El campo "Usuario" del formulario se traduce a un email sintético
+// (<usuario>@libreria-lm.local) para autenticar con Supabase Auth — nadie
+// necesita tener ni recordar un email real, la experiencia de login no cambia.
+function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -1211,18 +1212,14 @@ function Login({users, onLogin}) {
   const handleLogin = async () => {
     if(!username.trim()||!password) return;
     setChecking(true); setError("");
-    try {
-      const fresh = await db.getUsers();
-      const u = fresh.find(u => u.username === username.trim() && u.password === password);
-      if (u) { onLogin(u); return; }
-      const u2 = users.find(u => u.username === username.trim() && u.password === password);
-      if(u2) { onLogin(u2); return; }
-      setError("Usuario o contraseña incorrectos");
-    } catch(e) {
-      const u = users.find(u => u.username === username.trim() && u.password === password);
-      if (u) { onLogin(u); return; }
-      setError("Usuario o contraseña incorrectos");
-    } finally { setChecking(false); }
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email: `${username.trim()}@libreria-lm.local`,
+      password,
+    });
+    if(authError) setError("Usuario o contraseña incorrectos");
+    setChecking(false);
+    // Si el login funcionó, el listener onAuthStateChange de RootApp actualiza
+    // currentUser solo — no hace falta ningún callback acá.
   };
   return (
     <div style={{minHeight:"100vh",background:`linear-gradient(135deg,${REDD},${RED})`,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
@@ -1461,13 +1458,12 @@ function AppInner() {
   const [sandboxStock, setSandboxStock] = useState({});
   const isSandboxUser = (user) => user && isTestOrder(user.vendedor || user.name);
 
-  const [currentUser, setCurrentUser] = useState(() => {
-    // Recuperar sesión guardada al iniciar
-    try {
-      const saved = localStorage.getItem("lm_session");
-      return saved ? JSON.parse(saved) : null;
-    } catch { return null; }
-  });
+  // La sesión ya no se guarda a mano — Supabase Auth persiste la suya propia
+  // (con expiración y refresh reales) y accedemos a ella con getSession()/
+  // onAuthStateChange más abajo. authChecked evita mostrar el login de
+  // arranque mientras todavía no sabemos si hay una sesión válida.
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [users, setUsers]       = useState([]);
   const [vendors, setVendors]   = useState([]);
   const [products, setProducts] = useState([]);
@@ -1484,7 +1480,44 @@ function AppInner() {
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(null);
 
+  // Resuelve quién está logueado a partir de la sesión real de Supabase Auth
+  // (no de localStorage armado a mano). onAuthStateChange también dispara
+  // esto solo con login/logout/refresh de token, así que currentUser siempre
+  // queda sincronizado con la sesión real.
   useEffect(() => {
+    let active = true;
+    async function resolveUser(session) {
+      if(!session) { if(active){ setCurrentUser(null); setAuthChecked(true); } return; }
+      try {
+        const fresh = await db.getUsers();
+        const profile = fresh.find(u => u.id === session.user.id);
+        if(!active) return;
+        if(!profile) {
+          // Login válido en Supabase Auth pero sin fila de perfil en lm_users — no debería pasar en uso normal.
+          await supabase.auth.signOut();
+          setCurrentUser(null);
+        } else {
+          setCurrentUser(profile);
+        }
+      } catch {
+        if(active) setCurrentUser(null);
+      } finally {
+        if(active) setAuthChecked(true);
+      }
+    }
+    supabase.auth.getSession().then(({data}) => resolveUser(data.session));
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => resolveUser(session));
+    return () => { active = false; sub.subscription.unsubscribe(); };
+  }, []);
+
+  // Solo registrar en OneSignal cuando cambia DE VERDAD el usuario logueado
+  // (no en cada refresh de token, que onAuthStateChange también dispara).
+  useEffect(() => {
+    if(currentUser) registerOneSignal(currentUser.username, currentUser.role);
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    if(!currentUser) return;
     async function loadAll() {
       try {
         const [u,v,p,o,q,sl,act,pl,po,n,cl,pr,st] = await Promise.all([
@@ -1508,31 +1541,21 @@ function AppInner() {
           p.forEach(prod => { sbInit[prod.id] = prod.stock; });
           setSandboxStock(sbInit);
         }
-        // Refrescar sesión guardada con los datos actuales del usuario
-        try {
-          const saved = localStorage.getItem("lm_session");
-          if(saved) {
-            const savedUser = JSON.parse(saved);
-            const fresh = u.find(x => x.id === savedUser.id);
-            if(fresh) {
-              localStorage.setItem("lm_session", JSON.stringify(fresh));
-              setCurrentUser(fresh);
-            } else {
-              // Usuario eliminado — cerrar sesión
-              localStorage.removeItem("lm_session");
-              setCurrentUser(null);
-            }
-          }
-        } catch {}
-
         // Realtime se inicia en MainApp una vez que el usuario está logueado
       } catch(e) {
         setError("No se pudo conectar con la base de datos. Verificá tu conexión.");
       } finally { setLoading(false); }
     }
     loadAll();
-  }, []);
+  }, [currentUser?.id]);
 
+  if(!authChecked) return (
+    <div style={{minHeight:"100vh",background:`linear-gradient(135deg,#922b21,#c0392b)`,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
+      <img src="/logo.png" alt="LM" style={{width:80,height:80,borderRadius:"50%",objectFit:"cover"}}/>
+      <div style={{color:"#fff",fontWeight:700,fontSize:16}}>Cargando Libreria Madrid...</div>
+    </div>
+  );
+  if(!currentUser) return <Login/>;
   if(loading) return (
     <div style={{minHeight:"100vh",background:`linear-gradient(135deg,#922b21,#c0392b)`,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
       <img src="/logo.png" alt="LM" style={{width:80,height:80,borderRadius:"50%",objectFit:"cover"}}/>
@@ -1550,12 +1573,6 @@ function AppInner() {
       </div>
     </div>
   );
-  if(!currentUser) return <Login users={users} onLogin={u=>{
-    localStorage.setItem("lm_session", JSON.stringify(u));
-    setCurrentUser(u);
-    // Registrar en OneSignal (espera a que esté listo)
-    registerOneSignal(u.username, u.role);
-  }}/>;
   return <MainApp
     currentUser={currentUser} onLogout={()=>{
       // Logout de OneSignal en segundo plano, con timeout propio — nunca debe bloquear el logout real de la app
@@ -1563,8 +1580,8 @@ function AppInner() {
         (async()=>{ const OS=await getOneSignal(); if(OS) await OS.logout(); })(),
         new Promise(r=>setTimeout(r,3000)),
       ]).catch(()=>{});
-      localStorage.removeItem("lm_session");
-      setCurrentUser(null);
+      // El signOut real dispara onAuthStateChange, que ya se encarga de vaciar currentUser.
+      supabase.auth.signOut();
     }}
     users={users} setUsers={setUsers}
     vendors={vendors} setVendors={setVendors}
@@ -2675,7 +2692,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       )}
 
       {compPopup && <CompPopup order={compPopup} onClose={()=>setCompPopup(null)}/>}
-      {showChangePass && <ChangePasswordModal currentUser={currentUser} users={users} setUsers={setUsers} onClose={(updated)=>{setShowChangePass(false);}}/>}
+      {showChangePass && <ChangePasswordModal currentUser={currentUser} onClose={()=>{setShowChangePass(false);}}/>}
       {showNotifs && isMobile && <NotifPanel notifs={notifs} setNotifs={setNotifs} currentUser={currentUser} users={users} onClose={()=>setShowNotifs(false)} onMarkAllRead={markAllRead} pushNotif={pushNotif} orders={orders} onNavigate={handleNotifNavigate}/>}
 
       <div style={{maxWidth:isMobile?undefined:1200,margin:"0 auto",padding:isMobile?"12px 0":"20px 16px"}}>
@@ -2752,7 +2769,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
 
 
 // ─── CHANGE PASSWORD MODAL ───────────────────────────────────────────────────
-function ChangePasswordModal({currentUser, users, setUsers, onClose}) {
+function ChangePasswordModal({currentUser, onClose}) {
   const [current, setCurrent] = useState("");
   const [newPass, setNewPass] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -2760,18 +2777,24 @@ function ChangePasswordModal({currentUser, users, setUsers, onClose}) {
   const [showNew, setShowNew] = useState(false);
   const [error, setError] = useState("");
   const [ok, setOk] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const save = async () => {
     setError("");
-    if(current !== currentUser.password) { setError("La contraseña actual es incorrecta"); return; }
     if(newPass.length < 4) { setError("La nueva contraseña debe tener al menos 4 caracteres"); return; }
     if(newPass !== confirm) { setError("Las contraseñas no coinciden"); return; }
-    const updated = {...currentUser, password: newPass};
-    setUsers(us=>us.map(u=>u.id===currentUser.id?updated:u));
-    await db.saveUser(updated);
-    // Update currentUser in parent — force re-login with new password
+    setSaving(true);
+    // Confirmar la contraseña actual re-autenticando (no queda guardada en ningún lado para compararla directo).
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email: `${currentUser.username}@libreria-lm.local`,
+      password: current,
+    });
+    if(authError) { setError("La contraseña actual es incorrecta"); setSaving(false); return; }
+    const { error: updateError } = await supabase.auth.updateUser({ password: newPass });
+    setSaving(false);
+    if(updateError) { setError("No se pudo actualizar: " + updateError.message); return; }
     setOk(true);
-    setTimeout(()=>onClose(updated), 1500);
+    setTimeout(()=>onClose(), 1500);
   };
 
   return (
@@ -2813,9 +2836,9 @@ function ChangePasswordModal({currentUser, users, setUsers, onClose}) {
 
             <div style={{display:"flex",gap:8,marginTop:4}}>
               <button onClick={save}
-                disabled={!current||!newPass||!confirm}
-                style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:(!current||!newPass||!confirm)?"#e5e5e5":"linear-gradient(135deg,#922b21,#c0392b)",color:(!current||!newPass||!confirm)?"#aaa":"#fff",fontWeight:800,fontSize:14,cursor:(!current||!newPass||!confirm)?"not-allowed":"pointer"}}>
-                Guardar contraseña
+                disabled={!current||!newPass||!confirm||saving}
+                style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:(!current||!newPass||!confirm||saving)?"#e5e5e5":"linear-gradient(135deg,#922b21,#c0392b)",color:(!current||!newPass||!confirm||saving)?"#aaa":"#fff",fontWeight:800,fontSize:14,cursor:(!current||!newPass||!confirm||saving)?"not-allowed":"pointer"}}>
+                {saving?"Guardando...":"Guardar contraseña"}
               </button>
               <button onClick={()=>onClose(null)} style={{padding:"10px 16px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,cursor:"pointer"}}>
                 Cancelar
@@ -8512,19 +8535,37 @@ function VendorsPanel({vendors,setVendors}) {
   );
 }
 
+// Llama a las funciones serverless de api/admin/* con el JWT de la sesión
+// actual — esas funciones vuelven a chequear del lado del servidor que quien
+// llama sea admin antes de tocar nada con la clave secreta.
+async function callAdminApi(path, body) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+    body: JSON.stringify(body || {}),
+  });
+  const json = await res.json().catch(() => ({}));
+  if(!res.ok) throw new Error(json.error || "Error inesperado");
+  return json;
+}
+
 // ── Users ─────────────────────────────────────────────────────────────────────
 function UsersPanel({users,setUsers,vendors,priceLists}) {
   const [form, setForm] = useState({username:"",password:"",name:"",role:"vendedor",vendedor:"",priceList:"default",canSeeAll:true,email:"",phone:"",cargo:"",avatar:"",barcodeEnabled:false,tabsDeshabilitados:[]});
   const [editing, setEditing] = useState(null);
   const [showPass, setShowPass] = useState({});
   const [avatarPreview, setAvatarPreview] = useState("");
+  const [resetPass, setResetPass] = useState("");
+  const [resetting, setResetting] = useState(false);
 
   const startEdit = (u) => {
     setEditing(u.id);
-    setForm({username:u.username,password:u.password,name:u.name,role:u.role,email:u.email||"",phone:u.phone||"",cargo:u.cargo||"",vendedor:u.vendedor||"",priceList:u.priceList||"default",canSeeAll:u.canSeeAll!==false,avatar:u.avatar||"",barcodeEnabled:u.barcodeEnabled||false,tabsDeshabilitados:u.tabsDeshabilitados||[]});
+    setForm({username:u.username,password:"",name:u.name,role:u.role,email:u.email||"",phone:u.phone||"",cargo:u.cargo||"",vendedor:u.vendedor||"",priceList:u.priceList||"default",canSeeAll:u.canSeeAll!==false,avatar:u.avatar||"",barcodeEnabled:u.barcodeEnabled||false,tabsDeshabilitados:u.tabsDeshabilitados||[]});
     setAvatarPreview(u.avatar||"");
+    setResetPass("");
   };
-  const cancelEdit = () => { setEditing(null); setForm({username:"",password:"",name:"",role:"vendedor",vendedor:"",priceList:"default",canSeeAll:true,email:"",phone:"",cargo:"",avatar:"",barcodeEnabled:false,tabsDeshabilitados:[]}); setAvatarPreview(""); };
+  const cancelEdit = () => { setEditing(null); setForm({username:"",password:"",name:"",role:"vendedor",vendedor:"",priceList:"default",canSeeAll:true,email:"",phone:"",cargo:"",avatar:"",barcodeEnabled:false,tabsDeshabilitados:[]}); setAvatarPreview(""); setResetPass(""); };
 
   const handleAvatar = (e) => {
     const file = e.target.files[0];
@@ -8538,18 +8579,27 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
     reader.readAsDataURL(file);
   };
 
+  const refreshUsers = async () => { setUsers(await db.getUsers()); };
+
   const save = async () => {
-    if(!form.username.trim()||!form.password.trim()||!form.name.trim()){toast.error("Completá nombre, usuario y contraseña");return;}
+    if(!form.name.trim()){toast.error("Completá el nombre");return;}
+    if(!editing && (!form.username.trim()||!form.password.trim())){toast.error("Completá usuario y contraseña");return;}
     try {
       if(editing) {
-        const updated = {...users.find(u=>u.id===editing), ...form, priceList:form.priceList||"default", canSeeAll:form.canSeeAll!==false, tabsDeshabilitados:form.role==="vendedor"?(form.tabsDeshabilitados||[]):[]};
+        const current = users.find(u=>u.id===editing);
+        const updated = {...current, ...form, password: undefined, priceList:form.priceList||"default", canSeeAll:form.canSeeAll!==false, tabsDeshabilitados:form.role==="vendedor"?(form.tabsDeshabilitados||[]):[]};
         setUsers(us=>us.map(u=>u.id===editing?updated:u));
         await db.saveUser(updated);
       } else {
         if(users.find(u=>u.username===form.username.trim())){toast.error("Ese usuario ya existe");return;}
-        const newUser = {id:genId(),username:form.username.trim(),password:form.password,name:form.name.trim(),role:form.role||"vendedor",email:form.email||"",phone:form.phone||"",cargo:form.cargo||"",vendedor:form.vendedor||"",priceList:form.priceList||"default",canSeeAll:form.canSeeAll!==false,avatar:form.avatar||"",barcodeEnabled:form.barcodeEnabled||false,tabsDeshabilitados:form.role==="vendedor"?(form.tabsDeshabilitados||[]):[]};
-        setUsers(us=>[...us,newUser]);
-        await db.saveUser(newUser);
+        await callAdminApi("/api/admin/create-user", {
+          username: form.username.trim(), password: form.password, name: form.name.trim(),
+          role: form.role||"vendedor", email: form.email||"", phone: form.phone||"", cargo: form.cargo||"",
+          vendedor: form.vendedor||"", priceList: form.priceList||"default", canSeeAll: form.canSeeAll!==false,
+          avatar: form.avatar||"", barcodeEnabled: form.barcodeEnabled||false,
+          tabsDeshabilitados: form.role==="vendedor"?(form.tabsDeshabilitados||[]):[],
+        });
+        await refreshUsers();
       }
       cancelEdit();
     } catch(e) {
@@ -8557,10 +8607,27 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
     }
   };
 
+  const doResetPassword = async () => {
+    if(resetPass.length < 4){toast.error("La contraseña debe tener al menos 4 caracteres");return;}
+    setResetting(true);
+    try {
+      await callAdminApi("/api/admin/reset-password", { userId: editing, newPassword: resetPass });
+      toast.success("Contraseña actualizada");
+      setResetPass("");
+    } catch(e) {
+      toast.error("No se pudo resetear: " + e.message);
+    } finally { setResetting(false); }
+  };
+
   const remove = async (id) => {
     if(users.filter(u=>u.role==="admin").length===1&&users.find(u=>u.id===id)?.role==="admin"){toast.error("Debe haber al menos un administrador");return;}
-    setUsers(us=>us.filter(u=>u.id!==id));
-    await db.deleteUser(id);
+    try {
+      await callAdminApi("/api/admin/delete-user", { userId: id });
+      setUsers(us=>us.filter(u=>u.id!==id));
+    } catch(e) {
+      toast.error("No se pudo borrar: " + e.message);
+      return;
+    }
   };
 
   const Toggle = ({label,sub,val,onChange}) => (
@@ -8644,15 +8711,35 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
             <Field label="Teléfono"><input value={form.phone||""} onChange={e=>setForm(f=>({...f,phone:e.target.value}))} placeholder="+54 11 1234-5678" style={inputStyle}/></Field>
             <Field label="Email"><input type="email" value={form.email||""} onChange={e=>setForm(f=>({...f,email:e.target.value}))} placeholder="vendedor@ejemplo.com" style={inputStyle}/></Field>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <Field label="Usuario *"><input value={form.username} onChange={e=>setForm(f=>({...f,username:e.target.value}))} placeholder="Ej: maria" style={inputStyle}/></Field>
-            <Field label="Contraseña *">
-              <div style={{position:"relative"}}>
-                <input type={showPass.form?"text":"password"} value={form.password} onChange={e=>setForm(f=>({...f,password:e.target.value}))} placeholder="••••••••" style={{...inputStyle,paddingRight:40}}/>
-                <button onClick={()=>setShowPass(s=>({...s,form:!s.form}))} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"#aaa",display:"flex",alignItems:"center"}}>{showPass.form?<EyeOff size={15} strokeWidth={2.2}/>:<Eye size={15} strokeWidth={2.2}/>}</button>
+          {editing ? (
+            <>
+              <Field label="Usuario" hint="No se puede cambiar una vez creado">
+                <input value={form.username} disabled style={{...inputStyle,background:"#f5f5f5",color:"#999"}}/>
+              </Field>
+              <div style={{background:"#f9f9f9",borderRadius:10,padding:14,marginBottom:14}}>
+                <div style={{fontWeight:700,fontSize:13,marginBottom:8}}>Resetear contraseña</div>
+                <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
+                  <div style={{position:"relative",flex:1}}>
+                    <input type={showPass.reset?"text":"password"} value={resetPass} onChange={e=>setResetPass(e.target.value)} placeholder="Nueva contraseña" style={{...inputStyle,paddingRight:40}}/>
+                    <button onClick={()=>setShowPass(s=>({...s,reset:!s.reset}))} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"#aaa",display:"flex",alignItems:"center"}}>{showPass.reset?<EyeOff size={15} strokeWidth={2.2}/>:<Eye size={15} strokeWidth={2.2}/>}</button>
+                  </div>
+                  <button onClick={doResetPassword} disabled={resetting||resetPass.length<4} style={{padding:"0 16px",borderRadius:10,border:"none",background:(resetting||resetPass.length<4)?"#e5e5e5":"#1a5276",color:(resetting||resetPass.length<4)?"#aaa":"#fff",fontWeight:700,fontSize:13,cursor:(resetting||resetPass.length<4)?"not-allowed":"pointer",alignSelf:"stretch"}}>
+                    {resetting?"...":"Resetear"}
+                  </button>
+                </div>
               </div>
-            </Field>
-          </div>
+            </>
+          ) : (
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <Field label="Usuario *"><input value={form.username} onChange={e=>setForm(f=>({...f,username:e.target.value}))} placeholder="Ej: maria" style={inputStyle}/></Field>
+              <Field label="Contraseña *">
+                <div style={{position:"relative"}}>
+                  <input type={showPass.form?"text":"password"} value={form.password} onChange={e=>setForm(f=>({...f,password:e.target.value}))} placeholder="••••••••" style={{...inputStyle,paddingRight:40}}/>
+                  <button onClick={()=>setShowPass(s=>({...s,form:!s.form}))} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"#aaa",display:"flex",alignItems:"center"}}>{showPass.form?<EyeOff size={15} strokeWidth={2.2}/>:<Eye size={15} strokeWidth={2.2}/>}</button>
+                </div>
+              </Field>
+            </div>
+          )}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
             <Field label="Rol"><select value={form.role} onChange={e=>setForm(f=>({...f,role:e.target.value}))} style={{...inputStyle,cursor:"pointer"}}><option value="vendedor">Vendedor</option><option value="admin">Administrador</option></select></Field>
             <Field label="Vendedor asignado"><select value={form.vendedor||""} onChange={e=>setForm(f=>({...f,vendedor:e.target.value}))} style={{...inputStyle,cursor:"pointer",color:form.vendedor?"#1a1a1a":"#aaa"}}><option value="">- Sin asignar -</option>{(vendors||[]).map(v=><option key={v} value={v}>{v}</option>)}</select></Field>
