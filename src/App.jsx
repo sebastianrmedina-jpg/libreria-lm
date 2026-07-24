@@ -176,7 +176,7 @@ const supabase = createClient(SUPA_URL, SUPA_ANON);
 const supaAdmin = supabase;
 
 
-const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock,multiploCompra:r.multiplo_compra||1,barcode:r.barcode||"",costPriceAnterior:r.cost_price_anterior||0,imageUrl:r.image_url||"",skuProveedor:r.sku_proveedor||null,factorVenta:r.factor_venta||1,variantesHabilitadas:r.variantes_habilitadas||false});
+const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock,multiploCompra:r.multiplo_compra||1,barcode:r.barcode||"",costPriceAnterior:r.cost_price_anterior||0,imageUrl:r.image_url||"",skuProveedor:r.sku_proveedor||null,factorVenta:r.factor_venta||1,variantesHabilitadas:r.variantes_habilitadas||false,noFraccionar:r.no_fraccionar||false});
 const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||"",isTest:r.is_test||false,isSandbox:r.is_sandbox||false,internalNote:r.internal_note||"",editStatus:r.edit_status||"",editReason:r.edit_reason||"",editItems:r.edit_items||null,editRejectReason:r.edit_reject_reason||"",comprobanteUrl:r.comprobante_url||"",comprobanteNombre:r.comprobante_nombre||"",comprobanteFecha:r.comprobante_fecha||"",pagoTipo:r.pago_tipo||"",pagoEfectivoFecha:r.pago_efectivo_fecha||"",encargueResuelto:r.encargue_resuelto||false});
 const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,date:r.date,items:r.items||[],validity:r.validity||"",docNum:r.doc_num||"",convertida:r.convertida||false,ordenId:r.orden_id||"",extendida:r.extendida||false,extendReason:r.extend_reason||"",extendDate:r.extend_date||"",globalDisc:r.global_disc||null,subtotal:r.subtotal||0,shareToken:r.share_token||""});
 
@@ -298,7 +298,7 @@ const db = {
     }
     return all.map(mapProduct);
   },
-  upsertProduct: async (p) => { const {error} = await supaAdmin.from("lm_products").upsert({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0,multiplo_compra:p.multiploCompra||1,barcode:p.barcode||"",cost_price_anterior:p.costPriceAnterior||0,image_url:p.imageUrl||"",sku_proveedor:p.skuProveedor||null,factor_venta:p.factorVenta||1,variantes_habilitadas:p.variantesHabilitadas||false}); if(error) throw error; },
+  upsertProduct: async (p) => { const {error} = await supaAdmin.from("lm_products").upsert({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0,multiplo_compra:p.multiploCompra||1,barcode:p.barcode||"",cost_price_anterior:p.costPriceAnterior||0,image_url:p.imageUrl||"",sku_proveedor:p.skuProveedor||null,factor_venta:p.factorVenta||1,variantes_habilitadas:p.variantesHabilitadas||false,no_fraccionar:p.noFraccionar||false}); if(error) throw error; },
   upsertProducts: async (arr) => { const {error} = await supaAdmin.from("lm_products").upsert(arr.map(p=>({id:p.id,name:p.name,category:p.category||"Importado",cost_price:p.costPrice||0,sale_price:p.salePrice||0,stock:p.stock||0,multiplo_compra:p.multiploCompra||1,barcode:p.barcode||"",cost_price_anterior:p.costPriceAnterior||0,image_url:p.imageUrl||"",sku_proveedor:p.skuProveedor||null,factor_venta:p.factorVenta||1,variantes_habilitadas:p.variantesHabilitadas||false}))); if(error) throw error; },
   deleteProduct: async (id) => { const {error} = await supaAdmin.from("lm_products").delete().eq("id",id); if(error) throw error; },
 
@@ -623,6 +623,14 @@ const norm = (s) => String(s||"").toLowerCase()
   .normalize("NFD").replace(/[̀-ͯ]/g, "");
 // Normaliza SKU quitando guiones, puntos, espacios para búsqueda flexible
 const normSKU = (s) => String(s||"").toLowerCase().replace(/[-.\s_]/g, "");
+// Coincide si el texto contiene TODAS las palabras de la búsqueda, sin
+// importar el orden — "filgo resaltador" encuentra "Resaltador Filgo ...".
+const matchesQuery = (text, query) => {
+  const words = norm(query).trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  const normText = norm(text);
+  return words.every(w => normText.includes(w));
+};
 
 // ─── QUOTE EXPIRY HELPERS ─────────────────────────────────────────────────────
 // Parsea fecha "dd/mm/yyyy" a Date
@@ -4094,7 +4102,7 @@ function Precios({products,canScan}) {
   const shown=useMemo(()=>{
     const q=norm(search);
     return products
-      .filter(p=>!q||norm(p.name).includes(q)||normSKU(p.id).includes(normSKU(search)))
+      .filter(p=>!q||matchesQuery(p.name, search)||normSKU(p.id).includes(normSKU(search)))
       .sort((a,b)=>sortBy==="name"?a.name.localeCompare(b.name):b.salePrice-a.salePrice)
       .slice(0,200);
   },[products,search,sortBy]);
@@ -5455,9 +5463,10 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
                       <span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"1px 7px",fontSize:10,fontWeight:700,whiteSpace:"nowrap",marginLeft:4}}>
                         <BoxIcon size={10} strokeWidth={2.4}/> Variante de {p.skuProveedor}
                       </span>
-                    ) : (esCandidatoFraccion(p.name) && !p.variantesHabilitadas ? (
-                      <span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fdf2e3",color:"#b7770d",border:"1px dashed #f0d080",borderRadius:20,padding:"1px 7px",fontSize:10,fontWeight:700,whiteSpace:"nowrap",marginLeft:4}}>
-                        <AlertTriangle size={10} strokeWidth={2.4}/> Candidato a fraccionar
+                    ) : (esCandidatoFraccion(p.name) && !p.variantesHabilitadas && !p.noFraccionar ? (
+                      <span onClick={()=>onUpd({...p,noFraccionar:true})} title="No es fraccionable — click para no volver a sugerirlo"
+                        style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fdf2e3",color:"#b7770d",border:"1px dashed #f0d080",borderRadius:20,padding:"1px 7px",fontSize:10,fontWeight:700,whiteSpace:"nowrap",marginLeft:4,cursor:"pointer"}}>
+                        <AlertTriangle size={10} strokeWidth={2.4}/> Candidato a fraccionar <XIcon size={9} strokeWidth={2.6}/>
                       </span>
                     ) : null);
                     return isMobile ? (
@@ -7021,7 +7030,7 @@ function SandboxStockManager({products, sandboxStock, updateSandboxStock}) {
 
   const filtered = useMemo(()=>{
     const q = norm(search);
-    return products.filter(p=>!q||norm(p.name).includes(q)||normSKU(p.id).includes(normSKU(search)));
+    return products.filter(p=>!q||matchesQuery(p.name, search)||normSKU(p.id).includes(normSKU(search)));
   }, [products, search]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
@@ -7970,8 +7979,7 @@ function ComboForm({products, editing, nextSku, onSave, onCancel}) {
 
   const found = useMemo(()=>{
     if(!search.trim()) return [];
-    const q = norm(search);
-    return products.filter(p=>!componentes.find(c=>c.pid===p.id) && (norm(p.name).includes(q)||normSKU(p.id).includes(normSKU(search)))).slice(0,8);
+    return products.filter(p=>!componentes.find(c=>c.pid===p.id) && (matchesQuery(p.name, search)||normSKU(p.id).includes(normSKU(search)))).slice(0,8);
   },[search,products,componentes]);
 
   const addComp  = (p) => { setComponentes(c=>[...c,{pid:p.id,qty:1}]); setSearch(""); };
@@ -8067,8 +8075,7 @@ function TresPorDosForm({products, editing, nextSku, onSave, onCancel}) {
 
   const found = useMemo(()=>{
     if(!search.trim()) return [];
-    const q = norm(search);
-    return products.filter(p=>norm(p.name).includes(q)||normSKU(p.id).includes(normSKU(search))).slice(0,8);
+    return products.filter(p=>matchesQuery(p.name, search)||normSKU(p.id).includes(normSKU(search))).slice(0,8);
   },[search,products]);
 
   const selectTipo = (k) => { setTipoSel(k); if(k==="3x2"){setComprar(3);setPagar(2);} else if(k==="2x1"){setComprar(2);setPagar(1);} };
@@ -8157,8 +8164,7 @@ function DescuentoForm({products, editing, prefillProductId, onSave, onCancel}) 
 
   const found = useMemo(()=>{
     if(!search.trim()) return [];
-    const q = norm(search);
-    return products.filter(p=>norm(p.name).includes(q)||normSKU(p.id).includes(normSKU(search))).slice(0,8);
+    return products.filter(p=>matchesQuery(p.name, search)||normSKU(p.id).includes(normSKU(search))).slice(0,8);
   },[search,products]);
 
   const precioFinal = producto ? Math.max(0, tipoValor==="%" ? producto.salePrice*(1-(parseFloat(valor)||0)/100) : producto.salePrice-(parseFloat(valor)||0)) : null;
