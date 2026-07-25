@@ -407,6 +407,14 @@ const genShareToken = () => {
 const today = () => new Date().toLocaleDateString("es-AR");
 const todayISO = () => new Date().toISOString().slice(0,10);
 
+// ─── CATEGORÍAS ──────────────────────────────────────────────────────────────
+// Misma lista (mismos nombres, letra por letra) que CATEGORIES en
+// libreria-lm-tienda/src/lib/data/mock-categories.ts — la web reconoce la
+// categoría de un producto normalizando este texto (minúsculas, sin acentos)
+// y comparándolo contra el id de cada categoría ahí. Si se agrega o renombra
+// una categoría acá, hay que replicarlo en ese archivo de la web también.
+const CATEGORIAS_WEB = ["Bolígrafos","Cuadernos","Resaltadores","Marcadores","Lápices","Carpetas","Blocks","Gomas","Geometría","Tijeras","Adhesivos","Agendas","Papelería","Pinceles","Acrílicos","Acuarelas","Otros"];
+
 // ─── VARIANTES DE VENTA (stock compartido, ej. docena/unidad) ───────────────
 // Palabras que hacen sospechar que un producto viene empaquetado y podría
 // necesitar venderse también fraccionado. Solo sirve para sugerir — nunca
@@ -5654,6 +5662,7 @@ function EditModal({p,onSave,onClose}) {
   const [cost,setCost]=useState(p.costPrice);
   const [sale,setSale]=useState(p.salePrice);
   const [stock,setStock]=useState(p.stock);
+  const [category,setCategory]=useState(p.category);
   const [imageUrl,setImageUrl]=useState(p.imageUrl||"");
   const [uploadingImg,setUploadingImg]=useState(false);
   const [showLightbox,setShowLightbox]=useState(false);
@@ -5706,12 +5715,20 @@ function EditModal({p,onSave,onClose}) {
             <input type="number" value={val} onChange={e=>set(+e.target.value||0)} style={{...inputStyle}}/>
           </div>
         ))}
+        <div style={{marginBottom:12}}>
+          <label style={{fontSize:12,fontWeight:600,color:"#666",display:"block",marginBottom:4}}>Categoría</label>
+          <select value={category} onChange={e=>setCategory(e.target.value)} style={{...inputStyle}}>
+            {!CATEGORIAS_WEB.includes(category) && <option value={category}>{category} (sin categorizar)</option>}
+            {CATEGORIAS_WEB.map(c=><option key={c} value={c}>{c}</option>)}
+          </select>
+          <div style={{fontSize:10,color:"#aaa",marginTop:4}}>Esta lista es la que reconoce la tienda online para agrupar productos.</div>
+        </div>
         <div style={{background:"#f0fdf4",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#1e8449",marginBottom:14}}>
           Margen: <strong>{m}%</strong> . Ganancia/u: <strong>{fARS(sale-cost)}</strong>
         </div>
         <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
           <button onClick={onClose} style={{padding:"8px 14px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontWeight:600,color:"#666"}}>Cancelar</button>
-          <button onClick={()=>onSave({...p,costPrice:cost,salePrice:sale,stock,imageUrl})} style={{padding:"8px 14px",borderRadius:8,border:"none",background:RED,color:"#fff",cursor:"pointer",fontWeight:700}}>Guardar</button>
+          <button onClick={()=>onSave({...p,costPrice:cost,salePrice:sale,stock,category,imageUrl})} style={{padding:"8px 14px",borderRadius:8,border:"none",background:RED,color:"#fff",cursor:"pointer",fontWeight:700}}>Guardar</button>
         </div>
       </div>
       {showLightbox && <ImageLightbox src={imageUrl} onClose={()=>setShowLightbox(false)}/>}
