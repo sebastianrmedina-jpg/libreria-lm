@@ -407,13 +407,8 @@ const genShareToken = () => {
 const today = () => new Date().toLocaleDateString("es-AR");
 const todayISO = () => new Date().toISOString().slice(0,10);
 
-// ─── CATEGORÍAS ──────────────────────────────────────────────────────────────
-// Misma lista (mismos nombres, letra por letra) que CATEGORIES en
-// libreria-lm-tienda/src/lib/data/mock-categories.ts — la web reconoce la
-// categoría de un producto normalizando este texto (minúsculas, sin acentos)
-// y comparándolo contra el id de cada categoría ahí. Si se agrega o renombra
-// una categoría acá, hay que replicarlo en ese archivo de la web también.
-const CATEGORIAS_WEB = ["Bolígrafos","Cuadernos","Resaltadores","Marcadores","Lápices","Carpetas","Blocks","Gomas","Geometría","Tijeras","Adhesivos","Agendas","Papelería","Pinceles","Acrílicos","Acuarelas","Otros"];
+// Categorías: ver EditModal, se leen de lm_categories (Supabase) — se
+// administran desde /admin/categorias en la tienda online, no hay lista fija.
 
 // ─── VARIANTES DE VENTA (stock compartido, ej. docena/unidad) ───────────────
 // Palabras que hacen sospechar que un producto viene empaquetado y podría
@@ -5663,10 +5658,21 @@ function EditModal({p,onSave,onClose}) {
   const [sale,setSale]=useState(p.salePrice);
   const [stock,setStock]=useState(p.stock);
   const [category,setCategory]=useState(p.category);
+  const [categorias,setCategorias]=useState([]);
   const [imageUrl,setImageUrl]=useState(p.imageUrl||"");
   const [uploadingImg,setUploadingImg]=useState(false);
   const [showLightbox,setShowLightbox]=useState(false);
   const m=cost>0?((sale-cost)/cost*100).toFixed(1):"-";
+
+  // Categorías: viven en lm_categories (Supabase), administradas desde
+  // /admin/categorias en la tienda online — no hay lista fija acá.
+  useEffect(() => {
+    supabase.from("lm_categories").select("name").order("sort_order")
+      .then(({data,error}) => {
+        if(error) { console.error("Error cargando categorías:", error); return; }
+        setCategorias((data||[]).map(r=>r.name));
+      });
+  }, []);
 
   const handleImage = async (e) => {
     const file = e.target.files[0];
@@ -5718,8 +5724,8 @@ function EditModal({p,onSave,onClose}) {
         <div style={{marginBottom:12}}>
           <label style={{fontSize:12,fontWeight:600,color:"#666",display:"block",marginBottom:4}}>Categoría</label>
           <select value={category} onChange={e=>setCategory(e.target.value)} style={{...inputStyle}}>
-            {!CATEGORIAS_WEB.includes(category) && <option value={category}>{category} (sin categorizar)</option>}
-            {CATEGORIAS_WEB.map(c=><option key={c} value={c}>{c}</option>)}
+            {!categorias.includes(category) && <option value={category}>{category} (sin categorizar)</option>}
+            {categorias.map(c=><option key={c} value={c}>{c}</option>)}
           </select>
           <div style={{fontSize:10,color:"#aaa",marginTop:4}}>Esta lista es la que reconoce la tienda online para agrupar productos.</div>
         </div>
