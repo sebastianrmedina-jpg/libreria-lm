@@ -2732,7 +2732,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
         {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} promos={promos} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={setPreviewListId}/>}
         {tab==="clientes"   && <ClientesPanel clients={clients} onSave={saveClient} onDelete={deleteClient} onRequestDelete={requestDeleteClient} onRejectDelete={rejectDeleteClient} currentUser={currentUser} isMobile={isMobile} orders={orders}/>}
         {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onEnsureShareToken={ensureShareToken} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={setPreviewListId}/>}
-        {tab==="precios"    && <Precios products={pricedProducts} canScan={currentUser.role==="admin"||isTestOrder(currentUser.vendedor||currentUser.name)||currentUser.barcodeEnabled}/>}
+        {tab==="precios"    && <Precios products={pricedProducts} canScan={currentUser.role==="admin"||isTestOrder(currentUser.vendedor||currentUser.name)||currentUser.barcodeEnabled} showCamilaPrice={currentUser.role==="admin"||(currentUser.vendedor||currentUser.name)==="Camila"}/>}
         {tab==="stock"      && <>
               {isTestUser && (
                 <div style={{background:"#f5eef8",border:"1.5px solid #9b59b6",borderRadius:10,padding:"10px 16px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
@@ -4098,7 +4098,7 @@ function ClientesPanel({clients, onSave, onDelete, onRequestDelete, onRejectDele
   );
 }
 
-function Precios({products,canScan}) {
+function Precios({products,canScan,showCamilaPrice}) {
   const [search,setSearch]=useState("");
   const [sortBy,setSortBy]=useState("name");
   const [showScanner,setShowScanner]=useState(false);
@@ -4141,13 +4141,17 @@ function Precios({products,canScan}) {
         ? <div style={{textAlign:"center",padding:60,color:"#aaa",background:"#fff",borderRadius:12}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><Search size={40} color="#ddd" strokeWidth={1.7}/></div><div>No se encontraron productos</div></div>
         : <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 4px #0001",overflow:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-              <thead><tr style={{background:"#f9f9f9",position:"sticky",top:0}}>{["Código","Descripción","Categoría","Precio"].map(h=>(<th key={h} style={{padding:"11px 14px",textAlign:"left",fontWeight:700,color:"#888",fontSize:11,textTransform:"uppercase",letterSpacing:.5,whiteSpace:"nowrap"}}>{h}</th>))}</tr></thead>
+              <thead><tr style={{background:"#f9f9f9",position:"sticky",top:0}}>
+                {["Código","Descripción","Categoría","Precio"].map(h=>(<th key={h} style={{padding:"11px 14px",textAlign:"left",fontWeight:700,color:"#888",fontSize:11,textTransform:"uppercase",letterSpacing:.5,whiteSpace:"nowrap"}}>{h}</th>))}
+                {showCamilaPrice && <th style={{padding:"11px 14px",textAlign:"left",fontWeight:700,color:"#b8860b",fontSize:11,textTransform:"uppercase",letterSpacing:.5,whiteSpace:"nowrap"}}>Precio venta Camila<span style={{fontSize:9.5,fontWeight:800,color:"#fff",background:"#b8860b",borderRadius:5,padding:"1px 5px",marginLeft:6,textTransform:"none"}}>+40%</span></th>}
+              </tr></thead>
               <tbody>
                 {shown.map(p=>(<tr key={p.id} style={{borderTop:"1px solid #f5f5f5"}} onMouseEnter={e=>e.currentTarget.style.background="#fafafa"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                   <td style={{padding:"10px 14px",color:"#999",fontSize:11,whiteSpace:"nowrap"}}>{p.id}</td>
                   <td style={{padding:"10px 14px",fontWeight:600,color:"#1a1a1a",maxWidth:320}}>{p.name}</td>
                   <td style={{padding:"10px 14px"}}><span style={{background:"#f5f5f5",color:"#666",borderRadius:6,padding:"2px 8px",fontSize:11,fontWeight:500}}>{p.category}</span></td>
                   <td style={{padding:"10px 14px",whiteSpace:"nowrap"}}><span style={{fontWeight:800,fontSize:15,color:RED}}>{fARS(p.salePrice)}</span></td>
+                  {showCamilaPrice && <td style={{padding:"10px 14px",whiteSpace:"nowrap"}}><span style={{fontWeight:800,fontSize:15,color:"#b8860b",background:"#fdf6e3",border:"1px solid #eddca3",borderRadius:8,padding:"3px 10px"}}>{fARS(Math.round(p.salePrice*1.4))}</span></td>}
                 </tr>))}
               </tbody>
             </table>
