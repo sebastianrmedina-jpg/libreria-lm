@@ -5892,7 +5892,8 @@ function IngresarDesdeSolicitud({po, products, onStock, onDone, onArrived, onRes
 const ESTADO_CFG = {
   abierta:   {label:"Abierta",    color:"#1a5276", bg:"#d6eaf8",  Icon:ClipboardList},
   revisando: {label:"Revisando",  color:"#e67e22", bg:"#fef9e7",  Icon:Search},
-  cerrada:   {label:"Cerrada",    color:"#1e8449", bg:"#d5f5e3",  Icon:CheckCircle},
+  pedido:    {label:"Pedido",     color:"#6c3483", bg:"#f3e8fb",  Icon:Truck},
+  recibido:  {label:"Recibida",   color:"#1e8449", bg:"#d5f5e3",  Icon:CheckCircle},
 };
 
 function printSolicitudPDF(po, logoSrc) {
@@ -6142,9 +6143,9 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
 
   const myOrders = isAdmin ? purchaseOrders : purchaseOrders.filter(po=>po.vendedor===currentUser.vendedor||po.vendedor===currentUser.name);
   const [verHistorial, setVerHistorial] = useState(false);
-  const myOrdersFiltradas = myOrders.filter(po => verHistorial ? po.estado==="cerrada" : po.estado!=="cerrada");
-  const countCerradas = myOrders.filter(po=>po.estado==="cerrada").length;
-  const countActivas = myOrders.filter(po=>po.estado!=="cerrada").length;
+  const myOrdersFiltradas = myOrders.filter(po => verHistorial ? po.estado==="recibido" : po.estado!=="recibido");
+  const countCerradas = myOrders.filter(po=>po.estado==="recibido").length;
+  const countActivas = myOrders.filter(po=>po.estado!=="recibido").length;
 
   const savePO = async (po) => {
     setPurchaseOrders(prev=>prev.find(x=>x.id===po.id)?prev.map(x=>x.id===po.id?po:x):[po,...prev]);
@@ -6171,7 +6172,9 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
   };
 
   const changeEstado = async (po, estado) => {
-    const updated = {...po, estado, fechaCierre: estado==="cerrada" ? today() : po.fechaCierre};
+    // fechaCierre marca cuándo el pedido salió hacia el proveedor (transición a "pedido"),
+    // no cuándo se carga el stock — eso queda aparte en fechaRecibido.
+    const updated = {...po, estado, fechaCierre: estado==="pedido" ? today() : po.fechaCierre};
     await savePO(updated);
     if(selected?.id===po.id) setSelected(updated);
   };
@@ -6215,7 +6218,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
         : myOrdersFiltradas.map(po=>{
             const cfg = ESTADO_CFG[po.estado]||{};
             return (
-              <div key={po.id} style={{background:"#fff",borderRadius:12,marginBottom:8,boxShadow:"0 1px 6px #0001",overflow:"hidden",margin:isMobile?"0 12px 8px":"0 0 8px",opacity:po.estado==="cerrada"?0.85:1}}>
+              <div key={po.id} style={{background:"#fff",borderRadius:12,marginBottom:8,boxShadow:"0 1px 6px #0001",overflow:"hidden",margin:isMobile?"0 12px 8px":"0 0 8px",opacity:po.estado==="recibido"?0.85:1}}>
                 <div style={{padding:"13px 16px",display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer"}} onClick={()=>openDetail(po)}>
                   <div style={{width:10,height:10,borderRadius:"50%",background:cfg.color,marginTop:5,flexShrink:0}}/>
                   <div style={{flex:1,minWidth:0}}>
@@ -6231,7 +6234,8 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
                 <div style={{display:"flex",gap:6,padding:"8px 12px",background:"#fafafa",borderTop:"1px solid #f0f0f0"}}>
                   <button onClick={()=>openDetail(po)} style={{flex:1,padding:"8px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>Ver detalle</button>
                   {isAdmin && po.estado==="abierta" && <button onClick={()=>changeEstado(po,"revisando")} style={{flex:1,padding:"8px",borderRadius:8,border:"none",background:"#e67e22",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}><><Search size={11} strokeWidth={2.6}/> Revisar</></button>}
-                  {isAdmin && po.estado==="revisando" && <button onClick={()=>changeEstado(po,"cerrada")} style={{flex:1,padding:"8px",borderRadius:8,border:"none",background:"#1e8449",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}><><CheckCircle size={11} strokeWidth={2.6}/> Cerrar</></button>}
+                  {isAdmin && po.estado==="revisando" && <button onClick={()=>changeEstado(po,"pedido")} style={{flex:1,padding:"8px",borderRadius:8,border:"none",background:"#6c3483",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}><><Truck size={11} strokeWidth={2.6}/> Pedido</></button>}
+                  {isAdmin && po.estado==="pedido" && <button onClick={()=>changeEstado(po,"recibido")} style={{flex:1,padding:"8px",borderRadius:8,border:"none",background:"#1e8449",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}><><CheckCircle size={11} strokeWidth={2.6}/> Recibido</></button>}
                   {isAdmin && <button onClick={()=>deletePO(po.id)} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",background:"#fff",color:"#c0392b",fontSize:11,fontWeight:700,cursor:"pointer"}}><Trash size={12} strokeWidth={2.4}/></button>}
                 </div>
               </div>
@@ -6245,6 +6249,9 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
   if(view==="detalle" && selected) {
     const cfg = ESTADO_CFG[selected.estado]||{};
     const po = purchaseOrders.find(x=>x.id===selected.id)||selected;
+    // Editable solo mientras está abierta o en revisión — una vez pedida al proveedor
+    // (o recibida) la lista ya se cerró y no tiene sentido seguir modificándola.
+    const editable = po.estado==="abierta" || po.estado==="revisando";
     return (
       <div>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,padding:isMobile?"0 12px":"0"}}>
@@ -6275,7 +6282,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
 
         {/* Items table — editable for admin when not closed */}
         <div style={{background:"#fff",borderRadius:12,overflow:"auto",boxShadow:"0 1px 4px #0001",marginBottom:12,margin:isMobile?"0 12px 12px":"0 0 12px"}}>
-          {isAdmin && po.estado!=="cerrada" && (
+          {isAdmin && editable && (
             <div style={{padding:"8px 14px",background:"#fef9e7",borderBottom:"1px solid #f0e0a0",fontSize:12,color:"#7d6608",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
               <span style={{display:"inline-flex",alignItems:"center",gap:5}}><Pencil size={12} strokeWidth={2.4}/>Modo edición — modificá cantidades o agregá productos</span>
               <button onClick={()=>setShowAddProduct(s=>!s)}
@@ -6284,7 +6291,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
               </button>
             </div>
           )}
-          {isAdmin && po.estado!=="cerrada" && showAddProduct && (
+          {isAdmin && editable && showAddProduct && (
             <div style={{padding:"12px 14px",borderBottom:"1px solid #f0f0f0",background:"#f9f9fb"}}>
               <input value={addSearch} onChange={e=>setAddSearch(e.target.value)} autoFocus
                 placeholder="Buscar producto para agregar..."
@@ -6327,7 +6334,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
               <th style={{padding:"10px 12px",textAlign:"center",fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Cant.</th>
               {isAdmin && <th style={{padding:"10px 12px",textAlign:"right",fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Costo</th>}
               <th style={{padding:"10px 12px",textAlign:"left",fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Obs.</th>
-              {isAdmin && po.estado!=="cerrada" && <th style={{padding:"10px 12px",textAlign:"center",fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Quitar</th>}
+              {isAdmin && editable && <th style={{padding:"10px 12px",textAlign:"center",fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Quitar</th>}
             </tr></thead>
             <tbody>
               {po.items.map((it,i)=>(
@@ -6335,7 +6342,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
                   <td style={{padding:"9px 12px",fontWeight:600}}>{it.name}</td>
                   <td style={{padding:"9px 12px",color:"#aaa",fontSize:11}}>{it.id||it.pid||""}</td>
                   <td style={{padding:"9px 12px",textAlign:"center"}}>
-                    {isAdmin && po.estado!=="cerrada"
+                    {isAdmin && editable
                       ? <div style={{display:"flex",alignItems:"center",gap:4,justifyContent:"center"}}>
                           <button onClick={()=>{
                             const newItems=po.items.map((x,j)=>j===i?{...x,qty:Math.max(1,x.qty-1)}:x);
@@ -6364,7 +6371,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
                     return <td style={{padding:"9px 12px",textAlign:"right",fontSize:12,color:"#666",whiteSpace:"nowrap"}}>{costo>0?fARS(costo*it.qty):"—"}</td>;
                   })()}
                   <td style={{padding:"9px 12px"}}>
-                    {isAdmin && po.estado!=="cerrada"
+                    {isAdmin && editable
                       ? <input value={it.notas||""} onChange={e=>{
                             const newItems=po.items.map((x,j)=>j===i?{...x,notas:e.target.value}:x);
                             const updated={...po,items:newItems};
@@ -6374,7 +6381,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
                       : <span style={{color:"#888",fontSize:12}}>{it.notas||""}</span>
                     }
                   </td>
-                  {isAdmin && po.estado!=="cerrada" && (
+                  {isAdmin && editable && (
                     <td style={{padding:"9px 12px",textAlign:"center"}}>
                       <button onClick={()=>{
                         const newItems=po.items.filter((_,j)=>j!==i);
@@ -6397,7 +6404,8 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
         {/* Actions */}
         <div style={{display:"flex",gap:8,flexWrap:"wrap",padding:isMobile?"0 12px":"0"}}>
           {isAdmin && po.estado==="abierta" && <button onClick={()=>changeEstado(po,"revisando")} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:"#e67e22",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>🔍 Marcar como Revisando</button>}
-          {isAdmin && po.estado==="revisando" && <button onClick={()=>changeEstado(po,"cerrada")} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:"#1e8449",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}><><CheckCircle size={12} strokeWidth={2.4}/> Cerrar</> solicitud</button>}
+          {isAdmin && po.estado==="revisando" && <button onClick={()=>changeEstado(po,"pedido")} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:"#6c3483",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}><><Truck size={12} strokeWidth={2.4}/> Marcar como Pedido</></button>}
+          {isAdmin && po.estado==="pedido" && <button onClick={()=>changeEstado(po,"recibido")} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:"#1e8449",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}><><CheckCircle size={12} strokeWidth={2.4}/> Marcar como Recibido</></button>}
           <button onClick={()=>printSolicitudPDF(po, PDF_LOGO_BANNER)} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #1a5276",background:"#fff",color:"#1a5276",fontWeight:700,fontSize:13,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Printer size={13} strokeWidth={2.4}/> PDF</button>
           <button onClick={()=>exportSolicitudXLSX(po)} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #1e8449",background:"#fff",color:"#1e8449",fontWeight:700,fontSize:13,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><BarChart size={13} strokeWidth={2.4}/> Excel</button>
           <button
@@ -6411,24 +6419,24 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
           {isAdmin&&<button onClick={()=>deletePO(po.id)} style={{padding:"11px 16px",borderRadius:10,border:"1.5px solid #fcc",background:"#fff",color:"#c0392b",fontWeight:700,fontSize:13,cursor:"pointer",display:"inline-flex",alignItems:"center"}}><Trash size={13} strokeWidth={2.4}/></button>}
         </div>
 
-        {/* Ingresar mercadería desde solicitud — solo si todavía no se ingresó, para no duplicar stock */}
-        {isAdmin && po.estado==="cerrada" && !po.fechaRecibido && (
+        {/* Ingresar mercadería desde solicitud — solo si ya está marcada como Recibida y todavía no se cargó a stock, para no duplicar */}
+        {isAdmin && po.estado==="recibido" && !po.fechaRecibido && (
           <div style={{background:"#d5f5e3",border:"2px solid #1e8449",borderRadius:12,padding:16,marginTop:12,margin:isMobile?"12px 12px 0":"12px 0 0"}}>
-            <div style={{fontWeight:800,fontSize:14,color:"#1e8449",marginBottom:8,display:"flex",alignItems:"center",gap:6}}><Package size={14} strokeWidth={2.3}/>¿Llegó la mercadería?</div>
+            <div style={{fontWeight:800,fontSize:14,color:"#1e8449",marginBottom:8,display:"flex",alignItems:"center",gap:6}}><Package size={14} strokeWidth={2.3}/>Dar de alta en stock</div>
             <div style={{fontSize:12,color:"#1e8449",marginBottom:12,lineHeight:1.5}}>
               Podés ingresar el stock recibido directamente desde esta solicitud. Ajustá las cantidades si recibiste diferente a lo pedido.
             </div>
             <IngresarDesdeSolicitud po={po} products={products} onStock={onStockExternal} onDone={()=>setView("lista")}
               onResolverEncargue={onResolverEncargue}
               onArrived={async()=>{
-                const updated = {...po, fechaRecibido: today(), estado:"cerrada", fechaCierre: today()};
+                const updated = {...po, fechaRecibido: today(), estado:"recibido"};
                 setPurchaseOrders(prev=>prev.map(x=>x.id===po.id?updated:x));
                 setSelected(updated);
                 await db.savePurchaseOrder(updated);
               }}/>
           </div>
         )}
-        {isAdmin && po.estado==="cerrada" && po.fechaRecibido && (
+        {isAdmin && po.estado==="recibido" && po.fechaRecibido && (
           <div style={{background:"#f0fdf4",border:"1.5px solid #1e8449",borderRadius:12,padding:14,marginTop:12,margin:isMobile?"12px 12px 0":"12px 0 0",display:"flex",alignItems:"center",gap:8}}>
             <CheckCircle size={16} color="#1e8449" strokeWidth={2.3}/>
             <div style={{fontSize:12.5,color:"#1e8449",fontWeight:600}}>Mercadería ya ingresada al stock el {po.fechaRecibido}. No se puede volver a ingresar (evita duplicar stock).</div>
