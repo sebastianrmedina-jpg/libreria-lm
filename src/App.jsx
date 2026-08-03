@@ -8827,20 +8827,63 @@ function ExcelPanel({products,setProducts}) {
   const [status, setStatus] = useState(null);
   const [mode, setMode] = useState("update");
   const [fixing, setFixing] = useState(false);
+  const [aumentando, setAumentando] = useState(false);
+  const [aumentoStatus, setAumentoStatus] = useState(null);
 
   // Productos con el precio de venta roto (igual o menor al costo) por un import anterior
   const rotos = useMemo(()=>products.filter(p=>p.costPrice>0 && p.salePrice<=p.costPrice), [products]);
+  // Todo el catálogo con costo cargado — sobre esto se aplica el aumento de precio general
+  const conCosto = useMemo(()=>products.filter(p=>p.costPrice>0), [products]);
+
+  const aplicarAumento = async () => {
+    const ejemplo = conCosto[0];
+    const ok = await confirmDialog(
+      "¿Aplicar aumento de precio?",
+      `Se va a recalcular el precio de venta de ${conCosto.length} producto${conCosto.length!==1?"s":""} de todo el catálogo como costo × 1,5625 (×1.25 y ese resultado otra vez ×1.25).`
+        + (ejemplo ? ` Ej: "${ejemplo.name}" pasaría de ${fARS(ejemplo.salePrice)} a ${fARS(Math.round(ejemplo.costPrice*1.5625*100)/100)}.` : "")
+        + ` Los productos sin costo cargado quedan sin tocar. Esta acción no se puede deshacer.`,
+      true
+    );
+    if(!ok) return;
+    setAumentando(true);
+    try {
+      const aumentados = conCosto.map(p=>({...p, salePrice: Math.round(p.costPrice*1.5625*100)/100}));
+      const batchSize = 20;
+      const batches = [];
+      for(let i=0;i<aumentados.length;i+=batchSize) batches.push(aumentados.slice(i,i+batchSize));
+      let subidos = 0;
+      for(let i=0;i<batches.length;i++) {
+        const pct = Math.round((i+1)/batches.length*100);
+        setAumentoStatus({type:"progress", msg:`⏳ Aplicando aumento... ${subidos}/${aumentados.length} productos (${pct}%)`});
+        await db.upsertProducts(batches[i]);
+        subidos += batches[i].length;
+        await new Promise(r=>setTimeout(r,100));
+      }
+      setProducts(prev=>prev.map(p=>{
+        const fix = aumentados.find(c=>c.id===p.id);
+        return fix ? fix : p;
+      }));
+      setAumentoStatus({type:"success", msg:`Aumento aplicado a ${aumentados.length} producto${aumentados.length!==1?"s":""}.`});
+      toast.success(`Aumento de precio aplicado a ${aumentados.length} producto${aumentados.length!==1?"s":""}`);
+    } catch(e) {
+      console.warn(e);
+      setAumentoStatus({type:"error", msg:"No se pudo aplicar el aumento. Probá de nuevo."});
+      toast.error("No se pudo aplicar el aumento de precio. Probá de nuevo.");
+    } finally {
+      setAumentando(false);
+    }
+  };
 
   const corregirPrecios = async () => {
     const ok = await confirmDialog(
       "¿Corregir precios?",
-      `Se va a recalcular el precio de venta de ${rotos.length} producto${rotos.length!==1?"s":""} como costo × 1,5 (tu fórmula: ×1.25 y ×1.20). Esta acción no se puede deshacer.`,
+      `Se va a recalcular el precio de venta de ${rotos.length} producto${rotos.length!==1?"s":""} como costo × 1,5625 (tu fórmula: ×1.25 y ×1.25). Esta acción no se puede deshacer.`,
       true
     );
     if(!ok) return;
     setFixing(true);
     try {
-      const corregidos = rotos.map(p=>({...p, salePrice: Math.round(p.costPrice*1.5*100)/100}));
+      const corregidos = rotos.map(p=>({...p, salePrice: Math.round(p.costPrice*1.5625*100)/100}));
       await db.upsertProducts(corregidos);
       setProducts(prev=>prev.map(p=>{
         const fix = corregidos.find(c=>c.id===p.id);
@@ -8980,10 +9023,10 @@ function ExcelPanel({products,setProducts}) {
     const updated=[], notFound=[];
     const newProds = products.map(p=>({...p}));
 
-    // Formula real de venta de Sebastian: costo x 1.25 x 1.20 (= costo x 1.5)
+    // Formula real de venta de Sebastian: costo x 1.25 x 1.25 (= costo x 1.5625)
     // Se aplica SOLO cuando el archivo no trae una columna "Precio Final" ya calculada
     // (ej: su Excel propio con la formula puesta) — si la trae, esa tiene prioridad.
-    const MARKUP_VENTA = 1.25 * 1.20;
+    const MARKUP_VENTA = 1.25 * 1.25;
 
     // El costo real es el de oferta si el proveedor tiene uno activo (es un costo temporal
     // PRECIO OFERTA = costo especial (con descuento del proveedor). Si existe, reemplaza al PRECIO CON IVA
@@ -9060,11 +9103,22 @@ function ExcelPanel({products,setProducts}) {
 
   return (
     <div>
+      <div style={{background:"#fef9e7",border:"1px solid #f0d080",borderRadius:12,padding:"14px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+        <div style={{flex:1,minWidth:220}}>
+          <div style={{fontWeight:800,fontSize:14,color:"#9a7d0a",display:"flex",alignItems:"center",gap:6}}><TrendUp size={14} strokeWidth={2.3}/>Aumento de precio</div>
+          <div style={{fontSize:12,color:"#7d6608",marginTop:2}}>Recalcula el precio de venta de los {conCosto.length} producto{conCosto.length!==1?"s":""} con costo cargado, como costo × 1,5625 (×1.25 y ese resultado otra vez ×1.25). Es un cambio para todo el catálogo.</div>
+          {aumentoStatus && <div style={{fontSize:12,fontWeight:700,marginTop:6,color:aumentoStatus.type==="error"?RED:aumentoStatus.type==="progress"?"#7d6608":"#1e8449"}}>{aumentoStatus.msg}</div>}
+        </div>
+        <button onClick={aplicarAumento} disabled={aumentando||conCosto.length===0}
+          style={{padding:"9px 16px",borderRadius:9,border:"none",background:"#9a7d0a",color:"#fff",fontWeight:700,fontSize:13,cursor:(aumentando||conCosto.length===0)?"default":"pointer",opacity:(aumentando||conCosto.length===0)?0.7:1,whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}}>
+          {aumentando?"Aplicando...":<><TrendUp size={12} strokeWidth={2.4}/> Aplicar aumento ({conCosto.length})</>}
+        </button>
+      </div>
       {rotos.length>0 && (
         <div style={{background:"#fdecea",border:"1px solid #f1948a",borderRadius:12,padding:"14px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
           <div style={{flex:1,minWidth:220}}>
             <div style={{fontWeight:800,fontSize:14,color:RED,display:"flex",alignItems:"center",gap:6}}><AlertTriangle size={14} strokeWidth={2.3}/>{rotos.length} producto{rotos.length!==1?"s":""} con precio de venta roto</div>
-            <div style={{fontSize:12,color:"#a33",marginTop:2}}>Quedaron con precio de venta igual o menor al costo, probablemente por un import anterior. Esto los recalcula como costo × 1,5 (tu fórmula habitual).</div>
+            <div style={{fontSize:12,color:"#a33",marginTop:2}}>Quedaron con precio de venta igual o menor al costo, probablemente por un import anterior. Esto los recalcula como costo × 1,5625 (tu fórmula habitual).</div>
           </div>
           <button onClick={corregirPrecios} disabled={fixing}
             style={{padding:"9px 16px",borderRadius:9,border:"none",background:RED,color:"#fff",fontWeight:700,fontSize:13,cursor:fixing?"default":"pointer",opacity:fixing?0.7:1,whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}}>
