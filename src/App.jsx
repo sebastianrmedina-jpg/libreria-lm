@@ -4151,7 +4151,17 @@ function Precios({products,canScan,showCamilaPrice}) {
                   <td style={{padding:"10px 14px",fontWeight:600,color:"#1a1a1a",maxWidth:320}}>{p.name}</td>
                   <td style={{padding:"10px 14px"}}><span style={{background:"#f5f5f5",color:"#666",borderRadius:6,padding:"2px 8px",fontSize:11,fontWeight:500}}>{p.category}</span></td>
                   <td style={{padding:"10px 14px",whiteSpace:"nowrap"}}><span style={{fontWeight:800,fontSize:15,color:RED}}>{fARS(p.salePrice)}</span></td>
-                  {showCamilaPrice && <td style={{padding:"10px 14px",whiteSpace:"nowrap"}}><span style={{fontWeight:800,fontSize:15,color:"#b8860b",background:"#fdf6e3",border:"1px solid #eddca3",borderRadius:8,padding:"3px 10px"}}>{fARS(Math.round(p.salePrice*1.4))}</span></td>}
+                  {showCamilaPrice && (
+                    <td style={{padding:"10px 14px",whiteSpace:"nowrap"}}>
+                      {p.costPrice>0
+                        // "Lista Camila" = costo del proveedor x 1.30 (primer paso de nuestra formula,
+                        // sin el segundo x1.20 que aplicamos para nuestro propio precio de venta) —
+                        // sobre esa lista es que ella suma su margen del 40%, no sobre nuestro precio final.
+                        ? <span style={{fontWeight:800,fontSize:15,color:"#b8860b",background:"#fdf6e3",border:"1px solid #eddca3",borderRadius:8,padding:"3px 10px"}}>{fARS(Math.round(p.costPrice*1.30*1.40*100)/100)}</span>
+                        : <span style={{color:"#ccc",fontSize:12}}>—</span>
+                      }
+                    </td>
+                  )}
                 </tr>))}
               </tbody>
             </table>
