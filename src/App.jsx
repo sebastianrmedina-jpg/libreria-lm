@@ -8839,15 +8839,15 @@ function ExcelPanel({products,setProducts}) {
     const ejemplo = conCosto[0];
     const ok = await confirmDialog(
       "¿Aplicar aumento de precio?",
-      `Se va a recalcular el precio de venta de ${conCosto.length} producto${conCosto.length!==1?"s":""} de todo el catálogo como costo × 1,5625 (×1.25 y ese resultado otra vez ×1.25).`
-        + (ejemplo ? ` Ej: "${ejemplo.name}" pasaría de ${fARS(ejemplo.salePrice)} a ${fARS(Math.round(ejemplo.costPrice*1.5625*100)/100)}.` : "")
+      `Se va a recalcular el precio de venta de ${conCosto.length} producto${conCosto.length!==1?"s":""} de todo el catálogo como costo × 1,56 (×1.30 y ese resultado ×1.20).`
+        + (ejemplo ? ` Ej: "${ejemplo.name}" pasaría de ${fARS(ejemplo.salePrice)} a ${fARS(Math.round(ejemplo.costPrice*1.56*100)/100)}.` : "")
         + ` Los productos sin costo cargado quedan sin tocar. Esta acción no se puede deshacer.`,
       true
     );
     if(!ok) return;
     setAumentando(true);
     try {
-      const aumentados = conCosto.map(p=>({...p, salePrice: Math.round(p.costPrice*1.5625*100)/100}));
+      const aumentados = conCosto.map(p=>({...p, salePrice: Math.round(p.costPrice*1.56*100)/100}));
       const batchSize = 20;
       const batches = [];
       for(let i=0;i<aumentados.length;i+=batchSize) batches.push(aumentados.slice(i,i+batchSize));
@@ -8877,13 +8877,13 @@ function ExcelPanel({products,setProducts}) {
   const corregirPrecios = async () => {
     const ok = await confirmDialog(
       "¿Corregir precios?",
-      `Se va a recalcular el precio de venta de ${rotos.length} producto${rotos.length!==1?"s":""} como costo × 1,5625 (tu fórmula: ×1.25 y ×1.25). Esta acción no se puede deshacer.`,
+      `Se va a recalcular el precio de venta de ${rotos.length} producto${rotos.length!==1?"s":""} como costo × 1,56 (tu fórmula: ×1.30 y ×1.20). Esta acción no se puede deshacer.`,
       true
     );
     if(!ok) return;
     setFixing(true);
     try {
-      const corregidos = rotos.map(p=>({...p, salePrice: Math.round(p.costPrice*1.5625*100)/100}));
+      const corregidos = rotos.map(p=>({...p, salePrice: Math.round(p.costPrice*1.56*100)/100}));
       await db.upsertProducts(corregidos);
       setProducts(prev=>prev.map(p=>{
         const fix = corregidos.find(c=>c.id===p.id);
@@ -9023,10 +9023,10 @@ function ExcelPanel({products,setProducts}) {
     const updated=[], notFound=[];
     const newProds = products.map(p=>({...p}));
 
-    // Formula real de venta de Sebastian: costo x 1.25 x 1.25 (= costo x 1.5625)
+    // Formula real de venta de Sebastian: costo x 1.30 x 1.20 (= costo x 1.56)
     // Se aplica SOLO cuando el archivo no trae una columna "Precio Final" ya calculada
     // (ej: su Excel propio con la formula puesta) — si la trae, esa tiene prioridad.
-    const MARKUP_VENTA = 1.25 * 1.25;
+    const MARKUP_VENTA = 1.30 * 1.20;
 
     // El costo real es el de oferta si el proveedor tiene uno activo (es un costo temporal
     // PRECIO OFERTA = costo especial (con descuento del proveedor). Si existe, reemplaza al PRECIO CON IVA
@@ -9106,7 +9106,7 @@ function ExcelPanel({products,setProducts}) {
       <div style={{background:"#fef9e7",border:"1px solid #f0d080",borderRadius:12,padding:"14px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
         <div style={{flex:1,minWidth:220}}>
           <div style={{fontWeight:800,fontSize:14,color:"#9a7d0a",display:"flex",alignItems:"center",gap:6}}><TrendUp size={14} strokeWidth={2.3}/>Aumento de precio</div>
-          <div style={{fontSize:12,color:"#7d6608",marginTop:2}}>Recalcula el precio de venta de los {conCosto.length} producto{conCosto.length!==1?"s":""} con costo cargado, como costo × 1,5625 (×1.25 y ese resultado otra vez ×1.25). Es un cambio para todo el catálogo.</div>
+          <div style={{fontSize:12,color:"#7d6608",marginTop:2}}>Recalcula el precio de venta de los {conCosto.length} producto{conCosto.length!==1?"s":""} con costo cargado, como costo × 1,56 (×1.30 y ese resultado ×1.20). Es un cambio para todo el catálogo.</div>
           {aumentoStatus && <div style={{fontSize:12,fontWeight:700,marginTop:6,color:aumentoStatus.type==="error"?RED:aumentoStatus.type==="progress"?"#7d6608":"#1e8449"}}>{aumentoStatus.msg}</div>}
         </div>
         <button onClick={aplicarAumento} disabled={aumentando||conCosto.length===0}
@@ -9118,7 +9118,7 @@ function ExcelPanel({products,setProducts}) {
         <div style={{background:"#fdecea",border:"1px solid #f1948a",borderRadius:12,padding:"14px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
           <div style={{flex:1,minWidth:220}}>
             <div style={{fontWeight:800,fontSize:14,color:RED,display:"flex",alignItems:"center",gap:6}}><AlertTriangle size={14} strokeWidth={2.3}/>{rotos.length} producto{rotos.length!==1?"s":""} con precio de venta roto</div>
-            <div style={{fontSize:12,color:"#a33",marginTop:2}}>Quedaron con precio de venta igual o menor al costo, probablemente por un import anterior. Esto los recalcula como costo × 1,5625 (tu fórmula habitual).</div>
+            <div style={{fontSize:12,color:"#a33",marginTop:2}}>Quedaron con precio de venta igual o menor al costo, probablemente por un import anterior. Esto los recalcula como costo × 1,56 (tu fórmula habitual).</div>
           </div>
           <button onClick={corregirPrecios} disabled={fixing}
             style={{padding:"9px 16px",borderRadius:9,border:"none",background:RED,color:"#fff",fontWeight:700,fontSize:13,cursor:fixing?"default":"pointer",opacity:fixing?0.7:1,whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}}>
