@@ -7834,7 +7834,7 @@ function promoDisplay(promo, products) {
   const d = promo.data || {};
   let titulo = promo.nombre, sub = "";
   if(promo.tipo==="combo") {
-    sub = `${promo.id} · ${(d.componentes||[]).length} productos · ${fARS(d.precioFijo||0)}`;
+    sub = `${promo.id} · ${(d.componentes||[]).length} productos · ${fARS(d.precioFijo||0)}${d.mostrarEnFiesta?" · 🎉 Fiesta":""}`;
   } else if(promo.tipo==="3x2") {
     const prod = products.find(p=>p.id===d.productoId);
     titulo = prod?.name || promo.nombre;
@@ -8017,6 +8017,7 @@ function ComboForm({products, editing, nextSku, onSave, onCancel}) {
   const [search, setSearch] = useState("");
   const [componentes, setComponentes] = useState(editing?.data?.componentes || []);
   const [precioFijo, setPrecioFijo] = useState(editing?.data?.precioFijo!=null ? String(editing.data.precioFijo) : "");
+  const [mostrarEnFiesta, setMostrarEnFiesta] = useState(editing?.data?.mostrarEnFiesta || false);
   const [vigDesde, setVigDesde] = useState(editing?.vigenciaDesde || "");
   const [vigHasta, setVigHasta] = useState(editing?.vigenciaHasta || "");
   const [error, setError] = useState("");
@@ -8045,7 +8046,7 @@ function ComboForm({products, editing, nextSku, onSave, onCancel}) {
       await onSave({
         id:sku.trim(), tipo:"combo", nombre:nombre.trim(), activa:editing?.activa!==false,
         vigenciaDesde:vigDesde, vigenciaHasta:vigHasta,
-        data:{precioFijo:+precioFijo, componentes}, createdAt:editing?.createdAt,
+        data:{precioFijo:+precioFijo, componentes, mostrarEnFiesta}, createdAt:editing?.createdAt,
       });
     } finally { setSaving(false); }
   };
@@ -8091,6 +8092,16 @@ function ComboForm({products, editing, nextSku, onSave, onCancel}) {
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginTop:precioFijo&&precioNormal>0?0:14}}>
         <Field label="Vigencia desde (opcional)"><input type="date" value={vigDesde} onChange={e=>setVigDesde(e.target.value)} style={inputStyle}/></Field>
         <Field label="Vigencia hasta (opcional)"><input type="date" value={vigHasta} onChange={e=>setVigHasta(e.target.value)} style={inputStyle}/></Field>
+      </div>
+
+      <div onClick={()=>setMostrarEnFiesta(v=>!v)} style={{display:"flex",alignItems:"center",gap:10,marginTop:14,padding:"12px 14px",borderRadius:10,border:`1.5px solid ${mostrarEnFiesta?"#e6b800":"#e5e5e5"}`,background:mostrarEnFiesta?"#fffbea":"#fafafa",cursor:"pointer"}}>
+        <div style={{width:20,height:20,borderRadius:6,border:`2px solid ${mostrarEnFiesta?"#e6b800":"#ccc"}`,background:mostrarEnFiesta?"#e6b800":"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          {mostrarEnFiesta && <CheckCircle size={13} strokeWidth={3} color="#fff"/>}
+        </div>
+        <div>
+          <div style={{fontWeight:700,fontSize:13}}>🎉 Mostrar en "De fiesta con Madrid"</div>
+          <div style={{fontSize:11,color:"#888",marginTop:1}}>Aparece en la sección de regalitos de cumpleaños del home de la web</div>
+        </div>
       </div>
 
       {error && <div style={{color:RED,fontSize:12,fontWeight:600,marginBottom:10}}>{error}</div>}
