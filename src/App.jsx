@@ -177,7 +177,7 @@ const supaAdmin = supabase;
 
 
 const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock,multiploCompra:r.multiplo_compra||1,barcode:r.barcode||"",costPriceAnterior:r.cost_price_anterior||0,imageUrl:r.image_url||"",skuProveedor:r.sku_proveedor||null,factorVenta:r.factor_venta||1,variantesHabilitadas:r.variantes_habilitadas||false,noFraccionar:r.no_fraccionar||false});
-const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||"",isTest:r.is_test||false,isSandbox:r.is_sandbox||false,internalNote:r.internal_note||"",editStatus:r.edit_status||"",editReason:r.edit_reason||"",editItems:r.edit_items||null,editRejectReason:r.edit_reject_reason||"",comprobanteUrl:r.comprobante_url||"",comprobanteNombre:r.comprobante_nombre||"",comprobanteFecha:r.comprobante_fecha||"",pagoTipo:r.pago_tipo||"",pagoEfectivoFecha:r.pago_efectivo_fecha||"",encargueResuelto:r.encargue_resuelto||false});
+const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||"",isTest:r.is_test||false,isSandbox:r.is_sandbox||false,internalNote:r.internal_note||"",editStatus:r.edit_status||"",editReason:r.edit_reason||"",editItems:r.edit_items||null,editTotal:r.edit_total??null,editRejectReason:r.edit_reject_reason||"",comprobanteUrl:r.comprobante_url||"",comprobanteNombre:r.comprobante_nombre||"",comprobanteFecha:r.comprobante_fecha||"",pagoTipo:r.pago_tipo||"",pagoEfectivoFecha:r.pago_efectivo_fecha||"",encargueResuelto:r.encargue_resuelto||false});
 const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,date:r.date,items:r.items||[],validity:r.validity||"",docNum:r.doc_num||"",convertida:r.convertida||false,ordenId:r.orden_id||"",extendida:r.extendida||false,extendReason:r.extend_reason||"",extendDate:r.extend_date||"",globalDisc:r.global_disc||null,subtotal:r.subtotal||0,shareToken:r.share_token||""});
 
 
@@ -303,7 +303,7 @@ const db = {
   deleteProduct: async (id) => { const {error} = await supaAdmin.from("lm_products").delete().eq("id",id); if(error) throw error; },
 
   getOrders:    async () => { const {data,error} = await supabase.from("lm_orders").select("*").order("date",{ascending:false}); if(error) throw error; return (data||[]).map(mapOrder); },
-  upsertOrder:  async (o) => { const {error} = await supaAdmin.from("lm_orders").upsert({id:o.id,client:o.client,vendedor:o.vendedor||"",notes:o.notes||"",total:o.total,stage:o.stage,date:o.date,items:o.items,doc_num:o.docNum||"",comp_num:o.compNum||"",is_test:o.isTest||false,is_sandbox:o.isSandbox||false,internal_note:o.internalNote||"",edit_status:o.editStatus||"",edit_reason:o.editReason||"",edit_items:o.editItems||null,edit_reject_reason:o.editRejectReason||"",comprobante_url:o.comprobanteUrl||"",comprobante_nombre:o.comprobanteNombre||"",comprobante_fecha:o.comprobanteFecha||"",pago_tipo:o.pagoTipo||"",pago_efectivo_fecha:o.pagoEfectivoFecha||"",encargue_resuelto:o.encargueResuelto||false}); if(error) throw error; },
+  upsertOrder:  async (o) => { const {error} = await supaAdmin.from("lm_orders").upsert({id:o.id,client:o.client,vendedor:o.vendedor||"",notes:o.notes||"",total:o.total,stage:o.stage,date:o.date,items:o.items,doc_num:o.docNum||"",comp_num:o.compNum||"",is_test:o.isTest||false,is_sandbox:o.isSandbox||false,internal_note:o.internalNote||"",edit_status:o.editStatus||"",edit_reason:o.editReason||"",edit_items:o.editItems||null,edit_total:o.editTotal??null,edit_reject_reason:o.editRejectReason||"",comprobante_url:o.comprobanteUrl||"",comprobante_nombre:o.comprobanteNombre||"",comprobante_fecha:o.comprobanteFecha||"",pago_tipo:o.pagoTipo||"",pago_efectivo_fecha:o.pagoEfectivoFecha||"",encargue_resuelto:o.encargueResuelto||false}); if(error) throw error; },
   deleteOrder:  async (id) => { const {error} = await supaAdmin.from("lm_orders").delete().eq("id",id); if(error) throw error; },
 
   getQuotes:    async () => { const {data,error} = await supabase.from("lm_quotes").select("*").order("date",{ascending:false}); if(error) throw error; return (data||[]).map(mapQuote); },
@@ -2104,8 +2104,10 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       });
       for(const p of prods.filter(p=>idsAfectados.has(p.id))) await db.upsertProduct(p);
     }
-    const newTotal = ord.editItems.reduce((s,it)=>s+it.price*it.qty,0);
-    const updated = orders.map(o=>o.id===id ? {...o, items:ord.editItems, total:newTotal, editStatus:"", editItems:null, editReason:"", editRejectReason:""} : o);
+    // Usa el total que el vendedor ya calculó al enviar los cambios (con descuento
+    // aplicado si corresponde). Si no existe (flujo viejo), recalcula sin descuento.
+    const newTotal = ord.editTotal != null ? ord.editTotal : ord.editItems.reduce((s,it)=>s+it.price*it.qty,0);
+    const updated = orders.map(o=>o.id===id ? {...o, items:ord.editItems, total:newTotal, editStatus:"", editItems:null, editReason:"", editRejectReason:"", editTotal:null} : o);
     setOrders(updated);
     if(isSandboxOrder) return;
     const ordOk = updated.find(o=>o.id===id);
@@ -2125,7 +2127,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     await sendCrossNotif(db, setNotifs, {title:"❌ Cambios rechazados", body:`El admin rechazó tu edición del pedido de ${ordNo?.client}. Motivo: "${reason}"`, tag:`edit-no-${id}`, para:ordNo?.vendedor||"", de:"admin", ref:id});
   };
   // Admin edición directa (sin flujo de solicitud/aprobación)
-  const editDirect = async (id, newItems) => {
+  const editDirect = async (id, newItems, newTotal) => {
     const ord = orders.find(o=>o.id===id);
     if(!ord) return;
     const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
@@ -2142,8 +2144,10 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       });
       for(const p of prods.filter(p=>idsAfectados.has(p.id))) await db.upsertProduct(p);
     }
-    const newTotal = newItems.reduce((s,it)=>s+it.price*it.qty, 0);
-    const updated = orders.map(o=>o.id===id ? {...o, items:newItems, total:newTotal, editStatus:"", editItems:null} : o);
+    // Usa el total ya calculado por la pantalla de edición (con descuento aplicado si
+    // corresponde) en vez de recalcularlo ignorando el descuento.
+    const finalTotal = newTotal != null ? newTotal : newItems.reduce((s,it)=>s+it.price*it.qty, 0);
+    const updated = orders.map(o=>o.id===id ? {...o, items:newItems, total:finalTotal, editStatus:"", editItems:null} : o);
     setOrders(updated);
     const ordUpd = updated.find(o=>o.id===id);
     if(isSandboxOrder) return;
@@ -3178,6 +3182,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
   const [rejectReason, setRejectReason]   = useState("");
   const [showEditMode, setShowEditMode]   = useState(false);
   const [editItems,   setEditItems]       = useState([]);
+  const [editGlobalDisc, setEditGlobalDisc] = useState({type:"%",value:""});
   const [editSearch,  setEditSearch]      = useState("");
   const [showFinalReject, setShowFinalReject] = useState(false);
   const [finalRejectReason, setFinalRejectReason] = useState("");
@@ -3221,6 +3226,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
 
   const startEditMode = () => {
     setEditItems(o.items.map(it=>({...it})));
+    setEditGlobalDisc({type:"%",value:""});
     setEditSearch("");
     setShowEditMode(true);
   };
@@ -3234,7 +3240,9 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
   const editSearchResults = editSearch.trim()
     ? (products||[]).filter(p=>norm(p.name).includes(norm(editSearch))||normSKU(p.id).includes(normSKU(editSearch))).slice(0,6)
     : [];
-  const editTotal = editItems.reduce((s,it)=>s+it.price*it.qty,0);
+  const editSubtotal = editItems.reduce((s,it)=>s+it.price*it.qty,0);
+  const editTotal = applyGlobalDiscount(editSubtotal, editGlobalDisc);
+  const editDiscAmt = editSubtotal - editTotal;
 
   return (
     <div id={`order-${o.id}`} style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 2px rgba(20,20,20,.04), 0 4px 14px rgba(20,20,20,.06)",overflow:"hidden",marginBottom:8,borderLeft:`3px solid ${STAGE_COLORS[o.stage]||"#ccc"}`}}>
@@ -3392,6 +3400,18 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                   </div>
                 )}
               </div>
+              <div style={{background:"#f9fdf9",border:"1.5px solid #e5e5e5",borderRadius:8,padding:"10px 12px",margin:"4px 0"}}>
+                <div style={{fontSize:11,color:"#555",fontWeight:700,marginBottom:6}}>DESCUENTO GLOBAL</div>
+                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                  <select value={editGlobalDisc.type} onChange={e=>setEditGlobalDisc(d=>({...d,type:e.target.value}))}
+                    style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48}}>
+                    <option value="%">%</option><option value="$">$</option>
+                  </select>
+                  <input type="number" min="0" value={editGlobalDisc.value} onChange={e=>setEditGlobalDisc(d=>({...d,value:e.target.value}))}
+                    placeholder="0" style={{flex:1,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
+                  {editDiscAmt>0&&<span style={{fontSize:11,color:"#1e8449",fontWeight:700,whiteSpace:"nowrap"}}>−{fARS(editDiscAmt)}</span>}
+                </div>
+              </div>
               <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:15,color:RED,padding:"10px 0",borderTop:"2px solid #d6eaf8",margin:"4px 0 10px"}}>
                 <span>Nuevo total</span><span>{fARS(editTotal)}</span>
               </div>
@@ -3400,7 +3420,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                 setSaving(true);
                 try {
                   if(isAdmin) {
-                    await onEditDirect(o.id, editItems);
+                    await onEditDirect(o.id, editItems, editTotal);
                     setShowEditMode(false);
                     toast.success("Pedido actualizado.");
                   } else {
@@ -4586,6 +4606,18 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
             <div style={{fontSize:13,color:"#555",marginBottom:4,display:"flex",alignItems:"center",gap:5}}><Users size={12} strokeWidth={2.4}/><strong>{selectedClient?.name}</strong> · {vendedor}</div>
             <div style={{borderTop:"1px solid #f5f5f5",margin:"8px 0",paddingTop:8}}>
               <CartSummaryLines cart={cart}/>
+            </div>
+            <div style={{background:"#f9fdf9",border:"1.5px solid #e5e5e5",borderRadius:8,padding:"10px 12px",marginBottom:8}}>
+              <div style={{fontSize:11,color:"#555",fontWeight:700,marginBottom:6}}>DESCUENTO GLOBAL</div>
+              <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                <select value={globalDisc.type} onChange={e=>setGlobalDisc(d=>({...d,type:e.target.value}))}
+                  style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48}}>
+                  <option value="%">%</option><option value="$">$</option>
+                </select>
+                <input type="number" min="0" value={globalDisc.value} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))}
+                  placeholder="0" style={{flex:1,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
+                {globalDiscAmt>0&&<span style={{fontSize:11,color:"#1e8449",fontWeight:700,whiteSpace:"nowrap"}}>−{fARS(globalDiscAmt)}</span>}
+              </div>
             </div>
             <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:17,color:RED,padding:"8px 0",borderTop:"2px solid #f5f5f5",marginBottom:14}}><span>Total</span><span>{fARS(total)}</span></div>
             <button onClick={submit} style={{width:"100%",padding:"12px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
