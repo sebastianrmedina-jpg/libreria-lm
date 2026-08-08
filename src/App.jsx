@@ -6174,11 +6174,16 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
       notas,
       fechaCierre: "",
     };
-    await savePO(po);
-    if(onCreated) await onCreated(po);
-    setCart([]); setNotas(""); setItemNotas({});
-    setSaving(false);
-    setView("lista");
+    try {
+      await savePO(po);
+      if(onCreated) await onCreated(po);
+      setCart([]); setNotas(""); setItemNotas({});
+      setView("lista");
+    } catch(e) {
+      toast.error("No se pudo crear la solicitud: " + (e && e.message ? e.message : "error desconocido"));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const changeEstado = async (po, estado) => {
