@@ -3402,13 +3402,13 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
               </div>
               <div style={{background:"#f9fdf9",border:"1.5px solid #e5e5e5",borderRadius:8,padding:"10px 12px",margin:"4px 0"}}>
                 <div style={{fontSize:11,color:"#555",fontWeight:700,marginBottom:6}}>DESCUENTO GLOBAL</div>
-                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"center"}}>
                   <select value={editGlobalDisc.type} onChange={e=>setEditGlobalDisc(d=>({...d,type:e.target.value}))}
-                    style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48}}>
+                    style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48,flexShrink:0}}>
                     <option value="%">%</option><option value="$">$</option>
                   </select>
                   <input type="number" min="0" value={editGlobalDisc.value} onChange={e=>setEditGlobalDisc(d=>({...d,value:e.target.value}))}
-                    placeholder="0" style={{flex:1,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
+                    placeholder="0" style={{flex:1,minWidth:60,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
                   {editDiscAmt>0&&<span style={{fontSize:11,color:"#1e8449",fontWeight:700,whiteSpace:"nowrap"}}>−{fARS(editDiscAmt)}</span>}
                 </div>
               </div>
@@ -4609,13 +4609,13 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
             </div>
             <div style={{background:"#f9fdf9",border:"1.5px solid #e5e5e5",borderRadius:8,padding:"10px 12px",marginBottom:8}}>
               <div style={{fontSize:11,color:"#555",fontWeight:700,marginBottom:6}}>DESCUENTO GLOBAL</div>
-              <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"center"}}>
                 <select value={globalDisc.type} onChange={e=>setGlobalDisc(d=>({...d,type:e.target.value}))}
-                  style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48}}>
+                  style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48,flexShrink:0}}>
                   <option value="%">%</option><option value="$">$</option>
                 </select>
                 <input type="number" min="0" value={globalDisc.value} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))}
-                  placeholder="0" style={{flex:1,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
+                  placeholder="0" style={{flex:1,minWidth:60,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
                 {globalDiscAmt>0&&<span style={{fontSize:11,color:"#1e8449",fontWeight:700,whiteSpace:"nowrap"}}>−{fARS(globalDiscAmt)}</span>}
               </div>
             </div>
@@ -4975,13 +4975,13 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,on
           {/* Descuento global mobile */}
           <div style={{background:"#f5eef8",border:"1.5px solid #e8daef",borderRadius:8,padding:"10px 12px",marginBottom:8}}>
             <div style={{fontSize:11,color:PURPLE,fontWeight:700,marginBottom:6}}>DESCUENTO GLOBAL</div>
-            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"center"}}>
               <select value={globalDisc.type} onChange={e=>setGlobalDisc(d=>({...d,type:e.target.value}))}
-                style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48}}>
+                style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48,flexShrink:0}}>
                 <option value="%">%</option><option value="$">$</option>
               </select>
               <input type="number" min="0" value={globalDisc.value} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))}
-                placeholder="0" style={{flex:1,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
+                placeholder="0" style={{flex:1,minWidth:60,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
               {globalDiscAmt>0&&<span style={{fontSize:11,color:PURPLE,fontWeight:700,whiteSpace:"nowrap"}}>-{fARS(globalDiscAmt)}</span>}
             </div>
           </div>
@@ -5059,13 +5059,13 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,on
           </div>
           <div style={{background:"#f5f0fa",border:"1.5px solid #e8daef",borderRadius:8,padding:"10px 12px",marginBottom:8}}>
             <div style={{fontSize:11,color:PURPLE,fontWeight:700,marginBottom:6}}>DESCUENTO GLOBAL</div>
-            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"center"}}>
               <select value={globalDisc.type} onChange={e=>setGlobalDisc(d=>({...d,type:e.target.value}))}
-                style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48}}>
+                style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48,flexShrink:0}}>
                 <option value="%">%</option><option value="$">$</option>
               </select>
               <input type="number" min="0" value={globalDisc.value} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))}
-                placeholder="0" style={{flex:1,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
+                placeholder="0" style={{flex:1,minWidth:60,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
               {globalDiscAmt>0&&<span style={{fontSize:11,color:PURPLE,fontWeight:700,whiteSpace:"nowrap"}}>-{fARS(globalDiscAmt)}</span>}
             </div>
           </div>
