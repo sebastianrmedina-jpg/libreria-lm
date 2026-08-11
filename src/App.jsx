@@ -178,7 +178,7 @@ const supaAdmin = supabase;
 
 const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock,multiploCompra:r.multiplo_compra||1,barcode:r.barcode||"",costPriceAnterior:r.cost_price_anterior||0,imageUrl:r.image_url||"",skuProveedor:r.sku_proveedor||null,factorVenta:r.factor_venta||1,variantesHabilitadas:r.variantes_habilitadas||false,noFraccionar:r.no_fraccionar||false});
 const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||"",isTest:r.is_test||false,isSandbox:r.is_sandbox||false,internalNote:r.internal_note||"",editStatus:r.edit_status||"",editReason:r.edit_reason||"",editItems:r.edit_items||null,editTotal:r.edit_total??null,editRejectReason:r.edit_reject_reason||"",comprobanteUrl:r.comprobante_url||"",comprobanteNombre:r.comprobante_nombre||"",comprobanteFecha:r.comprobante_fecha||"",pagoTipo:r.pago_tipo||"",pagoEfectivoFecha:r.pago_efectivo_fecha||"",encargueResuelto:r.encargue_resuelto||false});
-const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,date:r.date,items:r.items||[],validity:r.validity||"",docNum:r.doc_num||"",convertida:r.convertida||false,ordenId:r.orden_id||"",extendida:r.extendida||false,extendReason:r.extend_reason||"",extendDate:r.extend_date||"",globalDisc:r.global_disc||null,subtotal:r.subtotal||0,shareToken:r.share_token||""});
+const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,date:r.date,items:r.items||[],validity:r.validity||"",docNum:r.doc_num||"",convertida:r.convertida||false,ordenId:r.orden_id||"",extendida:r.extendida||false,extendReason:r.extend_reason||"",extendDate:r.extend_date||"",globalDisc:r.global_disc||null,subtotal:r.subtotal||0,shareToken:r.share_token||"",customExpiry:r.custom_expiry||""});
 
 
 // ─── CORRELATIVE NUMBER HELPERS ───────────────────────────────────────────────
@@ -307,7 +307,7 @@ const db = {
   deleteOrder:  async (id) => { const {error} = await supaAdmin.from("lm_orders").delete().eq("id",id); if(error) throw error; },
 
   getQuotes:    async () => { const {data,error} = await supabase.from("lm_quotes").select("*").order("date",{ascending:false}); if(error) throw error; return (data||[]).map(mapQuote); },
-  upsertQuote:  async (q) => { const {error} = await supaAdmin.from("lm_quotes").upsert({id:q.id,client:q.client,vendedor:q.vendedor||"",notes:q.notes||"",total:q.total,date:q.date,items:q.items,validity:q.validity||"",doc_num:q.docNum||"",convertida:q.convertida||false,orden_id:q.ordenId||"",extendida:q.extendida||false,extend_reason:q.extendReason||"",extend_date:q.extendDate||"",global_disc:q.globalDisc||null,subtotal:q.subtotal||0,share_token:q.shareToken||null}); if(error) throw error; },
+  upsertQuote:  async (q) => { const {error} = await supaAdmin.from("lm_quotes").upsert({id:q.id,client:q.client,vendedor:q.vendedor||"",notes:q.notes||"",total:q.total,date:q.date,items:q.items,validity:q.validity||"",doc_num:q.docNum||"",convertida:q.convertida||false,orden_id:q.ordenId||"",extendida:q.extendida||false,extend_reason:q.extendReason||"",extend_date:q.extendDate||"",global_disc:q.globalDisc||null,subtotal:q.subtotal||0,share_token:q.shareToken||null,custom_expiry:q.customExpiry||null}); if(error) throw error; },
   deleteQuote:  async (id) => { const {error} = await supaAdmin.from("lm_quotes").delete().eq("id",id); if(error) throw error; },
 
   getStockLog:  async () => { const {data,error} = await supabase.from("lm_stocklog").select("*").order("fecha",{ascending:false}); if(error) throw error; return (data||[]).map(r=>({...r,productoId:r.producto_id,stockAntes:r.stock_antes,stockDespues:r.stock_despues})); },
@@ -643,13 +643,37 @@ function parseDate(dateStr) {
   if(parts.length !== 3) return null;
   return new Date(parseInt(parts[2]), parseInt(parts[1])-1, parseInt(parts[0]));
 }
+// "dd/mm/yyyy" (formato que usa el resto de la app) <-> "yyyy-mm-dd" (formato de <input type="date">)
+function dmyToISO(dmy) {
+  if(!dmy) return "";
+  const [d,m,y] = dmy.split("/");
+  if(!d||!m||!y) return "";
+  return `${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+}
+function isoToDMY(iso) {
+  if(!iso) return "";
+  const [y,m,d] = iso.split("-");
+  if(!d||!m||!y) return "";
+  return `${parseInt(d)}/${parseInt(m)}/${y}`;
+}
 
 // Estado de vencimiento de una cotización
 function quoteStatus(q) {
   if(q.convertida) return "convertida";
+  const now = new Date();
+  // Fecha de vencimiento fijada a mano por el admin: pisa el cálculo automático
+  // de 48/96hs (y el límite de una sola extensión) sin tocar precio ni items.
+  if(q.customExpiry) {
+    const exp = parseDate(q.customExpiry);
+    if(exp) {
+      exp.setHours(23,59,59,999);
+      const hoursLeft = Math.ceil((exp - now) / (1000 * 60 * 60));
+      if(hoursLeft > 0) return { status: q.extendida ? "extendida" : "vigente", hoursLeft };
+      return { status: "vencida", hoursLeft: 0 };
+    }
+  }
   const created = parseDate(q.date);
   if(!created) return "vigente";
-  const now = new Date();
   const hoursElapsed = (now - created) / (1000 * 60 * 60);
   const extendedHours = q.extendida ? 96 : 48; // 48hs + 48hs extensión
   if(hoursElapsed <= extendedHours) {
@@ -2177,6 +2201,16 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       await db.upsertQuote(quo);
     }
   };
+  // Solo admin: fija (o quita, con dateStr="") una fecha de vencimiento manual que
+  // pisa el cálculo automático de 48/96hs, sin tocar precio ni items de la cotización.
+  const setQuoteExpiry = async (id, dateStr) => {
+    const updated = quotes.map(q => q.id===id ? {...q, customExpiry:dateStr} : q);
+    setQuotes(updated);
+    const quo = updated.find(x=>x.id===id);
+    if(quo && !isTestOrder(quo.vendedor)) {
+      await db.upsertQuote(quo);
+    }
+  };
   // Genera el shareToken al toque para cotizaciones creadas antes de esta feature.
   // Devuelve el token (nuevo o existente) o null si es una cotización de prueba/sin persistir.
   const ensureShareToken = async (quote) => {
@@ -2735,7 +2769,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
           currentUser={currentUser} isMobile={isMobile}/>}
         {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} promos={promos} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={setPreviewListId}/>}
         {tab==="clientes"   && <ClientesPanel clients={clients} onSave={saveClient} onDelete={deleteClient} onRequestDelete={requestDeleteClient} onRejectDelete={rejectDeleteClient} currentUser={currentUser} isMobile={isMobile} orders={orders}/>}
-        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onEnsureShareToken={ensureShareToken} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={setPreviewListId}/>}
+        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onSetExpiry={setQuoteExpiry} onEnsureShareToken={ensureShareToken} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={setPreviewListId}/>}
         {tab==="precios"    && <Precios products={pricedProducts} canScan={currentUser.role==="admin"||isTestOrder(currentUser.vendedor||currentUser.name)||currentUser.barcodeEnabled} showCamilaPrice={(currentUser.vendedor||currentUser.name)==="Camila"}/>}
         {tab==="stock"      && <>
               {isTestUser && (
@@ -4688,7 +4722,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
   );
 }
 
-function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,onEnsureShareToken,onTabChange,currentUser,isMobile,clients,onSaveClient,orders,priceLists,previewListId,onChangeList}) {
+function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,onSetExpiry,onEnsureShareToken,onTabChange,currentUser,isMobile,clients,onSaveClient,orders,priceLists,previewListId,onChangeList}) {
   const [view,setView]=useState("lista");
   const [expanded,setExpanded]=useState(null);
   const getP=id=>products.find(p=>p.id===id);
@@ -4701,18 +4735,22 @@ function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,on
       {view==="nueva" && <NuevaCotizacion products={products} vendors={vendors} onAdd={async(q)=>{await onAdd(q);setView("lista");}} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={onSaveClient} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={onChangeList}/>}
       {view==="lista" && (quotes.length===0
         ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{display:"flex",justifyContent:"center"}}><FileText size={42} color="#ddd" strokeWidth={1.7}/></div><div style={{marginTop:8}}>No hay cotizaciones aún</div></div>
-        : quotes.map(q=><QuoteCard key={q.id} q={q} exp={expanded===q.id} toggle={()=>setExpanded(expanded===q.id?null:q.id)} getP={getP} onDel={onDel} onConvert={async(qt)=>{await onConvert(qt);onTabChange("central");}} onExtend={onExtend} products={products} onEnsureShareToken={onEnsureShareToken}/>)
+        : quotes.map(q=><QuoteCard key={q.id} q={q} exp={expanded===q.id} toggle={()=>setExpanded(expanded===q.id?null:q.id)} getP={getP} onDel={onDel} onConvert={async(qt)=>{await onConvert(qt);onTabChange("central");}} onExtend={onExtend} onSetExpiry={onSetExpiry} currentUser={currentUser} products={products} onEnsureShareToken={onEnsureShareToken}/>)
       )}
     </div>
   );
 }
 
 
-function QuoteCard({q,exp,toggle,getP,onDel,onConvert,onExtend,products,onEnsureShareToken}) {
+function QuoteCard({q,exp,toggle,getP,onDel,onConvert,onExtend,onSetExpiry,currentUser,products,onEnsureShareToken}) {
   const PURPLE = "#6c3483"; const PURPLEBG = "#e8daef";
   const [showExtForm, setShowExtForm] = useState(false);
   const [extReason, setExtReason] = useState("");
   const [saving, setSaving] = useState(false);
+  const [editExpiry, setEditExpiry] = useState(false);
+  const [expiryVal, setExpiryVal] = useState(dmyToISO(q.customExpiry));
+  const [savingExpiry, setSavingExpiry] = useState(false);
+  const isAdmin = currentUser?.role==="admin";
 
   const qs = quoteStatus(q);
   const status    = typeof qs === "object" ? qs.status : qs;
@@ -4725,6 +4763,18 @@ function QuoteCard({q,exp,toggle,getP,onDel,onConvert,onExtend,products,onEnsure
     setSaving(true);
     await onExtend(q.id, extReason.trim());
     setShowExtForm(false); setExtReason(""); setSaving(false);
+  };
+
+  const handleSaveExpiry = async () => {
+    if(!expiryVal) return;
+    setSavingExpiry(true);
+    await onSetExpiry(q.id, isoToDMY(expiryVal));
+    setSavingExpiry(false); setEditExpiry(false);
+  };
+  const handleClearExpiry = async () => {
+    setSavingExpiry(true);
+    await onSetExpiry(q.id, "");
+    setExpiryVal(""); setSavingExpiry(false); setEditExpiry(false);
   };
 
   const StatusBdg = () => {
@@ -4787,6 +4837,45 @@ function QuoteCard({q,exp,toggle,getP,onDel,onConvert,onExtend,products,onEnsure
                   Cancelar
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* ADMIN: editar vencimiento a mano — pisa el cálculo automático y el límite de una sola extensión */}
+          {isAdmin && (
+            <div style={{background:"#eaf4fc",border:"1.5px solid #aed6f1",borderRadius:10,padding:"10px 14px",marginBottom:14}} onClick={e=>e.stopPropagation()}>
+              {!editExpiry ? (
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+                  <span style={{fontSize:12,color:"#1a5276"}}>
+                    {q.customExpiry ? <>Vencimiento fijado a mano: <strong>{q.customExpiry}</strong></> : "Vencimiento automático (48/96hs desde la creación)"}
+                  </span>
+                  <button onClick={()=>{setExpiryVal(dmyToISO(q.customExpiry)); setEditExpiry(true);}}
+                    style={{padding:"6px 12px",borderRadius:7,border:"1.5px solid #aed6f1",background:"#fff",color:"#1a5276",fontWeight:700,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+                    <Pencil size={11} strokeWidth={2.4}/>Editar vencimiento
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div style={{fontSize:12,fontWeight:700,color:"#1a5276",marginBottom:6}}>Nueva fecha de vencimiento (admin)</div>
+                  <input type="date" value={expiryVal} onChange={e=>setExpiryVal(e.target.value)}
+                    style={{padding:"7px 10px",borderRadius:8,border:"1.5px solid #aed6f1",fontSize:13,outline:"none"}}/>
+                  <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
+                    <button onClick={handleSaveExpiry} disabled={!expiryVal||savingExpiry}
+                      style={{padding:"7px 14px",borderRadius:7,border:"none",background:expiryVal?"#1a5276":"#e5e5e5",color:expiryVal?"#fff":"#aaa",fontWeight:700,fontSize:12,cursor:expiryVal?"pointer":"not-allowed"}}>
+                      {savingExpiry?"Guardando...":"Guardar"}
+                    </button>
+                    {q.customExpiry && (
+                      <button onClick={handleClearExpiry} disabled={savingExpiry}
+                        style={{padding:"7px 12px",borderRadius:7,border:"1px solid #f1948a",background:"#fff",color:"#c0392b",fontSize:12,cursor:"pointer"}}>
+                        Quitar (volver al cálculo automático)
+                      </button>
+                    )}
+                    <button onClick={()=>setEditExpiry(false)}
+                      style={{padding:"7px 12px",borderRadius:7,border:"1px solid #e5e5e5",background:"#fff",color:"#666",fontSize:12,cursor:"pointer"}}>
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
