@@ -1965,6 +1965,14 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const ordDel=orders.find(o=>o.id===id);
     setOrders(o=>o.filter(x=>x.id!==id)); await db.deleteOrder(id);
     if(ordDel) await logActivity("Pedido eliminado", `${ordDel.docNum||ordDel.compNum||""} - ${ordDel.client} - ${fARS(ordDel.total)}`, id, "pedido");
+    // Si el pedido venía de una cotización convertida, esa cotización queda "Convertida"
+    // apuntando a un pedido inexistente y sin forma de re-convertirse. La reabrimos.
+    const origenQuote = quotes.find(q=>q.ordenId===id);
+    if(origenQuote) {
+      const updatedQuote = {...origenQuote, convertida:false, ordenId:""};
+      setQuotes(qs=>qs.map(x=>x.id===origenQuote.id?updatedQuote:x));
+      if(!isTestOrder(origenQuote.vendedor)) await db.upsertQuote(updatedQuote);
+    }
   };
   const saveNote = async (id, note) => {
     const updated = orders.map(o=>o.id===id ? {...o, internalNote:note} : o);
