@@ -454,7 +454,12 @@ function applyStockDelta(products, pid, deltaFilas) {
     // Producto sin variantes: comportamiento clásico, sin tocar nada más.
     return products.map(p => p.id===pid ? {...p, stock: Math.max(0, p.stock + deltaFilas)} : p);
   }
-  const poolFisicoActual = target.stock * factor;
+  // El pool físico se deriva de la fila con factor 1 ("unidad") cuando existe:
+  // esa fila nunca pierde precisión al redondear (floor(pool/1) = pool exacto).
+  // Derivarlo de una fila con factor > 1 (ej. "docena") puede perder unidades
+  // reales cada vez que esa fila ya venía con stock redondeado hacia abajo.
+  const filaUnidad = hermanas.find(p => (p.factorVenta || 1) === 1);
+  const poolFisicoActual = filaUnidad ? filaUnidad.stock : target.stock * factor;
   const poolFisicoNuevo = Math.max(0, poolFisicoActual + deltaFilas * factor);
   return products.map(p => grupoVarianteId(p)===grupoId ? {...p, stock: Math.floor(poolFisicoNuevo / (p.factorVenta||1))} : p);
 }
