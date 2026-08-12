@@ -3130,15 +3130,30 @@ function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onAppro
   const [search,setSearch]=useState("");
   const [expanded,setExpanded]=useState(null);
   const [soloEncargue,setSoloEncargue]=useState(false);
+  const [sortBy,setSortBy]=useState("fecha_desc");
   const getP = id=>products.find(p=>p.id===id);
   const vendedores = useMemo(()=>[...new Set(orders.map(o=>o.vendedor).filter(Boolean))].sort(),[orders]);
   const countEncargue = useMemo(()=>orders.filter(o=>!o.encargueResuelto&&(o.items||[]).some(it=>it.porEncargue&&it.qtyFaltante>0)).length,[orders]);
   const filtered = orders.filter(o=>{
+    // "Todos" no incluye entregados — se acumulan y ensucian la pantalla principal.
+    // Para verlos, se filtra explícitamente por el chip "Entregado".
+    if(fStage==="todos"&&o.stage==="entregado") return false;
     if(fStage!=="todos"&&o.stage!==fStage) return false;
     if(fVendedor!=="todos"&&o.vendedor!==fVendedor) return false;
     if(search&&!norm(o.client).includes(norm(search))&&!o.id.toLowerCase().includes(search.toLowerCase())) return false;
     if(soloEncargue&&!(!o.encargueResuelto&&(o.items||[]).some(it=>it.porEncargue&&it.qtyFaltante>0))) return false;
     return true;
+  });
+  const sorted = [...filtered].sort((a,b)=>{
+    switch(sortBy){
+      case "fecha_asc":   return (parseDate(a.date)?.getTime()||0)-(parseDate(b.date)?.getTime()||0);
+      case "monto_desc":  return b.total-a.total;
+      case "monto_asc":   return a.total-b.total;
+      case "vendedor":    return (a.vendedor||"").localeCompare(b.vendedor||"");
+      case "cliente":     return (a.client||"").localeCompare(b.client||"");
+      case "fecha_desc":
+      default:            return (parseDate(b.date)?.getTime()||0)-(parseDate(a.date)?.getTime()||0);
+    }
   });
   // Si todos los pedidos son sandbox (usuario Prueba), contar normalmente
   const allSandbox = orders.length>0 && orders.every(o=>o.isSandbox);
@@ -3196,14 +3211,30 @@ function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onAppro
           <option value="todos">👤 Todos los vendedores</option>
           {vendedores.map(v=><option key={v} value={v}>{v}</option>)}
         </select>}
+        <select value={sortBy} onChange={e=>setSortBy(e.target.value)}
+          style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",cursor:"pointer",background:"#fff"}}>
+          <option value="fecha_desc">↓ Fecha: más reciente</option>
+          <option value="fecha_asc">↑ Fecha: más antigua</option>
+          <option value="monto_desc">↓ Monto: mayor</option>
+          <option value="monto_asc">↑ Monto: menor</option>
+          <option value="vendedor">Vendedor (A-Z)</option>
+          <option value="cliente">Cliente (A-Z)</option>
+        </select>
         <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
           {["todos",...STAGES].map(s=>{const c=SCFG[s];return <button key={s} onClick={()=>setFStage(s)} style={{padding:"5px 11px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:fStage===s?(c?.color||RED):"#e5e5e5",background:fStage===s?(c?.bg||"#fdecea"):"#fff",color:fStage===s?(c?.color||RED):"#666"}}>{s==="todos"?"Todos":c.label}</button>;})}
           {countEncargue>0 && <button onClick={()=>setSoloEncargue(s=>!s)} style={{padding:"5px 11px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:700,borderColor:soloEncargue?"#b7770d":"#f0d080",background:soloEncargue?"#fef3e0":"#fffaf2",color:"#b7770d",display:"inline-flex",alignItems:"center",gap:5}}><Package size={10} strokeWidth={2.5}/>Por encargue ({countEncargue})</button>}
         </div>
       </div>
-      {filtered.length===0
-        ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{fontSize:48}}>📭</div><div style={{marginTop:8}}>No hay pedidos. !Creá uno desde "Nuevo Pedido"!</div></div>
-        : filtered.map(o=><OCard key={o.id} o={o} exp={expanded===o.id} toggle={()=>setExpanded(expanded===o.id?null:o.id)} getP={getP} onStage={onStage} onDel={onDel} onSaveNote={onSaveNote} onRequestEdit={onRequestEdit} onApproveEditRequest={onApproveEditRequest} onRejectEditRequest={onRejectEditRequest} onSubmitEdit={onSubmitEdit} onApproveEdit={onApproveEdit} onRejectEdit={onRejectEdit} onEditDirect={onEditDirect} onUploadComprobante={onUploadComprobante} onConfirmarComprobante={onConfirmarComprobante} onRechazarComprobante={onRechazarComprobante} onMarcarEfectivo={onMarcarEfectivo} onConfirmarEfectivo={onConfirmarEfectivo} onRechazarEfectivo={onRechazarEfectivo} exigirPagoConfirmado={exigirPagoConfirmado} onGoToPagos={onGoToPagos} onPedirEncargue={onPedirEncargue} onResolverEncargue={onResolverEncargue} currentUser={currentUser} products={products}/>)
+      {sorted.length===0
+        ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}>
+            <div style={{fontSize:48}}>📭</div>
+            <div style={{marginTop:8}}>
+              {fStage==="todos"&&orders.some(o=>o.stage==="entregado")
+                ? "No hay pedidos activos — están todos entregados. Filtrá por \"Entregado\" para verlos."
+                : "No hay pedidos. !Creá uno desde \"Nuevo Pedido\"!"}
+            </div>
+          </div>
+        : sorted.map(o=><OCard key={o.id} o={o} exp={expanded===o.id} toggle={()=>setExpanded(expanded===o.id?null:o.id)} getP={getP} onStage={onStage} onDel={onDel} onSaveNote={onSaveNote} onRequestEdit={onRequestEdit} onApproveEditRequest={onApproveEditRequest} onRejectEditRequest={onRejectEditRequest} onSubmitEdit={onSubmitEdit} onApproveEdit={onApproveEdit} onRejectEdit={onRejectEdit} onEditDirect={onEditDirect} onUploadComprobante={onUploadComprobante} onConfirmarComprobante={onConfirmarComprobante} onRechazarComprobante={onRechazarComprobante} onMarcarEfectivo={onMarcarEfectivo} onConfirmarEfectivo={onConfirmarEfectivo} onRechazarEfectivo={onRechazarEfectivo} exigirPagoConfirmado={exigirPagoConfirmado} onGoToPagos={onGoToPagos} onPedirEncargue={onPedirEncargue} onResolverEncargue={onResolverEncargue} currentUser={currentUser} products={products}/>)
       }
     </div>
   );
