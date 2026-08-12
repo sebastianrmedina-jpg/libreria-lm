@@ -194,6 +194,13 @@ const fmtDocNum = (prefix, n) => `${prefix}-${padNum(n)}`;
 const TEST_VENDOR = "Prueba";
 const isTestOrder = (vendedor) => vendedor === TEST_VENDOR;
 
+// ─── FÓRMULA DE PRECIO DE VENTA ─────────────────────────────────────────────────
+// costo x 1.30 (aumento) x 1.20 (margen) — única fuente de verdad, usada en
+// importación de Excel, ingreso de mercadería (Solicitudes y Alta Mercancía)
+// y la herramienta de "corregir precios rotos". No duplicar este número: si se
+// vuelve a actualizar el aumento, cambia acá y se propaga a todo el sistema.
+const MARKUP_VENTA = 1.30 * 1.20;
+
 // ─── COMPROBANTES DE PAGO — Supabase Storage ──────────────────────────────────
 // Bucket: "comprobantes" (público). Las imágenes se comprimen en el cliente antes
 // de subir para no acumular fotos de cámara de varios MB cada una.
@@ -2318,13 +2325,24 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const grupoId = prod ? grupoVarianteId(prod) : pid;
     let updatedProds = applyStockDelta(products, pid, qty);
     if(newCost){
-      updatedProds = updatedProds.map(x => x.id===pid ? {...x, costPrice:newCost, salePrice:Math.round(newCost*1.5*100)/100} : x);
+      updatedProds = updatedProds.map(x => x.id===pid ? {...x, costPrice:newCost, salePrice:Math.round(newCost*MARKUP_VENTA*100)/100} : x);
     }
     setProducts(updatedProds);
     // Si el producto tiene variantes hermanas, el pool se reparte entre varias filas
     // y hay que guardar todas — no solo la que se buscó.
     const afectadas = updatedProds.filter(p => grupoVarianteId(p)===grupoId);
     for(const p of afectadas) await db.upsertProduct(p);
+    // Verificación contra el servidor: una escritura que no tira error pero no
+    // persiste de verdad puede dejar mercadería marcada como "ingresada" con el
+    // stock real sin actualizar (pasó con la solicitud recibida el 1/8). Si el
+    // valor guardado no coincide, cortamos acá — así el que ingresa mercadería
+    // se entera al toque y puede reintentar, en vez de descubrirlo semanas después.
+    for(const p of afectadas) {
+      const { data: check, error: checkErr } = await supabase.from("lm_products").select("stock").eq("id", p.id).single();
+      if(checkErr || !check || check.stock !== p.stock) {
+        throw new Error(`El stock de "${p.name}" no se guardó en el servidor. Volvé a intentar el ingreso.`);
+      }
+    }
     const updProd=updatedProds.find(p=>p.id===pid);
     let pendientes = [];
     if(prod){
@@ -7084,7 +7102,7 @@ function Compras({products,onStock,isMobile,canScan,onResolverEncargue}) {
               </div>
               <div style={{fontSize:12,color:"#666",marginTop:8,display:"flex",gap:16}}>
                 <span>Subtotal: <strong>{fARS(it.qty*it.cost)}</strong></span>
-                <span>Venta est.: <strong style={{color:RED}}>{fARS(it.cost*1.5)}</strong></span>
+                <span>Venta est.: <strong style={{color:RED}}>{fARS(it.cost*MARKUP_VENTA)}</strong></span>
               </div>
             </div>
           ))}
@@ -7186,7 +7204,7 @@ function Compras({products,onStock,isMobile,canScan,onResolverEncargue}) {
                     <div style={{flex:1}}><div style={{fontSize:10,color:"#aaa",marginBottom:3}}>P. Costo ($)</div>
                       <input type="number" value={it.cost} onChange={e=>updI(it.pid,"cost",+e.target.value)} style={{...inputStyle,padding:"5px 7px",fontSize:12}}/></div>
                   </div>
-                  <div style={{fontSize:11,color:"#666",marginTop:6}}>Subtotal: <strong>{fARS(it.qty*it.cost)}</strong> · Venta: <strong style={{color:RED}}>{fARS(it.cost*1.5)}</strong></div>
+                  <div style={{fontSize:11,color:"#666",marginTop:6}}>Subtotal: <strong>{fARS(it.qty*it.cost)}</strong> · Venta: <strong style={{color:RED}}>{fARS(it.cost*MARKUP_VENTA)}</strong></div>
                 </div>
               ))
           }
@@ -9178,10 +9196,9 @@ function ExcelPanel({products,setProducts}) {
     const updated=[], notFound=[];
     const newProds = products.map(p=>({...p}));
 
-    // Formula real de venta de Sebastian: costo x 1.30 x 1.20 (= costo x 1.56)
-    // Se aplica SOLO cuando el archivo no trae una columna "Precio Final" ya calculada
-    // (ej: su Excel propio con la formula puesta) — si la trae, esa tiene prioridad.
-    const MARKUP_VENTA = 1.30 * 1.20;
+    // MARKUP_VENTA (costo x 1.30 x 1.20, definido a nivel de módulo) se aplica SOLO
+    // cuando el archivo no trae una columna "Precio Final" ya calculada (ej: su Excel
+    // propio con la formula puesta) — si la trae, esa tiene prioridad.
 
     // El costo real es el de oferta si el proveedor tiene uno activo (es un costo temporal
     // PRECIO OFERTA = costo especial (con descuento del proveedor). Si existe, reemplaza al PRECIO CON IVA
