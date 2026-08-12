@@ -1909,6 +1909,14 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       updatedProds.filter(p=>grupoVarianteId(p)===grupoId).forEach(p=>idsAfectados.add(p.id));
     });
     for(const p of updatedProds.filter(p=>idsAfectados.has(p.id))) await db.upsertProduct(p);
+    // Registro en el historial de stock: sin esto la venta es el único movimiento
+    // de stock que no queda en ningún lado, y el historial no sirve para auditar
+    // si no tiene TODOS los movimientos, no solo los ajustes manuales.
+    Object.entries(qtyByPid).forEach(([pid,qty])=>{
+      const antes = products.find(p=>p.id===pid);
+      const despues = updatedProds.find(p=>p.id===pid);
+      if(antes && despues) addLog({tipo:"SALIDA", productoId:pid, producto:antes.name, stockAntes:antes.stock, stockDespues:despues.stock, cambio:-qty, motivo:`Vendido en pedido ${orderWithNum.docNum} (${orderWithNum.client})`});
+    });
     setOrders(o=>[{...orderWithNum, isSandbox: false},...o]);
     await db.upsertOrder({...orderWithNum, isSandbox: false});
     const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"NUEVO_PEDIDO",para:"admin",icono:"🛒",titulo:"Nuevo pedido registrado",cuerpo:`${orderWithNum.client} - ${fARS(orderWithNum.total)} - ${orderWithNum.docNum}`,ref:orderWithNum.id};
@@ -1966,7 +1974,15 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       } else {
         const updatedProds=products.map(x=>{const qty=ord.items.filter(i=>i.pid===x.id).reduce((s,i)=>s+i.qty,0);return qty>0?{...x,stock:x.stock+qty}:x;});
         setProducts(updatedProds);
-        for(const p of updatedProds.filter(p=>ord.items.find(i=>i.pid===p.id))) await db.upsertProduct(p);
+        const afectados = updatedProds.filter(p=>ord.items.find(i=>i.pid===p.id));
+        for(const p of afectados) await db.upsertProduct(p);
+        // Registro en el historial de stock: el stock que vuelve al borrar un
+        // pedido es un movimiento real, antes quedaba completamente invisible.
+        afectados.forEach(p=>{
+          const antes = products.find(x=>x.id===p.id);
+          const qty = ord.items.filter(i=>i.pid===p.id).reduce((s,i)=>s+i.qty,0);
+          addLog({tipo:"ENTRADA", productoId:p.id, producto:p.name, stockAntes:antes?antes.stock:p.stock-qty, stockDespues:p.stock, cambio:qty, motivo:`Stock restaurado al eliminar el pedido ${ord.docNum||ord.compNum||ord.id} (${ord.client})`});
+        });
       }
     }
     const ordDel=orders.find(o=>o.id===id);
@@ -2346,6 +2362,18 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const updProd=updatedProds.find(p=>p.id===pid);
     let pendientes = [];
     if(prod){
+      // Único registro en el historial de stock para mercadería recibida (antes
+      // esto no quedaba en ningún lado — solo los ajustes manuales se loggeaban,
+      // así que una recepción que fallara en silencio no dejaba ningún rastro).
+      addLog({
+        tipo: "ENTRADA",
+        productoId: pid,
+        producto: prod.name,
+        stockAntes: prod.stock,
+        stockDespues: updProd.stock,
+        cambio: qty,
+        motivo: newCost ? `Mercadería recibida (nuevo costo: ${fARS(newCost)})` : "Mercadería recibida",
+      });
       try {
         const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"ALTA_MERCADERIA",para:"admin",icono:"📦",titulo:"Alta de mercaderia",cuerpo:`${prod.name} - +${qty} unidades${newCost?` - Nuevo costo: ${fARS(newCost)}`:""}`,ref:pid};
         await db.addNotif(notif); setNotifs(n=>[notif,...n]);
