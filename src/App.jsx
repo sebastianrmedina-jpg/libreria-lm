@@ -8030,6 +8030,7 @@ function TypeBadge({tipo}) {
     combo:     {label:"🎁 COMBO",  bg:"#7b1a1a", color:"#fff",    border:"none"},
     "3x2":     {label:"🏷️ OFERTA", bg:"#fef9e7", color:"#b7770d", border:"1px solid #f3d98a"},
     descuento: {label:"🔻 DESC.",  bg:"#fdecea", color:"#c0392b", border:"1px solid #f5b7b1"},
+    destacado: {label:"📣 AVISO",  bg:"#eaf4fc", color:"#1a5276", border:"1px solid #aed6f1"},
   };
   const c = CFG[tipo] || CFG.descuento;
   return <span style={{fontSize:10,fontWeight:800,borderRadius:6,padding:"3px 8px",whiteSpace:"nowrap",background:c.bg,color:c.color,border:c.border,display:"inline-block"}}>{c.label}</span>;
@@ -8060,6 +8061,10 @@ function promoDisplay(promo, products) {
     titulo = prod?.name || promo.nombre;
     const finalP = prod ? (d.tipoValor==="%" ? prod.salePrice*(1-(d.valor||0)/100) : Math.max(0,prod.salePrice-(d.valor||0))) : null;
     sub = `${promo.id}${prod?` · ${fARS(prod.salePrice)} → ${fARS(finalP)}`:""}`;
+  } else if(promo.tipo==="destacado") {
+    const prod = products.find(p=>p.id===d.productoId);
+    titulo = prod?.name || promo.nombre;
+    sub = `${promo.id}${d.mensaje?` · "${d.mensaje}"`:""}`;
   }
   return {titulo, sub};
 }
@@ -8117,12 +8122,14 @@ function OfertasPanel({promos, setPromos, products, isMobile, prefillProductId, 
   if(view==="combo")     return <ComboForm products={products} editing={editing} nextSku={nextPromoSku(promos)} onSave={savePromo} onCancel={cancelForm}/>;
   if(view==="3x2")       return <TresPorDosForm products={products} editing={editing} nextSku={nextPromoSku(promos)} onSave={savePromo} onCancel={cancelForm}/>;
   if(view==="descuento") return <DescuentoForm products={products} editing={editing} prefillProductId={prefillProductId} onSave={savePromo} onCancel={cancelForm}/>;
+  if(view==="destacado") return <DestacadoForm products={products} editing={editing} nextSku={nextPromoSku(promos)} onSave={savePromo} onCancel={cancelForm}/>;
 
   if(view==="elegir") {
     const TIPOS = [
       {k:"combo",     Icon:Gift,    title:"Combo",            desc:"Varios productos distintos agrupados a un precio fijo"},
       {k:"3x2",       Icon:Tag,     title:"Oferta 3×N",        desc:"Comprando X unidades de un producto, paga menos"},
       {k:"descuento", Icon:TrendDown, title:"Descuento simple", desc:"Un producto puntual con % o $ de descuento"},
+      {k:"destacado", Icon:Bell,    title:"Aviso destacado",  desc:"Mostrale a los clientes un producto puntual en un aviso chico, sin descuento"},
     ];
     return (
       <div>
@@ -8130,7 +8137,7 @@ function OfertasPanel({promos, setPromos, products, isMobile, prefillProductId, 
           <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>¿Qué querés crear?</div>
           <div style={{fontSize:13,color:"#888"}}>Elegí el tipo de promoción</div>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:14,maxWidth:760,margin:"0 auto"}}>
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:14,maxWidth:640,margin:"0 auto"}}>
           {TIPOS.map(t=>(
             <div key={t.k} onClick={()=>setView(t.k)}
               style={{background:"#fff",borderRadius:14,padding:"24px 18px",textAlign:"center",boxShadow:"0 1px 6px #0001",cursor:"pointer",border:"2px solid transparent",transition:"border .15s"}}
@@ -8503,6 +8510,73 @@ function DescuentoForm({products, editing, prefillProductId, onSave, onCancel}) 
       <div style={{display:"flex",gap:10,marginTop:6}}>
         <button onClick={onCancel} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancelar</button>
         <button onClick={submit} disabled={saving} style={{flex:2,padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",opacity:saving?.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>{saving?"Guardando...":<><CheckCircle size={13} strokeWidth={2.4}/> Guardar Descuento</>}</button>
+      </div>
+    </div>
+  );
+}
+
+function DestacadoForm({products, editing, nextSku, onSave, onCancel}) {
+  const isEdit = !!editing;
+  const [search, setSearch] = useState("");
+  const [producto, setProducto] = useState(()=> editing?.data?.productoId ? (products.find(p=>p.id===editing.data.productoId)||null) : null);
+  const [mensaje, setMensaje] = useState(editing?.data?.mensaje || "");
+  const [vigDesde, setVigDesde] = useState(editing?.vigenciaDesde || "");
+  const [vigHasta, setVigHasta] = useState(editing?.vigenciaHasta || "");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const found = useMemo(()=>{
+    if(!search.trim()) return [];
+    return products.filter(p=>matchesQuery(p.name, search)||normSKU(p.id).includes(normSKU(search))).slice(0,8);
+  },[search,products]);
+
+  const submit = async () => {
+    if(!producto) { setError("Elegí el producto a destacar"); return; }
+    setError(""); setSaving(true);
+    try {
+      await onSave({
+        id: editing?.id || nextSku, tipo:"destacado", nombre:producto.name, activa:editing?.activa!==false,
+        vigenciaDesde:vigDesde, vigenciaHasta:vigHasta,
+        data:{productoId:producto.id, mensaje:mensaje.trim()}, createdAt:editing?.createdAt,
+      });
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{maxWidth:680}}>
+      <div style={{fontWeight:800,fontSize:15,marginBottom:4,display:"flex",alignItems:"center",gap:7}}><Bell size={15} strokeWidth={2.3}/>{isEdit?"Editar":"Nuevo"} Aviso destacado</div>
+      <div style={{fontSize:12,color:"#888",marginBottom:14,lineHeight:1.5}}>Aparece como una tarjeta chica en una esquina de la web, unos segundos después de entrar. El cliente la puede cerrar y no vuelve a aparecer en esa visita. No aplica ningún descuento — es solo para darle visibilidad a un producto puntual.</div>
+
+      <Field label="Producto a destacar *">
+        {producto
+          ? <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:"#f9f9f9",borderRadius:8,border:"1.5px solid #f0f0f0"}}>
+              <span style={{flex:1,fontWeight:700,fontSize:13}}>{producto.name}</span>
+              <span style={{fontSize:12,color:"#888"}}>{fARS(producto.salePrice)} c/u</span>
+              <span onClick={()=>setProducto(null)} style={{color:RED,cursor:"pointer",display:"inline-flex"}}><XIcon size={13} strokeWidth={2.6}/></span>
+            </div>
+          : <>
+              <div style={{position:"relative"}}><Search size={13} color="#aaa" strokeWidth={2.3} style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)"}}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar producto..." style={{...inputStyle,paddingLeft:32}}/></div>
+              {found.length>0 && <div style={{border:"1.5px solid #f0f0f0",borderRadius:8,marginTop:6,overflow:"hidden"}}>
+                {found.map(p=><div key={p.id} onClick={()=>{setProducto(p);setSearch("");}} style={{padding:"8px 12px",cursor:"pointer",fontSize:12,borderBottom:"1px solid #f5f5f5"}}>{p.name} <span style={{color:"#aaa"}}>· {fARS(p.salePrice)}</span></div>)}
+              </div>}
+            </>
+        }
+      </Field>
+
+      <Field label="Mensaje (opcional)">
+        <input value={mensaje} onChange={e=>setMensaje(e.target.value)} placeholder="Mensaje corto para el aviso" style={inputStyle}/>
+        <div style={{fontSize:11,color:"#aaa",marginTop:4}}>Ej: "¡Volvió el stock!" o "Ideal para la vuelta al cole". Si lo dejás vacío, se muestra solo el nombre del producto.</div>
+      </Field>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        <Field label="Vigencia desde"><input type="date" value={vigDesde} onChange={e=>setVigDesde(e.target.value)} style={inputStyle}/></Field>
+        <Field label="Vigencia hasta"><input type="date" value={vigHasta} onChange={e=>setVigHasta(e.target.value)} style={inputStyle}/></Field>
+      </div>
+
+      {error && <div style={{color:RED,fontSize:12,fontWeight:600,margin:"10px 0 0"}}>{error}</div>}
+      <div style={{display:"flex",gap:10,marginTop:14}}>
+        <button onClick={onCancel} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancelar</button>
+        <button onClick={submit} disabled={saving} style={{flex:2,padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",opacity:saving?.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>{saving?"Guardando...":<><CheckCircle size={13} strokeWidth={2.4}/> Guardar Aviso</>}</button>
       </div>
     </div>
   );
