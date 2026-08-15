@@ -362,6 +362,13 @@ const db = {
   getPromos:    async () => { try { const {data,error} = await supabase.from("lm_promos").select("*").order("created_at",{ascending:false}); if(error) throw error; return (data||[]).map(r=>({id:r.id,tipo:r.tipo,nombre:r.nombre,activa:r.activa!==false,vigenciaDesde:r.vigencia_desde||"",vigenciaHasta:r.vigencia_hasta||"",data:r.data||{},createdAt:r.created_at||""})); } catch(e) { console.warn("getPromos:", e); return []; } },
   savePromo:    async (p) => { const {error} = await supaAdmin.from("lm_promos").upsert({id:p.id,tipo:p.tipo,nombre:p.nombre,activa:p.activa!==false,vigencia_desde:p.vigenciaDesde||"",vigencia_hasta:p.vigenciaHasta||"",data:p.data||{},created_at:p.createdAt||new Date().toISOString()}); if(error) throw error; },
   deletePromo:  async (id) => { const {error} = await supaAdmin.from("lm_promos").delete().eq("id",id); if(error) throw error; },
+  // Combinaciones producto→producto para el aviso destacado de la web ("combina con tu compra").
+  // source "manual" = cargada a mano por el admin, siempre gana. "auto" = calculada
+  // sola a partir de qué se compró junto en pedidos reales, se recalcula cada tanto.
+  // SQL: CREATE TABLE lm_product_pairs (product_id TEXT PRIMARY KEY, related_product_id TEXT NOT NULL, source TEXT DEFAULT 'manual', updated_at TIMESTAMPTZ DEFAULT now());
+  getProductPairs: async () => { try { const {data,error} = await supabase.from("lm_product_pairs").select("*"); if(error) throw error; return (data||[]).map(r=>({productId:r.product_id, relatedProductId:r.related_product_id, source:r.source||"manual", updatedAt:r.updated_at||""})); } catch(e) { console.warn("getProductPairs:", e); return []; } },
+  saveProductPair: async (pair) => { const {error} = await supaAdmin.from("lm_product_pairs").upsert({product_id:pair.productId, related_product_id:pair.relatedProductId, source:pair.source||"manual", updated_at:new Date().toISOString()}); if(error) throw error; },
+  deleteProductPair: async (productId) => { const {error} = await supaAdmin.from("lm_product_pairs").delete().eq("product_id",productId); if(error) throw error; },
   // Configuracion global de la app (un solo registro con id="global")
   // SQL: CREATE TABLE lm_settings (id TEXT PRIMARY KEY DEFAULT 'global', exigir_pago_confirmado BOOLEAN DEFAULT false);
   getSettings:  async () => {
@@ -1523,6 +1530,7 @@ function AppInner() {
   const [notifs, setNotifs]     = useState([]);
   const [clients, setClients]   = useState([]);
   const [promos, setPromos]     = useState([]);
+  const [productPairs, setProductPairs] = useState([]);
   const [settings, setSettings] = useState({exigirPagoConfirmado:false});
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(null);
@@ -1567,12 +1575,12 @@ function AppInner() {
     if(!currentUser) return;
     async function loadAll() {
       try {
-        const [u,v,p,o,q,sl,act,pl,po,n,cl,pr,st] = await Promise.all([
+        const [u,v,p,o,q,sl,act,pl,po,n,cl,pr,st,pp] = await Promise.all([
           db.getUsers(), db.getVendors(), db.getProducts(),
-          db.getOrders(), db.getQuotes(), db.getStockLog(), db.getActivity(), db.getPriceLists(), db.getPurchaseOrders(), db.getNotifs(), db.getClients(), db.getPromos(), db.getSettings(),
+          db.getOrders(), db.getQuotes(), db.getStockLog(), db.getActivity(), db.getPriceLists(), db.getPurchaseOrders(), db.getNotifs(), db.getClients(), db.getPromos(), db.getSettings(), db.getProductPairs(),
         ]);
         setUsers(u); setVendors(v); setProducts(p);
-        setOrders(o); setQuotes(q); setStockLog(sl); setActivity(act); setPriceLists(pl); setPurchaseOrders(po); setNotifs(n); setClients(cl); setPromos(pr); setSettings(st);
+        setOrders(o); setQuotes(q); setStockLog(sl); setActivity(act); setPriceLists(pl); setPurchaseOrders(po); setNotifs(n); setClients(cl); setPromos(pr); setSettings(st); setProductPairs(pp);
         // Inicializar sandbox — recuperar de localStorage si existe, sino copiar stock real
         try {
           const saved = localStorage.getItem("lm_sandbox_stock");
@@ -1643,6 +1651,7 @@ function AppInner() {
     sandboxStock={sandboxStock} setSandboxStock={setSandboxStock}
     clients={clients} setClients={setClients}
     promos={promos} setPromos={setPromos}
+    productPairs={productPairs} setProductPairs={setProductPairs}
     settings={settings} setSettings={setSettings}
   />;
 }
@@ -1782,7 +1791,7 @@ export default function App() {
 }
 
 // ─── MAIN APP (authenticated) ─────────────────────────────────────────────────
-function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,products,setProducts,orders,setOrders,quotes,setQuotes,stockLog,setStockLog,activity,setActivity,priceLists,setPriceLists,purchaseOrders,setPurchaseOrders,notifs,setNotifs,sandboxStock,setSandboxStock,clients,setClients,promos,setPromos,settings,setSettings}) {
+function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,products,setProducts,orders,setOrders,quotes,setQuotes,stockLog,setStockLog,activity,setActivity,priceLists,setPriceLists,purchaseOrders,setPurchaseOrders,notifs,setNotifs,sandboxStock,setSandboxStock,clients,setClients,promos,setPromos,productPairs,setProductPairs,settings,setSettings}) {
   // updateSandboxStock persists to localStorage on every change
   const updateSandboxStock = (updater) => {
     setSandboxStock(prev => {
@@ -2872,7 +2881,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
             });
           }}
         />}
-        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} purchaseOrders={purchaseOrders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile} sandboxStock={sandboxStock} setSandboxStock={setSandboxStock} updateSandboxStock={updateSandboxStock} promos={promos} setPromos={setPromos} settings={settings} onToggleExigirPago={toggleExigirPago} onConfirmarComprobante={confirmarComprobante} onRechazarComprobante={rechazarComprobante} onConfirmarEfectivo={confirmarEfectivo} onRechazarEfectivo={rechazarEfectivo}
+        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} purchaseOrders={purchaseOrders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile} sandboxStock={sandboxStock} setSandboxStock={setSandboxStock} updateSandboxStock={updateSandboxStock} promos={promos} setPromos={setPromos} productPairs={productPairs} setProductPairs={setProductPairs} settings={settings} onToggleExigirPago={toggleExigirPago} onConfirmarComprobante={confirmarComprobante} onRechazarComprobante={rechazarComprobante} onConfirmarEfectivo={confirmarEfectivo} onRechazarEfectivo={rechazarEfectivo}
           autoSection={deepLinkAdminSection} onConsumedAutoSection={()=>setDeepLinkAdminSection(null)}
           prefillProductId={deepLinkOfertaProductId} onConsumedPrefill={()=>setDeepLinkOfertaProductId(null)}/>}
       </div>
@@ -7686,7 +7695,7 @@ function AnalisisComprasPanel({products, purchaseOrders}) {
   );
 }
 
-function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,purchaseOrders,priceLists,setPriceLists,isMobile,sandboxStock,setSandboxStock,updateSandboxStock,promos,setPromos,settings,onToggleExigirPago,onConfirmarComprobante,onRechazarComprobante,onConfirmarEfectivo,onRechazarEfectivo,autoSection,onConsumedAutoSection,prefillProductId,onConsumedPrefill}) {
+function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,purchaseOrders,priceLists,setPriceLists,isMobile,sandboxStock,setSandboxStock,updateSandboxStock,promos,setPromos,productPairs,setProductPairs,settings,onToggleExigirPago,onConfirmarComprobante,onRechazarComprobante,onConfirmarEfectivo,onRechazarEfectivo,autoSection,onConsumedAutoSection,prefillProductId,onConsumedPrefill}) {
   const [section, setSection] = useState("home");
   // Deep-link desde otras pantallas (ej: "Ver en Pagos" desde un pedido bloqueado)
   useEffect(() => {
@@ -7703,6 +7712,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
     {k:"ventas",      label:"Ventas",           Icon:TrendUp,      grp:"negocio"},
     {k:"pagos",       label:"Pagos",            Icon:CreditCard,   grp:"negocio", badge:pagosPendientes, urgentColor:"#b7770d"},
     {k:"ofertas",     label:"Ofertas y Combos", Icon:Gift,         grp:"negocio"},
+    {k:"combinaciones", label:"Combinaciones",  Icon:RefreshCw,    grp:"negocio"},
     {k:"pricelists",  label:"Listas de Precio", Icon:CircleDollarSign, grp:"negocio"},
     {k:"compras",     label:"Análisis Compras", Icon:TrendDown,    grp:"negocio", badge:negativosCount, urgentColor:"#c0392b"},
     {k:"vendors",     label:"Vendedores",       Icon:Users,        grp:"equipo"},
@@ -7810,6 +7820,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
           settings={settings} onToggleExigirPago={onToggleExigirPago}/>
       )}
       {section==="ofertas"     && <OfertasPanel   promos={promos} setPromos={setPromos} products={products} isMobile={isMobile} prefillProductId={prefillProductId} onConsumedPrefill={onConsumedPrefill}/>}
+      {section==="combinaciones" && <CombinacionesPanel productPairs={productPairs} setProductPairs={setProductPairs} products={products} orders={orders} isMobile={isMobile}/>}
       {section==="sandboxstock" && (
         <div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10,marginBottom:16}}>
@@ -8583,6 +8594,176 @@ function DestacadoForm({products, editing, nextSku, onSave, onCancel}) {
         <button onClick={onCancel} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancelar</button>
         <button onClick={submit} disabled={saving} style={{flex:2,padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",opacity:saving?.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>{saving?"Guardando...":<><CheckCircle size={13} strokeWidth={2.4}/> Guardar Aviso</>}</button>
       </div>
+    </div>
+  );
+}
+
+// ── Combinaciones de productos ("combina con tu compra" en la web) ────────────
+function CombinacionesPanel({productPairs, setProductPairs, products, orders, isMobile}) {
+  const [searchA, setSearchA] = useState("");
+  const [searchB, setSearchB] = useState("");
+  const [prodA, setProdA] = useState(null);
+  const [prodB, setProdB] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [recalculando, setRecalculando] = useState(false);
+  const [recalcStatus, setRecalcStatus] = useState(null);
+
+  const foundA = useMemo(()=> searchA.trim() ? products.filter(p=>matchesQuery(p.name,searchA)||normSKU(p.id).includes(normSKU(searchA))).slice(0,8) : [], [searchA,products]);
+  const foundB = useMemo(()=> searchB.trim() ? products.filter(p=>matchesQuery(p.name,searchB)||normSKU(p.id).includes(normSKU(searchB))).slice(0,8) : [], [searchB,products]);
+
+  const guardar = async () => {
+    if(!prodA || !prodB) { toast.error("Elegí los dos productos"); return; }
+    if(prodA.id === prodB.id) { toast.error("Tienen que ser productos distintos"); return; }
+    setSaving(true);
+    const pair = {productId: prodA.id, relatedProductId: prodB.id, source:"manual"};
+    try {
+      await db.saveProductPair(pair);
+      setProductPairs(prev => [...prev.filter(p=>p.productId!==prodA.id), pair]);
+      setProdA(null); setProdB(null); setSearchA(""); setSearchB("");
+      toast.success("Combinación guardada");
+    } catch(e) {
+      console.warn(e);
+      toast.error("No se pudo guardar");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const eliminar = async (productId) => {
+    if(!await confirmDialog("¿Eliminar combinación?","Esta acción no se puede deshacer.",true)) return;
+    await db.deleteProductPair(productId);
+    setProductPairs(prev => prev.filter(p=>p.productId!==productId));
+  };
+
+  // Para cada producto que aparece en pedidos reales, busca cuál es el producto
+  // que más veces se compró junto en el mismo pedido. Nunca pisa una combinación
+  // cargada a mano — esas siempre ganan.
+  const recalcularAutomaticas = async () => {
+    setRecalculando(true);
+    setRecalcStatus({type:"progress", msg:"Analizando pedidos..."});
+    try {
+      const manualIds = new Set(productPairs.filter(p=>p.source==="manual").map(p=>p.productId));
+      const realOrders = orders.filter(o=>!o.isSandbox && !isTestOrder(o.vendedor));
+      const co = {};
+      realOrders.forEach(o=>{
+        const pids = [...new Set((o.items||[]).map(it=>it.pid).filter(Boolean))];
+        for(let i=0;i<pids.length;i++){
+          for(let j=0;j<pids.length;j++){
+            if(i===j) continue;
+            co[pids[i]] = co[pids[i]] || {};
+            co[pids[i]][pids[j]] = (co[pids[i]][pids[j]]||0) + 1;
+          }
+        }
+      });
+      const nuevas = [];
+      Object.entries(co).forEach(([pid, partners])=>{
+        if(manualIds.has(pid)) return;
+        let bestPid = null, bestCount = 0;
+        Object.entries(partners).forEach(([partnerId,count])=>{
+          if(count > bestCount) { bestCount = count; bestPid = partnerId; }
+        });
+        // Al menos 2 pedidos distintos que los compraron juntos, para no sugerir
+        // algo a partir de una sola coincidencia de casualidad.
+        if(bestPid && bestCount >= 2) nuevas.push({productId: pid, relatedProductId: bestPid, source:"auto"});
+      });
+      const batchSize = 20;
+      for(let i=0;i<nuevas.length;i+=batchSize) {
+        const batch = nuevas.slice(i,i+batchSize);
+        for(const pair of batch) await db.saveProductPair(pair);
+        setRecalcStatus({type:"progress", msg:`Guardando... ${Math.min(i+batchSize,nuevas.length)}/${nuevas.length}`});
+      }
+      setProductPairs(prev => [...prev.filter(p=>p.source==="manual"), ...nuevas]);
+      setRecalcStatus({type:"success", msg:`${nuevas.length} combinaciones automáticas calculadas a partir de ${realOrders.length} pedidos.`});
+      toast.success(`${nuevas.length} combinaciones automáticas actualizadas`);
+    } catch(e) {
+      console.warn(e);
+      setRecalcStatus({type:"error", msg:"No se pudo recalcular. Probá de nuevo."});
+      toast.error("No se pudo recalcular");
+    } finally {
+      setRecalculando(false);
+    }
+  };
+
+  const getP = id => products.find(p=>p.id===id);
+
+  return (
+    <div>
+      <div style={{background:"#fff",borderRadius:12,padding:20,marginBottom:16,boxShadow:"0 1px 4px #0001"}}>
+        <div style={{fontWeight:800,fontSize:15,marginBottom:4,display:"flex",alignItems:"center",gap:7}}><RefreshCw size={15} strokeWidth={2.3}/>Combinaciones de productos</div>
+        <div style={{fontSize:12,color:"#888",marginBottom:16,lineHeight:1.5}}>
+          Se usan en la web para sugerir "combina con tu compra" según lo que el cliente tiene en el carrito.
+          Las que cargás acá a mano siempre tienen prioridad. Para el resto, podés calcular combinaciones
+          automáticas a partir de lo que se compró junto en pedidos reales.
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:14,marginBottom:14}}>
+          <Field label="Producto">
+            {prodA
+              ? <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",background:"#f9f9f9",borderRadius:8,border:"1.5px solid #f0f0f0"}}>
+                  <span style={{flex:1,fontWeight:700,fontSize:12.5}}>{prodA.name}</span>
+                  <span onClick={()=>setProdA(null)} style={{color:RED,cursor:"pointer",display:"inline-flex"}}><XIcon size={12} strokeWidth={2.6}/></span>
+                </div>
+              : <>
+                  <input value={searchA} onChange={e=>setSearchA(e.target.value)} placeholder="Buscar producto..." style={inputStyle}/>
+                  {foundA.length>0 && <div style={{border:"1.5px solid #f0f0f0",borderRadius:8,marginTop:6,overflow:"hidden"}}>
+                    {foundA.map(p=><div key={p.id} onClick={()=>{setProdA(p);setSearchA("");}} style={{padding:"7px 10px",cursor:"pointer",fontSize:12,borderBottom:"1px solid #f5f5f5"}}>{p.name}</div>)}
+                  </div>}
+                </>
+            }
+          </Field>
+          <Field label="Combina con">
+            {prodB
+              ? <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",background:"#f9f9f9",borderRadius:8,border:"1.5px solid #f0f0f0"}}>
+                  <span style={{flex:1,fontWeight:700,fontSize:12.5}}>{prodB.name}</span>
+                  <span onClick={()=>setProdB(null)} style={{color:RED,cursor:"pointer",display:"inline-flex"}}><XIcon size={12} strokeWidth={2.6}/></span>
+                </div>
+              : <>
+                  <input value={searchB} onChange={e=>setSearchB(e.target.value)} placeholder="Buscar producto..." style={inputStyle}/>
+                  {foundB.length>0 && <div style={{border:"1.5px solid #f0f0f0",borderRadius:8,marginTop:6,overflow:"hidden"}}>
+                    {foundB.map(p=><div key={p.id} onClick={()=>{setProdB(p);setSearchB("");}} style={{padding:"7px 10px",cursor:"pointer",fontSize:12,borderBottom:"1px solid #f5f5f5"}}>{p.name}</div>)}
+                  </div>}
+                </>
+            }
+          </Field>
+        </div>
+        <button onClick={guardar} disabled={saving||!prodA||!prodB}
+          style={{padding:"9px 16px",borderRadius:9,border:"none",fontWeight:700,fontSize:13,cursor:(!prodA||!prodB)?"default":"pointer",background:(!prodA||!prodB)?"#e5e5e5":`linear-gradient(135deg,${REDD},${RED})`,color:(!prodA||!prodB)?"#aaa":"#fff",display:"inline-flex",alignItems:"center",gap:6}}>
+          {saving?"Guardando...":<><CheckCircle size={13} strokeWidth={2.4}/> Guardar combinación</>}
+        </button>
+      </div>
+
+      <div style={{background:"#eaf4fc",border:"1px solid #aed6f1",borderRadius:12,padding:"14px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+        <div style={{flex:1,minWidth:220}}>
+          <div style={{fontWeight:800,fontSize:14,color:"#1a5276",display:"flex",alignItems:"center",gap:6}}><RefreshCw size={14} strokeWidth={2.3}/>Combinaciones automáticas</div>
+          <div style={{fontSize:12,color:"#1a5276",marginTop:2}}>Analiza los pedidos reales y calcula qué se compra junto, para los productos que no tengan una combinación manual.</div>
+          {recalcStatus && <div style={{fontSize:12,fontWeight:700,marginTop:6,color:recalcStatus.type==="error"?RED:recalcStatus.type==="progress"?"#1a5276":"#1e8449"}}>{recalcStatus.msg}</div>}
+        </div>
+        <button onClick={recalcularAutomaticas} disabled={recalculando}
+          style={{padding:"9px 16px",borderRadius:9,border:"none",background:"#1a5276",color:"#fff",fontWeight:700,fontSize:13,cursor:recalculando?"default":"pointer",opacity:recalculando?0.7:1,whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}}>
+          {recalculando?"Calculando...":<><RefreshCw size={12} strokeWidth={2.4}/> Recalcular automáticas</>}
+        </button>
+      </div>
+
+      <div style={{fontWeight:700,fontSize:13,color:"#888",marginBottom:10,textTransform:"uppercase",letterSpacing:.5}}>
+        Combinaciones actuales ({productPairs.length})
+      </div>
+      {productPairs.length===0
+        ? <div style={{textAlign:"center",color:"#aaa",padding:"40px 0",background:"#fff",borderRadius:12}}>Todavía no hay combinaciones cargadas.</div>
+        : productPairs.map(pair=>{
+            const pA = getP(pair.productId), pB = getP(pair.relatedProductId);
+            return (
+              <div key={pair.productId} style={{background:"#fff",borderRadius:10,padding:"12px 16px",marginBottom:8,boxShadow:"0 1px 4px #0001",display:"flex",alignItems:"center",gap:12}}>
+                <span style={{fontSize:10,fontWeight:800,borderRadius:6,padding:"3px 8px",background:pair.source==="manual"?"#fdecea":"#eaf4fc",color:pair.source==="manual"?RED:"#1a5276"}}>{pair.source==="manual"?"MANUAL":"AUTO"}</span>
+                <div style={{flex:1,fontSize:13}}>
+                  <strong>{pA?.name||pair.productId}</strong>
+                  <span style={{color:"#aaa",margin:"0 6px"}}>combina con</span>
+                  <strong>{pB?.name||pair.relatedProductId}</strong>
+                </div>
+                <button onClick={()=>eliminar(pair.productId)} style={{background:"none",border:"none",cursor:"pointer",padding:"4px 6px",color:"#888",display:"flex",alignItems:"center"}}><Trash size={13} strokeWidth={2.3}/></button>
+              </div>
+            );
+          })
+      }
     </div>
   );
 }
