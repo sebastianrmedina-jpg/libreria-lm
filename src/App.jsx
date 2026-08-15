@@ -1851,16 +1851,21 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     ? previewListId
     : (currentUser.priceList||"default");
   const activeList = priceLists.find(pl=>pl.id===activeListId) || {id:"default",name:"Normal",discount:0};
-  // Apply list discount to a base price
-  const getPrice = (basePrice) => {
-    if(!activeList || activeList.discount===0) return basePrice;
-    return Math.round(basePrice * (1 - activeList.discount/100) * 100) / 100;
+  // Listas con cost_multiplier (ej. Lista Cami) calculan el precio directo desde el costo
+  // (costo × multiplicador), no como descuento sobre el precio de venta normal — son cosas
+  // distintas: acá no importa el salePrice del producto en absoluto.
+  const getPrice = (p) => {
+    if(activeList?.cost_multiplier > 0) {
+      return p.costPrice > 0 ? Math.round(p.costPrice * activeList.cost_multiplier * 100) / 100 : p.salePrice;
+    }
+    if(!activeList || !activeList.discount) return p.salePrice;
+    return Math.round(p.salePrice * (1 - activeList.discount/100) * 100) / 100;
   };
   // Products with prices adjusted for active list
   const isTestUser = isTestOrder(currentUser.vendedor || currentUser.name);
   const pricedProducts = useMemo(()=>products.map(p=>({
     ...p,
-    salePrice: getPrice(p.salePrice),
+    salePrice: getPrice(p),
     _basePrice: p.salePrice,
     // Vendedor Prueba ve el stock sandbox, no el real
     stock: isTestUser ? (sandboxStock[p.id] ?? p.stock) : p.stock,
@@ -2659,7 +2664,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
               <img src={LOGO} alt="LM" style={{width:38,height:38,borderRadius:"50%",objectFit:"cover",border:"2px solid #ffffff44",flexShrink:0}}/>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{color:"#fff",fontWeight:800,fontSize:15,fontFamily:"Georgia,serif"}}>Libreria Madrid</div>
-                <div style={{color:"#ffcccc",fontSize:11,display:"flex",alignItems:"center",gap:4}}><Users size={10} strokeWidth={2.5}/>{currentUser.name}{activeList.discount>0&&<span style={{marginLeft:6,background:"#f1c40f",color:"#1a1a1a",borderRadius:4,padding:"1px 5px",fontSize:10,fontWeight:800}}>{activeList.name}</span>}</div>
+                <div style={{color:"#ffcccc",fontSize:11,display:"flex",alignItems:"center",gap:4}}><Users size={10} strokeWidth={2.5}/>{currentUser.name}{(activeList.discount>0||activeList.cost_multiplier>0)&&<span style={{marginLeft:6,background:"#f1c40f",color:"#1a1a1a",borderRadius:4,padding:"1px 5px",fontSize:10,fontWeight:800}}>{activeList.name}</span>}</div>
               </div>
               <div style={{display:"flex",gap:6,flexShrink:0}}>
                 <button onClick={()=>setShowNotifs(s=>!s)} style={{width:34,height:34,borderRadius:9,background:"#ffffff1a",border:"1px solid #ffffff2a",color:"#fff",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative"}}>
@@ -2704,13 +2709,13 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                 {isAdmin && priceLists.length>1 && (
                   <select value={previewListId||"default"} onChange={e=>setPreviewListId(e.target.value==="default"?null:e.target.value)}
                     style={{background:"#ffffff18",border:"1px solid #ffffff40",color:"#fff",borderRadius:6,padding:"6px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>
-                    {priceLists.map(pl=><option key={pl.id} value={pl.id} style={{color:"#1a1a1a"}}>{pl.name}{pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
+                    {priceLists.map(pl=><option key={pl.id} value={pl.id} style={{color:"#1a1a1a"}}>{pl.name}{pl.cost_multiplier>0?` (×${pl.cost_multiplier})`:pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
                   </select>
                 )}
                 <button onClick={()=>setShowChangePass(true)}
                   style={{background:"#ffffff18",border:"1px solid #ffffff40",color:"#fff",borderRadius:6,padding:"6px 10px",cursor:"pointer",fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:5}}>
                   <Users size={11} strokeWidth={2.5}/> {currentUser.name}
-                  {activeList.discount>0&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:4,padding:"1px 5px",fontSize:10,fontWeight:800,marginLeft:3}}>{activeList.name}</span>}
+                  {(activeList.discount>0||activeList.cost_multiplier>0)&&<span style={{background:"#f1c40f",color:"#1a1a1a",borderRadius:4,padding:"1px 5px",fontSize:10,fontWeight:800,marginLeft:3}}>{activeList.name}</span>}
                   <Key size={11} strokeWidth={2.4} style={{opacity:.7}}/>
                 </button>
                 <div style={{position:"relative"}}>
@@ -2790,7 +2795,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                   <div style={{fontSize:10,fontWeight:700,color:"#aaa",marginBottom:4}}>LISTA DE PRECIOS</div>
                   <select value={previewListId||"default"} onChange={e=>setPreviewListId(e.target.value==="default"?null:e.target.value)}
                     style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,background:"#fff",cursor:"pointer"}}>
-                    {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}{pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
+                    {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}{pl.cost_multiplier>0?` (×${pl.cost_multiplier})`:pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
                   </select>
                 </div>
               )}
@@ -4695,7 +4700,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
             {currentUser.role==="admin"&&<Field label="Vendedor *"><select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,cursor:"pointer",color:vendedor?"#1a1a1a":"#aaa",marginBottom:8}}><option value="">— Seleccioná vendedor —</option>{vendors.map(v=><option key={v} value={v}>{v}</option>)}</select></Field>}
             {currentUser.role==="admin"&&priceLists?.length>1&&<Field label="Lista de precios">
               <select value={previewListId||"default"} onChange={e=>onChangeList&&onChangeList(e.target.value==="default"?null:e.target.value)} style={{...inputStyle,cursor:"pointer"}}>
-                {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}{pl.discount>0?` (-${pl.discount}%)`:""}  </option>)}
+                {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}{pl.cost_multiplier>0?` (×${pl.cost_multiplier})`:pl.discount>0?` (-${pl.discount}%)`:""}  </option>)}
               </select>
               {previewListId&&previewListId!=="default"&&<div style={{fontSize:11,color:"#b7770d",marginTop:4,fontWeight:600}}>⚠️ Los precios ya muestran el descuento aplicado</div>}
             </Field>}
@@ -4781,7 +4786,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
           {currentUser.role==="admin"&&<Field label="Vendedor *"><select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,color:vendedor?"#1a1a1a":"#aaa",cursor:"pointer"}}><option value="">— Seleccioná vendedor —</option>{vendors.map(v=><option key={v} value={v}>{v}</option>)}</select></Field>}
           {currentUser.role==="admin"&&priceLists?.length>1&&<Field label="Lista de precios">
             <select value={previewListId||"default"} onChange={e=>onChangeList&&onChangeList(e.target.value==="default"?null:e.target.value)} style={{...inputStyle,cursor:"pointer"}}>
-              {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}{pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
+              {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}{pl.cost_multiplier>0?` (×${pl.cost_multiplier})`:pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
             </select>
             {previewListId&&previewListId!=="default"&&<div style={{fontSize:11,color:"#b7770d",marginTop:4,fontWeight:600}}>⚠️ Los precios ya muestran el descuento aplicado</div>}
           </Field>}
@@ -5105,7 +5110,7 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,on
           {currentUser?.role==="admin"&&<Field label="Vendedor"><select value={vendedor} onChange={e=>setVendedor(e.target.value)} style={{...inputStyle,cursor:"pointer"}}><option value="">- Sin asignar -</option>{vendors.map(v=><option key={v} value={v}>{v}</option>)}</select></Field>}
           {currentUser?.role==="admin"&&priceLists?.length>1&&<Field label="Lista de precios">
             <select value={previewListId||"default"} onChange={e=>onChangeList&&onChangeList(e.target.value==="default"?null:e.target.value)} style={{...inputStyle,cursor:"pointer"}}>
-              {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}{pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
+              {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}{pl.cost_multiplier>0?` (×${pl.cost_multiplier})`:pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
             </select>
             {previewListId&&previewListId!=="default"&&<div style={{fontSize:11,color:"#b7770d",marginTop:4,fontWeight:600}}>⚠️ Los precios ya muestran el descuento aplicado</div>}
           </Field>}
@@ -5215,7 +5220,7 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,on
           }
           {currentUser?.role==="admin"&&priceLists?.length>1&&<Field label="Lista de precios">
             <select value={previewListId||"default"} onChange={e=>onChangeList&&onChangeList(e.target.value==="default"?null:e.target.value)} style={{...inputStyle,cursor:"pointer"}}>
-              {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}{pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
+              {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}{pl.cost_multiplier>0?` (×${pl.cost_multiplier})`:pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
             </select>
             {previewListId&&previewListId!=="default"&&<div style={{fontSize:11,color:"#b7770d",marginTop:4,fontWeight:600}}>⚠️ Los precios ya muestran el descuento aplicado</div>}
           </Field>}
@@ -8707,19 +8712,27 @@ function ActivityPanel({activity, setActivity}) {
 // Esto evita que la UI quede desincronizada si Supabase falla.
 // -- Price Lists -----------------------------------------------------------------
 function PriceListsPanel({priceLists, setPriceLists}) {
-  const [form, setForm] = useState({name:"", discount:""});
+  const [form, setForm] = useState({name:"", discount:"", costMultiplier:""});
+  const [modo, setModo] = useState("descuento"); // "descuento" (% sobre precio normal) | "multiplicador" (× directo sobre costo)
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
     if(!form.name.trim()) { toast.error("Ingresá un nombre"); return; }
-    const disc = parseFloat(form.discount)||0;
-    if(disc < 0 || disc >= 100) { toast.error("El descuento debe ser entre 0 y 99"); return; }
+    let pl;
+    if(modo==="multiplicador") {
+      const mult = parseFloat(form.costMultiplier)||0;
+      if(mult <= 0) { toast.error("Ingresá el multiplicador sobre el costo"); return; }
+      pl = {id: editing || genId(), name: form.name.trim(), discount: 0, cost_multiplier: mult};
+    } else {
+      const disc = parseFloat(form.discount)||0;
+      if(disc < 0 || disc >= 100) { toast.error("El descuento debe ser entre 0 y 99"); return; }
+      pl = {id: editing || genId(), name: form.name.trim(), discount: disc, cost_multiplier: null};
+    }
     setSaving(true);
-    const pl = {id: editing || genId(), name: form.name.trim(), discount: disc};
     setPriceLists(list => editing ? list.map(x=>x.id===editing?pl:x) : [...list, pl]);
     await db.savePriceList(pl);
-    setForm({name:"", discount:""}); setEditing(null); setSaving(false);
+    setForm({name:"", discount:"", costMultiplier:""}); setModo("descuento"); setEditing(null); setSaving(false);
   };
 
   const del = async (id) => {
@@ -8729,8 +8742,12 @@ function PriceListsPanel({priceLists, setPriceLists}) {
     await db.deletePriceList(id);
   };
 
-  const startEdit = (pl) => { setEditing(pl.id); setForm({name:pl.name, discount:pl.discount}); };
-  const cancel = () => { setEditing(null); setForm({name:"", discount:""}); };
+  const startEdit = (pl) => {
+    setEditing(pl.id);
+    setForm({name:pl.name, discount:pl.discount||"", costMultiplier:pl.cost_multiplier||""});
+    setModo(pl.cost_multiplier>0 ? "multiplicador" : "descuento");
+  };
+  const cancel = () => { setEditing(null); setForm({name:"", discount:"", costMultiplier:""}); setModo("descuento"); };
 
   return (
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,alignItems:"start"}}>
@@ -8743,19 +8760,42 @@ function PriceListsPanel({priceLists, setPriceLists}) {
           <input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}
             placeholder="Ej: Mayorista, Revendedor..." style={inputStyle}/>
         </Field>
-        <Field label="Descuento sobre precio normal (%)">
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <input type="number" min="0" max="99" value={form.discount} onChange={e=>setForm(f=>({...f,discount:e.target.value}))}
-              placeholder="0" style={{...inputStyle,width:100}}/>
-            <span style={{fontSize:13,color:"#888"}}>%</span>
-            {parseFloat(form.discount)>0&&(
-              <span style={{fontSize:12,color:"#1e8449",fontWeight:600}}>
-                Precio de $1000 → {fARS(1000*(1-parseFloat(form.discount)/100))}
-              </span>
-            )}
+        <Field label="Cómo se calcula el precio de esta lista">
+          <div style={{display:"flex",gap:8,marginBottom:10}}>
+            <div onClick={()=>setModo("descuento")} style={{padding:"7px 14px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:12,fontWeight:700,borderColor:modo==="descuento"?RED:"#e5e5e5",background:modo==="descuento"?"#fdecea":"#fff",color:modo==="descuento"?RED:"#666"}}>% Descuento sobre precio normal</div>
+            <div onClick={()=>setModo("multiplicador")} style={{padding:"7px 14px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:12,fontWeight:700,borderColor:modo==="multiplicador"?RED:"#e5e5e5",background:modo==="multiplicador"?"#fdecea":"#fff",color:modo==="multiplicador"?RED:"#666"}}>× Directo sobre el costo</div>
           </div>
-          <div style={{fontSize:11,color:"#888",marginTop:4}}>0% = precios normales sin cambios</div>
         </Field>
+
+        {modo==="descuento" ? (
+          <Field label="Descuento sobre precio normal (%)">
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <input type="number" min="0" max="99" value={form.discount} onChange={e=>setForm(f=>({...f,discount:e.target.value}))}
+                placeholder="0" style={{...inputStyle,width:100}}/>
+              <span style={{fontSize:13,color:"#888"}}>%</span>
+              {parseFloat(form.discount)>0&&(
+                <span style={{fontSize:12,color:"#1e8449",fontWeight:600}}>
+                  Precio de $1000 → {fARS(1000*(1-parseFloat(form.discount)/100))}
+                </span>
+              )}
+            </div>
+            <div style={{fontSize:11,color:"#888",marginTop:4}}>0% = precios normales sin cambios</div>
+          </Field>
+        ) : (
+          <Field label="Multiplicador sobre el costo">
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:13,color:"#888"}}>costo ×</span>
+              <input type="number" min="0" step="0.01" value={form.costMultiplier} onChange={e=>setForm(f=>({...f,costMultiplier:e.target.value}))}
+                placeholder="1.30" style={{...inputStyle,width:100}}/>
+              {parseFloat(form.costMultiplier)>0&&(
+                <span style={{fontSize:12,color:"#1e8449",fontWeight:600}}>
+                  Costo de $1000 → {fARS(1000*parseFloat(form.costMultiplier))}
+                </span>
+              )}
+            </div>
+            <div style={{fontSize:11,color:"#888",marginTop:4}}>Ignora el precio de venta normal — calcula directo desde el costo del producto.</div>
+          </Field>
+        )}
         <div style={{display:"flex",gap:8,marginTop:8}}>
           <button onClick={save} disabled={saving||!form.name.trim()}
             style={{flex:1,padding:"10px",borderRadius:9,border:"none",fontWeight:800,fontSize:13,cursor:"pointer",
@@ -8777,9 +8817,11 @@ function PriceListsPanel({priceLists, setPriceLists}) {
             <div style={{flex:1}}>
               <div style={{fontWeight:700,fontSize:14}}>{pl.name}</div>
               <div style={{fontSize:12,color:"#888",marginTop:2}}>
-                {pl.discount===0
-                  ? <span style={{color:"#1e8449",fontWeight:600}}>Precios normales (sin descuento)</span>
-                  : <span style={{color:"#c0392b",fontWeight:600}}>-{pl.discount}% sobre precio normal</span>
+                {pl.cost_multiplier>0
+                  ? <span style={{color:"#1a5276",fontWeight:600}}>costo × {pl.cost_multiplier} (directo, ignora precio normal)</span>
+                  : pl.discount===0
+                    ? <span style={{color:"#1e8449",fontWeight:600}}>Precios normales (sin descuento)</span>
+                    : <span style={{color:"#c0392b",fontWeight:600}}>-{pl.discount}% sobre precio normal</span>
                 }
               </div>
             </div>
@@ -9098,7 +9140,7 @@ function UsersPanel({users,setUsers,vendors,priceLists}) {
           </div>
           <Field label="Lista de precios">
             <select value={form.priceList||"default"} onChange={e=>setForm(f=>({...f,priceList:e.target.value}))} style={{...inputStyle,cursor:"pointer"}}>
-              {(priceLists||[{id:"default",name:"Normal",discount:0}]).map(pl=>(<option key={pl.id} value={pl.id}>{pl.name}{pl.discount>0?` (-${pl.discount}%)`:""}</option>))}
+              {(priceLists||[{id:"default",name:"Normal",discount:0}]).map(pl=>(<option key={pl.id} value={pl.id}>{pl.name}{pl.cost_multiplier>0?` (×${pl.cost_multiplier})`:pl.discount>0?` (-${pl.discount}%)`:""}</option>))}
             </select>
           </Field>
           <Toggle label="Ver todos los pedidos" sub={form.canSeeAll?"Ve todos los pedidos":"Solo sus propios pedidos"} val={form.canSeeAll} onChange={()=>setForm(f=>({...f,canSeeAll:!f.canSeeAll}))}/>
@@ -9138,52 +9180,9 @@ function ExcelPanel({products,setProducts}) {
   const [status, setStatus] = useState(null);
   const [mode, setMode] = useState("update");
   const [fixing, setFixing] = useState(false);
-  const [aumentando, setAumentando] = useState(false);
-  const [aumentoStatus, setAumentoStatus] = useState(null);
 
   // Productos con el precio de venta roto (igual o menor al costo) por un import anterior
   const rotos = useMemo(()=>products.filter(p=>p.costPrice>0 && p.salePrice<=p.costPrice), [products]);
-  // Todo el catálogo con costo cargado — sobre esto se aplica el aumento de precio general
-  const conCosto = useMemo(()=>products.filter(p=>p.costPrice>0), [products]);
-
-  const aplicarAumento = async () => {
-    const ejemplo = conCosto[0];
-    const ok = await confirmDialog(
-      "¿Aplicar aumento de precio?",
-      `Se va a recalcular el precio de venta de ${conCosto.length} producto${conCosto.length!==1?"s":""} de todo el catálogo como costo × 1,56 (×1.30 y ese resultado ×1.20).`
-        + (ejemplo ? ` Ej: "${ejemplo.name}" pasaría de ${fARS(ejemplo.salePrice)} a ${fARS(Math.round(ejemplo.costPrice*1.56*100)/100)}.` : "")
-        + ` Los productos sin costo cargado quedan sin tocar. Esta acción no se puede deshacer.`,
-      true
-    );
-    if(!ok) return;
-    setAumentando(true);
-    try {
-      const aumentados = conCosto.map(p=>({...p, salePrice: Math.round(p.costPrice*1.56*100)/100}));
-      const batchSize = 20;
-      const batches = [];
-      for(let i=0;i<aumentados.length;i+=batchSize) batches.push(aumentados.slice(i,i+batchSize));
-      let subidos = 0;
-      for(let i=0;i<batches.length;i++) {
-        const pct = Math.round((i+1)/batches.length*100);
-        setAumentoStatus({type:"progress", msg:`⏳ Aplicando aumento... ${subidos}/${aumentados.length} productos (${pct}%)`});
-        await db.upsertProducts(batches[i]);
-        subidos += batches[i].length;
-        await new Promise(r=>setTimeout(r,100));
-      }
-      setProducts(prev=>prev.map(p=>{
-        const fix = aumentados.find(c=>c.id===p.id);
-        return fix ? fix : p;
-      }));
-      setAumentoStatus({type:"success", msg:`Aumento aplicado a ${aumentados.length} producto${aumentados.length!==1?"s":""}.`});
-      toast.success(`Aumento de precio aplicado a ${aumentados.length} producto${aumentados.length!==1?"s":""}`);
-    } catch(e) {
-      console.warn(e);
-      setAumentoStatus({type:"error", msg:"No se pudo aplicar el aumento. Probá de nuevo."});
-      toast.error("No se pudo aplicar el aumento de precio. Probá de nuevo.");
-    } finally {
-      setAumentando(false);
-    }
-  };
 
   const corregirPrecios = async () => {
     const ok = await confirmDialog(
@@ -9194,7 +9193,7 @@ function ExcelPanel({products,setProducts}) {
     if(!ok) return;
     setFixing(true);
     try {
-      const corregidos = rotos.map(p=>({...p, salePrice: Math.round(p.costPrice*1.56*100)/100}));
+      const corregidos = rotos.map(p=>({...p, salePrice: Math.round(p.costPrice*MARKUP_VENTA*100)/100}));
       await db.upsertProducts(corregidos);
       setProducts(prev=>prev.map(p=>{
         const fix = corregidos.find(c=>c.id===p.id);
@@ -9334,20 +9333,17 @@ function ExcelPanel({products,setProducts}) {
     const updated=[], notFound=[];
     const newProds = products.map(p=>({...p}));
 
-    // MARKUP_VENTA (costo x 1.30 x 1.20, definido a nivel de módulo) se aplica SOLO
-    // cuando el archivo no trae una columna "Precio Final" ya calculada (ej: su Excel
-    // propio con la formula puesta) — si la trae, esa tiene prioridad.
-
-    // El costo real es el de oferta si el proveedor tiene uno activo (es un costo temporal
+    // El costo real es el de oferta si el proveedor tiene uno activo (es un costo temporal)
     // PRECIO OFERTA = costo especial (con descuento del proveedor). Si existe, reemplaza al PRECIO CON IVA
-    // como base de cálculo. En ambos casos se multiplica por el markup para obtener el precio de venta.
-    // PRECIO FINAL = precio de venta ya calculado (si la lista lo trae, se usa directo sin markup).
+    // como base de cálculo. En ambos casos se multiplica por MARKUP_VENTA para obtener el precio de venta.
+    // "Precio Final" del archivo del proveedor NUNCA se usa como precio de venta — el precio de
+    // venta lo calculamos siempre nosotros desde el costo, para que el aumento se aplique solo
+    // en cada importación sin depender de una herramienta manual aparte.
     const resolveCosto = (row) => {
       if(row.precioOferta && row.precioOferta > 0) return row.precioOferta;
       return row.precioIVA || null;
     };
     const resolveSalePrice = (row) => {
-      if(row.precioFinal !== null && row.precioFinal > 0) return row.precioFinal;
       const costo = resolveCosto(row);
       return costo ? Math.round(costo * MARKUP_VENTA * 100) / 100 : null;
     };
@@ -9413,17 +9409,6 @@ function ExcelPanel({products,setProducts}) {
 
   return (
     <div>
-      <div style={{background:"#fef9e7",border:"1px solid #f0d080",borderRadius:12,padding:"14px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
-        <div style={{flex:1,minWidth:220}}>
-          <div style={{fontWeight:800,fontSize:14,color:"#9a7d0a",display:"flex",alignItems:"center",gap:6}}><TrendUp size={14} strokeWidth={2.3}/>Aumento de precio</div>
-          <div style={{fontSize:12,color:"#7d6608",marginTop:2}}>Recalcula el precio de venta de los {conCosto.length} producto{conCosto.length!==1?"s":""} con costo cargado, como costo × 1,56 (×1.30 y ese resultado ×1.20). Es un cambio para todo el catálogo.</div>
-          {aumentoStatus && <div style={{fontSize:12,fontWeight:700,marginTop:6,color:aumentoStatus.type==="error"?RED:aumentoStatus.type==="progress"?"#7d6608":"#1e8449"}}>{aumentoStatus.msg}</div>}
-        </div>
-        <button onClick={aplicarAumento} disabled={aumentando||conCosto.length===0}
-          style={{padding:"9px 16px",borderRadius:9,border:"none",background:"#9a7d0a",color:"#fff",fontWeight:700,fontSize:13,cursor:(aumentando||conCosto.length===0)?"default":"pointer",opacity:(aumentando||conCosto.length===0)?0.7:1,whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}}>
-          {aumentando?"Aplicando...":<><TrendUp size={12} strokeWidth={2.4}/> Aplicar aumento ({conCosto.length})</>}
-        </button>
-      </div>
       {rotos.length>0 && (
         <div style={{background:"#fdecea",border:"1px solid #f1948a",borderRadius:12,padding:"14px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
           <div style={{flex:1,minWidth:220}}>
