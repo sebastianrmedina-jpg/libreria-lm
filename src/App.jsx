@@ -500,6 +500,57 @@ function getProductPromo(promos, pid) {
 function getVigentCombos(promos) {
   return (promos||[]).filter(p=>isPromoVigente(p) && p.tipo==="combo");
 }
+// Último movimiento de stock por producto (para "sin rotación") — única fuente de
+// verdad, la usan tanto la pestaña Stock como las sugerencias al vendedor.
+function buildLastMovMap(stockLog) {
+  const map={};
+  (stockLog||[]).forEach(e=>{
+    const d = parseFechaLog(e.fecha);
+    if(!d) return;
+    if(!map[e.productoId] || d > map[e.productoId]) map[e.productoId] = d;
+  });
+  return map;
+}
+function diasSinRotacion(lastMovMap, pid) {
+  const last = lastMovMap[pid];
+  if(!last) return null;
+  return Math.floor((Date.now() - last.getTime()) / 86400000);
+}
+// Hasta 4 sugerencias para que el vendedor le ofrezca al cliente al armar un
+// pedido/cotización: 1) combina con algo que ya tiene en el carrito, 2) está
+// en oferta, 3) hace mucho que no rota. Nunca repite un producto ya en el
+// carrito ni sugiere el mismo dos veces por distintos motivos.
+function buildVendorSuggestions({products, promos, productPairs, stockLog, cart}) {
+  const cartPids = new Set((cart||[]).map(i=>i.pid));
+  const sugeridos = new Set();
+  const out = [];
+  const push = (pid, motivo) => {
+    if(cartPids.has(pid) || sugeridos.has(pid)) return;
+    const p = products.find(x=>x.id===pid);
+    if(!p || p.stock<=0) return;
+    sugeridos.add(pid);
+    out.push({product:p, motivo});
+  };
+
+  // 1) Combina con algo que ya está en el carrito
+  (cart||[]).forEach(item=>{
+    const pair = (productPairs||[]).find(pp=>pp.productId===item.pid);
+    if(pair) push(pair.relatedProductId, "combina");
+  });
+  // 2) Productos en oferta vigente
+  (promos||[]).filter(pr=>isPromoVigente(pr) && (pr.tipo==="descuento"||pr.tipo==="3x2") && pr.data?.productoId)
+    .forEach(pr=>push(pr.data.productoId, "promo"));
+  // 3) Sin rotación hace 180 días o más
+  const lastMovMap = buildLastMovMap(stockLog);
+  products
+    .filter(p=>p.stock>0 && !cartPids.has(p.id) && !sugeridos.has(p.id))
+    .map(p=>({p, dias:diasSinRotacion(lastMovMap,p.id)}))
+    .filter(x=>x.dias!==null && x.dias>=180)
+    .sort((a,b)=>b.dias-a.dias)
+    .forEach(x=>push(x.p.id, "rotacion"));
+
+  return out.slice(0,4);
+}
 // Calcula el descuento equivalente {type,value} según la promo y la cantidad actual del item
 function computeAutoDisc(promo, qty) {
   if(!promo) return {disc:null, label:null};
@@ -2840,9 +2891,9 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
           onPedirEncargue={(items)=>{setDeepLinkSolicitudItem(items);setTab("solicitud");}}
           onResolverEncargue={resolverEncargue}
           currentUser={currentUser} isMobile={isMobile}/>}
-        {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} promos={promos} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={setPreviewListId}/>}
+        {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} promos={promos} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={setPreviewListId} productPairs={productPairs} stockLog={stockLog}/>}
         {tab==="clientes"   && <ClientesPanel clients={clients} onSave={saveClient} onDelete={deleteClient} onRequestDelete={requestDeleteClient} onRejectDelete={rejectDeleteClient} currentUser={currentUser} isMobile={isMobile} orders={orders}/>}
-        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onSetExpiry={setQuoteExpiry} onEnsureShareToken={ensureShareToken} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={setPreviewListId}/>}
+        {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onSetExpiry={setQuoteExpiry} onEnsureShareToken={ensureShareToken} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={setPreviewListId} promos={promos} productPairs={productPairs} stockLog={stockLog}/>}
         {tab==="precios"    && <Precios products={pricedProducts} canScan={currentUser.role==="admin"||isTestOrder(currentUser.vendedor||currentUser.name)||currentUser.barcodeEnabled} showCamilaPrice={(currentUser.vendedor||currentUser.name)==="Camila"}/>}
         {tab==="stock"      && <>
               {isTestUser && (
@@ -4359,7 +4410,7 @@ function EditableQty({qty, onChange, small}) {
   );
 }
 
-function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=false,orders=[],sortByPopularity=false}) {
+function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=false,orders=[],sortByPopularity=false,productPairs=[],stockLog=[]}) {
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("todos");
   const [catOpen,setCatOpen]=useState(false);
@@ -4467,8 +4518,39 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
     });
   };
 
+  // ── Sugerencias al vendedor (combina / en oferta / sin rotación) ──
+  const sugerencias = useMemo(
+    () => loteMode ? [] : buildVendorSuggestions({products, promos, productPairs, stockLog, cart}),
+    [products, promos, productPairs, stockLog, cart, loteMode]
+  );
+  const MOTIVO_CFG = {
+    combina:  {label:"Combina con el pedido", bg:"#eaf4fc", color:"#1a5276", Icon:RefreshCw},
+    promo:    {label:"En oferta",             bg:"#fdecea", color:RED,      Icon:Tag},
+    rotacion: {label:"Hace tiempo sin rotar", bg:"#fef9e7", color:"#b7770d", Icon:AlertTriangle},
+  };
+
   return (
     <div>
+      {sugerencias.length>0 && (
+        <div style={{background:"#fff",borderRadius:12,padding:14,marginBottom:12,boxShadow:"0 1px 4px #0001"}}>
+          <div style={{fontWeight:800,fontSize:12.5,color:"#888",marginBottom:8,display:"flex",alignItems:"center",gap:5,textTransform:"uppercase",letterSpacing:.4}}><Star size={12} strokeWidth={2.4}/>Sugerencias para ofrecer</div>
+          <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:2}}>
+            {sugerencias.map(({product,motivo})=>{
+              const cfg = MOTIVO_CFG[motivo];
+              return (
+                <div key={product.id} style={{flexShrink:0,minWidth:190,background:cfg.bg,borderRadius:10,padding:"9px 11px"}}>
+                  <div style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:800,color:cfg.color,marginBottom:5}}><cfg.Icon size={10} strokeWidth={2.6}/>{cfg.label.toUpperCase()}</div>
+                  <div style={{fontSize:12,fontWeight:700,color:"#1a1a1a",lineHeight:1.3,marginBottom:6,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{product.name}</div>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <span style={{fontSize:12,fontWeight:800,color:"#1a1a1a"}}>{fARS(product.salePrice)}</span>
+                    <button onClick={()=>addC(product)} style={{padding:"4px 10px",borderRadius:7,border:"none",background:cfg.color,color:"#fff",fontWeight:800,fontSize:11,cursor:"pointer"}}>+ Agregar</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px #0001"}}>
         <div style={{position:"relative",marginBottom:10}}>
           <Search size={14} color="#aaa" strokeWidth={2.3} style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)"}}/>
@@ -4651,7 +4733,7 @@ function CartSummaryLines({cart}) {
   );
 }
 
-function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSaveClient,promos,orders,priceLists,previewListId,onChangeList}) {
+function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSaveClient,promos,orders,priceLists,previewListId,onChangeList,productPairs,stockLog}) {
   const [selectedClient, setSelectedClient] = useState(null);
   const [notes,setNotes]=useState("");
   const [vendedor,setVendedor]=useState(currentUser.role==="vendedor"?(currentUser.vendedor||currentUser.name):"");
@@ -4723,7 +4805,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
 
         {mStep===2 && (
           <div style={{flex:1,overflow:"auto",paddingBottom:cart.length>0?72:0}}>
-            <ProductSelector products={products} cart={cart} setCart={setCart} isMobile={true} promos={promos} orders={orders} sortByPopularity={true}/>
+            <ProductSelector products={products} cart={cart} setCart={setCart} isMobile={true} promos={promos} orders={orders} sortByPopularity={true} productPairs={productPairs} stockLog={stockLog}/>
           </div>
         )}
         {mStep===2 && cart.length>0&&(
@@ -4772,7 +4854,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
     <div style={{display:"grid",gridTemplateColumns:"1fr 330px",gap:18,alignItems:"start"}}>
       <div>
         <div style={{fontWeight:800,fontSize:15,marginBottom:12,display:"flex",alignItems:"center",gap:7}}><ShoppingCart size={15} strokeWidth={2.3}/>Nuevo Pedido — Seleccioná productos</div>
-        <ProductSelector products={products} cart={cart} setCart={setCart} promos={promos} orders={orders} sortByPopularity={true}/>
+        <ProductSelector products={products} cart={cart} setCart={setCart} promos={promos} orders={orders} sortByPopularity={true} productPairs={productPairs} stockLog={stockLog}/>
       </div>
       <div style={{position:"sticky",top:16}}>
         <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 2px 12px #0002"}}>
@@ -4826,7 +4908,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
   );
 }
 
-function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,onSetExpiry,onEnsureShareToken,onTabChange,currentUser,isMobile,clients,onSaveClient,orders,priceLists,previewListId,onChangeList}) {
+function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,onSetExpiry,onEnsureShareToken,onTabChange,currentUser,isMobile,clients,onSaveClient,orders,priceLists,previewListId,onChangeList,promos,productPairs,stockLog}) {
   const [view,setView]=useState("lista");
   const [expanded,setExpanded]=useState(null);
   const getP=id=>products.find(p=>p.id===id);
@@ -4836,7 +4918,7 @@ function Cotizaciones({quotes,products,vendors,onAdd,onDel,onConvert,onExtend,on
         <button onClick={()=>setView("lista")} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="lista"?`linear-gradient(135deg,${REDD},${RED})`:"transparent",color:view==="lista"?"#fff":"#555",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}><FileText size={13} strokeWidth={2.3}/>Lista de Cotizaciones ({quotes.filter(q=>!q.convertida).length})</button>
         <button onClick={()=>setView("nueva")} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:view==="nueva"?`linear-gradient(135deg,${REDD},${RED})`:"transparent",color:view==="nueva"?"#fff":"#555",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}><Plus size={13} strokeWidth={2.4}/>Nueva Cotización</button>
       </div>
-      {view==="nueva" && <NuevaCotizacion products={products} vendors={vendors} onAdd={async(q)=>{await onAdd(q);setView("lista");}} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={onSaveClient} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={onChangeList}/>}
+      {view==="nueva" && <NuevaCotizacion products={products} vendors={vendors} onAdd={async(q)=>{await onAdd(q);setView("lista");}} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={onSaveClient} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={onChangeList} promos={promos} productPairs={productPairs} stockLog={stockLog}/>}
       {view==="lista" && (quotes.length===0
         ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}><div style={{display:"flex",justifyContent:"center"}}><FileText size={42} color="#ddd" strokeWidth={1.7}/></div><div style={{marginTop:8}}>No hay cotizaciones aún</div></div>
         : quotes.map(q=><QuoteCard key={q.id} q={q} exp={expanded===q.id} toggle={()=>setExpanded(expanded===q.id?null:q.id)} getP={getP} onDel={onDel} onConvert={async(qt)=>{await onConvert(qt);onTabChange("central");}} onExtend={onExtend} onSetExpiry={onSetExpiry} currentUser={currentUser} products={products} onEnsureShareToken={onEnsureShareToken}/>)
@@ -5049,7 +5131,7 @@ function QuoteDelBtn({onConfirm}) {
   return <button onClick={()=>setC(true)} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>🗑 Eliminar</button>;
 }
 
-function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,onSaveClient,orders,priceLists,previewListId,onChangeList}) {
+function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,onSaveClient,orders,priceLists,previewListId,onChangeList,promos,productPairs,stockLog}) {
   const PURPLE="#6c3483"; const PURPLEG="linear-gradient(135deg,#6c3483,#9b59b6)";
   const [selectedClient,setSelectedClient]=useState(null);
   const [notes,setNotes]=useState("");
@@ -5135,7 +5217,7 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,on
       {/* Paso 2 — Productos */}
       {mStep===2 && (
         <div style={{flex:1,overflow:"auto",paddingBottom:cart.length>0?72:0}}>
-          <ProductSelector products={products} cart={cart} setCart={setCart} isMobile={true} orders={orders} sortByPopularity={true}/>
+          <ProductSelector products={products} cart={cart} setCart={setCart} isMobile={true} promos={promos} orders={orders} sortByPopularity={true} productPairs={productPairs} stockLog={stockLog}/>
         </div>
       )}
       {mStep===2 && cart.length>0 && (
@@ -5197,7 +5279,7 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,on
     <div style={{display:"grid",gridTemplateColumns:"1fr 330px",gap:18,alignItems:"start"}}>
       <div>
         <div style={{fontWeight:800,fontSize:15,marginBottom:12,display:"flex",alignItems:"center",gap:7}}><FileText size={15} strokeWidth={2.3}/>Nueva Cotización - Seleccioná productos</div>
-        <ProductSelector products={products} cart={cart} setCart={setCart} orders={orders} sortByPopularity={true}/>
+        <ProductSelector products={products} cart={cart} setCart={setCart} promos={promos} orders={orders} sortByPopularity={true} productPairs={productPairs} stockLog={stockLog}/>
       </div>
       <div style={{position:"sticky",top:16}}>
         <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 2px 12px #0002",border:"2px solid #e8daef"}}>
@@ -5590,15 +5672,7 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
   const q=search.toLowerCase();
 
   // ── Último movimiento por producto (solo admin) ───────────────────────────
-  const lastMovByPid = useMemo(()=>{
-    const map={};
-    stockLog.forEach(e=>{
-      const d = parseFechaLog(e.fecha);
-      if(!d) return;
-      if(!map[e.productoId] || d > map[e.productoId]) map[e.productoId] = d;
-    });
-    return map;
-  }, [stockLog]);
+  const lastMovByPid = useMemo(()=>buildLastMovMap(stockLog), [stockLog]);
 
   const diasSinRot = (pid) => {
     const last = lastMovByPid[pid];
