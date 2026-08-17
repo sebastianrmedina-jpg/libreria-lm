@@ -179,6 +179,10 @@ const supaAdmin = supabase;
 const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.cost_price,salePrice:r.sale_price,stock:r.stock,multiploCompra:r.multiplo_compra||1,barcode:r.barcode||"",costPriceAnterior:r.cost_price_anterior||0,imageUrl:r.image_url||"",skuProveedor:r.sku_proveedor||null,factorVenta:r.factor_venta||1,variantesHabilitadas:r.variantes_habilitadas||false,noFraccionar:r.no_fraccionar||false});
 const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||"",isTest:r.is_test||false,isSandbox:r.is_sandbox||false,internalNote:r.internal_note||"",editStatus:r.edit_status||"",editReason:r.edit_reason||"",editItems:r.edit_items||null,editTotal:r.edit_total??null,editRejectReason:r.edit_reject_reason||"",comprobanteUrl:r.comprobante_url||"",comprobanteNombre:r.comprobante_nombre||"",comprobanteFecha:r.comprobante_fecha||"",pagoTipo:r.pago_tipo||"",pagoEfectivoFecha:r.pago_efectivo_fecha||"",encargueResuelto:r.encargue_resuelto||false});
 const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,date:r.date,items:r.items||[],validity:r.validity||"",docNum:r.doc_num||"",convertida:r.convertida||false,ordenId:r.orden_id||"",extendida:r.extendida||false,extendReason:r.extend_reason||"",extendDate:r.extend_date||"",globalDisc:r.global_disc||null,subtotal:r.subtotal||0,shareToken:r.share_token||"",customExpiry:r.custom_expiry||""});
+const mapPromo = r => ({id:r.id,tipo:r.tipo,nombre:r.nombre,activa:r.activa!==false,vigenciaDesde:r.vigencia_desde||"",vigenciaHasta:r.vigencia_hasta||"",data:r.data||{},createdAt:r.created_at||""});
+const mapProductPair = r => ({productId:r.product_id, relatedProductId:r.related_product_id, source:r.source||"manual", updatedAt:r.updated_at||""});
+const mapClient = r => ({id:r.id,name:r.name,phone:r.phone||"",email:r.email||"",cuit:r.cuit||"",address:r.address||"",notes:r.notes||"",deleteRequested:r.delete_requested||false,deleteReason:r.delete_reason||"",createdBy:r.created_by||"",createdAt:r.created_at||""});
+const mapStockLogEntry = r => ({...r,productoId:r.producto_id,stockAntes:r.stock_antes,stockDespues:r.stock_despues});
 
 
 // ─── CORRELATIVE NUMBER HELPERS ───────────────────────────────────────────────
@@ -317,7 +321,7 @@ const db = {
   upsertQuote:  async (q) => { const {error} = await supaAdmin.from("lm_quotes").upsert({id:q.id,client:q.client,vendedor:q.vendedor||"",notes:q.notes||"",total:q.total,date:q.date,items:q.items,validity:q.validity||"",doc_num:q.docNum||"",convertida:q.convertida||false,orden_id:q.ordenId||"",extendida:q.extendida||false,extend_reason:q.extendReason||"",extend_date:q.extendDate||"",global_disc:q.globalDisc||null,subtotal:q.subtotal||0,share_token:q.shareToken||null,custom_expiry:q.customExpiry||null}); if(error) throw error; },
   deleteQuote:  async (id) => { const {error} = await supaAdmin.from("lm_quotes").delete().eq("id",id); if(error) throw error; },
 
-  getStockLog:  async () => { const {data,error} = await supabase.from("lm_stocklog").select("*").order("fecha",{ascending:false}); if(error) throw error; return (data||[]).map(r=>({...r,productoId:r.producto_id,stockAntes:r.stock_antes,stockDespues:r.stock_despues})); },
+  getStockLog:  async () => { const {data,error} = await supabase.from("lm_stocklog").select("*").order("fecha",{ascending:false}); if(error) throw error; return (data||[]).map(mapStockLogEntry); },
   addStockLog:  async (e) => { const {error} = await supaAdmin.from("lm_stocklog").insert({id:e.id,fecha:e.fecha,usuario:e.usuario,rol:e.rol,tipo:e.tipo,producto_id:e.productoId,producto:e.producto,stock_antes:e.stockAntes,stock_despues:e.stockDespues,cambio:e.cambio,motivo:e.motivo}); if(error) throw error; },
   clearStockLog: async () => { const {error} = await supaAdmin.from("lm_stocklog").delete().neq("id","none"); if(error) throw error; },
 
@@ -327,7 +331,7 @@ const db = {
   deleteNotif:  async (id) => { const {error} = await supaAdmin.from("lm_notifs").delete().eq("id",id); if(error) throw error; },
   clearNotifs:  async () => { const {error} = await supaAdmin.from("lm_notifs").delete().neq("id","none"); if(error) throw error; },
   // Clients
-  getClients:   async () => { const {data,error} = await supabase.from("lm_clients").select("*").order("name"); if(error) throw error; return (data||[]).map(r=>({id:r.id,name:r.name,phone:r.phone||"",email:r.email||"",cuit:r.cuit||"",address:r.address||"",notes:r.notes||"",deleteRequested:r.delete_requested||false,deleteReason:r.delete_reason||"",createdBy:r.created_by||"",createdAt:r.created_at||""})); },
+  getClients:   async () => { const {data,error} = await supabase.from("lm_clients").select("*").order("name"); if(error) throw error; return (data||[]).map(mapClient); },
   saveClient:   async (c) => { const {error} = await supaAdmin.from("lm_clients").upsert({id:c.id,name:c.name,phone:c.phone||"",email:c.email||"",cuit:c.cuit||"",address:c.address||"",notes:c.notes||"",delete_requested:c.deleteRequested||false,delete_reason:c.deleteReason||"",created_by:c.createdBy||"",created_at:c.createdAt||""}); if(error) throw error; },
   deleteClient: async (id) => { const {error} = await supaAdmin.from("lm_clients").delete().eq("id",id); if(error) throw error; },
   // Counters
@@ -359,14 +363,14 @@ const db = {
   clearActivity: async () => { const {error} = await supaAdmin.from("lm_activity").delete().neq("id","none"); if(error) throw error; },
   // Ofertas y combos (promos)
   // SQL: CREATE TABLE lm_promos (id TEXT PRIMARY KEY, tipo TEXT NOT NULL, nombre TEXT NOT NULL, activa BOOLEAN DEFAULT true, vigencia_desde TEXT DEFAULT '', vigencia_hasta TEXT DEFAULT '', data JSONB DEFAULT '{}', created_at TEXT DEFAULT '');
-  getPromos:    async () => { try { const {data,error} = await supabase.from("lm_promos").select("*").order("created_at",{ascending:false}); if(error) throw error; return (data||[]).map(r=>({id:r.id,tipo:r.tipo,nombre:r.nombre,activa:r.activa!==false,vigenciaDesde:r.vigencia_desde||"",vigenciaHasta:r.vigencia_hasta||"",data:r.data||{},createdAt:r.created_at||""})); } catch(e) { console.warn("getPromos:", e); return []; } },
+  getPromos:    async () => { try { const {data,error} = await supabase.from("lm_promos").select("*").order("created_at",{ascending:false}); if(error) throw error; return (data||[]).map(mapPromo); } catch(e) { console.warn("getPromos:", e); return []; } },
   savePromo:    async (p) => { const {error} = await supaAdmin.from("lm_promos").upsert({id:p.id,tipo:p.tipo,nombre:p.nombre,activa:p.activa!==false,vigencia_desde:p.vigenciaDesde||"",vigencia_hasta:p.vigenciaHasta||"",data:p.data||{},created_at:p.createdAt||new Date().toISOString()}); if(error) throw error; },
   deletePromo:  async (id) => { const {error} = await supaAdmin.from("lm_promos").delete().eq("id",id); if(error) throw error; },
   // Combinaciones producto→producto para el aviso destacado de la web ("combina con tu compra").
   // source "manual" = cargada a mano por el admin, siempre gana. "auto" = calculada
   // sola a partir de qué se compró junto en pedidos reales, se recalcula cada tanto.
   // SQL: CREATE TABLE lm_product_pairs (product_id TEXT PRIMARY KEY, related_product_id TEXT NOT NULL, source TEXT DEFAULT 'manual', updated_at TIMESTAMPTZ DEFAULT now());
-  getProductPairs: async () => { try { const {data,error} = await supabase.from("lm_product_pairs").select("*"); if(error) throw error; return (data||[]).map(r=>({productId:r.product_id, relatedProductId:r.related_product_id, source:r.source||"manual", updatedAt:r.updated_at||""})); } catch(e) { console.warn("getProductPairs:", e); return []; } },
+  getProductPairs: async () => { try { const {data,error} = await supabase.from("lm_product_pairs").select("*"); if(error) throw error; return (data||[]).map(mapProductPair); } catch(e) { console.warn("getProductPairs:", e); return []; } },
   saveProductPair: async (pair) => { const {error} = await supaAdmin.from("lm_product_pairs").upsert({product_id:pair.productId, related_product_id:pair.relatedProductId, source:pair.source||"manual", updated_at:new Date().toISOString()}); if(error) throw error; },
   deleteProductPair: async (productId) => { const {error} = await supaAdmin.from("lm_product_pairs").delete().eq("product_id",productId); if(error) throw error; },
   // Configuracion global de la app (un solo registro con id="global")
@@ -2637,19 +2641,92 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       .on("postgres_changes", {event:"DELETE", schema:"public", table:"lm_purchase_orders"}, (payload) => {
         setPurchaseOrders(prev => prev.filter(x => x.id !== payload.old.id));
       })
+      // OFERTAS Y COMBOS (incluye Aviso destacado) — antes solo se actualizaban al recargar
+      .on("postgres_changes", {event:"INSERT", schema:"public", table:"lm_promos"}, (payload) => {
+        const p = mapPromo(payload.new);
+        setPromos(prev => prev.find(x=>x.id===p.id) ? prev : [p,...prev]);
+      })
+      .on("postgres_changes", {event:"UPDATE", schema:"public", table:"lm_promos"}, (payload) => {
+        const p = mapPromo(payload.new);
+        setPromos(prev => prev.map(x => x.id===p.id ? p : x));
+      })
+      .on("postgres_changes", {event:"DELETE", schema:"public", table:"lm_promos"}, (payload) => {
+        setPromos(prev => prev.filter(x => x.id !== payload.old.id));
+      })
+      // COMBINACIONES DE PRODUCTOS
+      .on("postgres_changes", {event:"INSERT", schema:"public", table:"lm_product_pairs"}, (payload) => {
+        const pp = mapProductPair(payload.new);
+        setProductPairs(prev => [...prev.filter(x=>x.productId!==pp.productId), pp]);
+      })
+      .on("postgres_changes", {event:"UPDATE", schema:"public", table:"lm_product_pairs"}, (payload) => {
+        const pp = mapProductPair(payload.new);
+        setProductPairs(prev => prev.map(x => x.productId===pp.productId ? pp : x));
+      })
+      .on("postgres_changes", {event:"DELETE", schema:"public", table:"lm_product_pairs"}, (payload) => {
+        setProductPairs(prev => prev.filter(x => x.productId !== payload.old.product_id));
+      })
+      // LISTAS DE PRECIO
+      .on("postgres_changes", {event:"INSERT", schema:"public", table:"lm_pricelists"}, (payload) => {
+        setPriceLists(prev => prev.find(x=>x.id===payload.new.id) ? prev : [...prev, payload.new]);
+      })
+      .on("postgres_changes", {event:"UPDATE", schema:"public", table:"lm_pricelists"}, (payload) => {
+        setPriceLists(prev => prev.map(x => x.id===payload.new.id ? payload.new : x));
+      })
+      .on("postgres_changes", {event:"DELETE", schema:"public", table:"lm_pricelists"}, (payload) => {
+        setPriceLists(prev => prev.filter(x => x.id !== payload.old.id));
+      })
+      // CLIENTES
+      .on("postgres_changes", {event:"INSERT", schema:"public", table:"lm_clients"}, (payload) => {
+        const c = mapClient(payload.new);
+        setClients(prev => prev.find(x=>x.id===c.id) ? prev : [...prev, c]);
+      })
+      .on("postgres_changes", {event:"UPDATE", schema:"public", table:"lm_clients"}, (payload) => {
+        const c = mapClient(payload.new);
+        setClients(prev => prev.map(x => x.id===c.id ? c : x));
+      })
+      .on("postgres_changes", {event:"DELETE", schema:"public", table:"lm_clients"}, (payload) => {
+        setClients(prev => prev.filter(x => x.id !== payload.old.id));
+      })
+      // CONFIGURACIÓN GLOBAL (ej: exigir pago confirmado) — un solo registro
+      .on("postgres_changes", {event:"UPDATE", schema:"public", table:"lm_settings"}, (payload) => {
+        setSettings({exigirPagoConfirmado: payload.new.exigir_pago_confirmado || false});
+      })
+      // HISTORIAL DE STOCK
+      .on("postgres_changes", {event:"INSERT", schema:"public", table:"lm_stocklog"}, (payload) => {
+        const e = mapStockLogEntry(payload.new);
+        setStockLog(prev => prev.find(x=>x.id===e.id) ? prev : [e,...prev]);
+      })
+      .on("postgres_changes", {event:"DELETE", schema:"public", table:"lm_stocklog"}, (payload) => {
+        setStockLog(prev => prev.filter(x => x.id !== payload.old.id));
+      })
+      // ACTIVIDAD
+      .on("postgres_changes", {event:"INSERT", schema:"public", table:"lm_activity"}, (payload) => {
+        setActivity(prev => prev.find(x=>x.id===payload.new.id) ? prev : [payload.new,...prev]);
+      })
+      .on("postgres_changes", {event:"DELETE", schema:"public", table:"lm_activity"}, (payload) => {
+        setActivity(prev => prev.filter(x => x.id !== payload.old.id));
+      })
       .subscribe(async (status) => {
         console.log("Realtime status:", status);
         if(status === "SUBSCRIBED") {
           // Al reconectarse después de un error, recargar datos para no perderse
           // eventos que pasaron mientras el canal estaba caído
           try {
-            const [freshOrders, freshQuotes, freshNotifs, freshPOs] = await Promise.all([
+            const [freshOrders, freshQuotes, freshNotifs, freshPOs, freshPromos, freshPairs, freshPriceLists, freshClients, freshSettings, freshStockLog, freshActivity] = await Promise.all([
               db.getOrders(), db.getQuotes(), db.getNotifs(), db.getPurchaseOrders(),
+              db.getPromos(), db.getProductPairs(), db.getPriceLists(), db.getClients(), db.getSettings(), db.getStockLog(), db.getActivity(),
             ]);
             setOrders(freshOrders);
             setQuotes(freshQuotes);
             setNotifs(freshNotifs);
             setPurchaseOrders(freshPOs);
+            setPromos(freshPromos);
+            setProductPairs(freshPairs);
+            setPriceLists(freshPriceLists);
+            setClients(freshClients);
+            setSettings(freshSettings);
+            setStockLog(freshStockLog);
+            setActivity(freshActivity);
           } catch(e) { console.warn("Error recargando datos en reconexión:", e); }
         }
         if(status === "CHANNEL_ERROR") {
