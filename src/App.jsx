@@ -483,6 +483,16 @@ const parseFechaLog = (s) => {
   if(!dd||!mm||!yyyy) return null;
   return new Date(+yyyy, +mm-1, +dd);
 };
+// "fecha" se guarda como texto D/M/AAAA (sin ceros a la izquierda), así que un
+// ORDER BY de SQL o un sort de string ordena mal (ej: "10/8" antes que "9/8").
+// Hay que compararlo siempre como fecha real. Como la fecha de una solicitud
+// no tiene hora, dos creadas el mismo día empatan — ahí desempata el id
+// (Date.now() en base36, así que también crece con el tiempo).
+const comparePOFechaDesc = (a,b) => {
+  const diff = (parseFechaLog(b.fecha)?.getTime()||0) - (parseFechaLog(a.fecha)?.getTime()||0);
+  if(diff!==0) return diff;
+  return (b.id||"") > (a.id||"") ? 1 : (b.id||"") < (a.id||"") ? -1 : 0;
+};
 // Pedidos viejos (de versiones anteriores de esta funcionalidad) pueden tener pagoTipo="comprobante"
 // o "efectivo" sin sufijo. Los normalizamos a su equivalente confirmado para que sigan funcionando.
 const normPagoTipo = (tipo) => tipo==="comprobante" ? "comprobante_confirmado" : tipo==="efectivo" ? "efectivo_confirmado" : (tipo||"");
@@ -3263,7 +3273,7 @@ function ConsolaAprobBaja({c,onDeleteClient,onRejectDeleteClient}) {
 function ConsolaAprobaciones({orders,clients,purchaseOrders,onApproveEditRequest,onRejectEditRequest,onApproveEdit,onRejectEdit,onConfirmarComprobante,onRechazarComprobante,onConfirmarEfectivo,onRechazarEfectivo,onDeleteClient,onRejectDeleteClient,onQuickReviewPO,onViewPO,onViewOrder}) {
   const ediciones = orders.filter(o=>o.editStatus==="solicitada"||o.editStatus==="en revisión");
   const pagos = orders.filter(o=>{const pt=normPagoTipo(o.pagoTipo); return pt==="comprobante_pendiente"||pt==="efectivo_pendiente";});
-  const solicitudes = (purchaseOrders||[]).filter(po=>po.estado==="abierta");
+  const solicitudes = (purchaseOrders||[]).filter(po=>po.estado==="abierta").sort(comparePOFechaDesc);
   const bajas = (clients||[]).filter(c=>c.deleteRequested);
   const total = ediciones.length+pagos.length+solicitudes.length+bajas.length;
   const [open,setOpen] = useState(true);
@@ -6527,7 +6537,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
     onConsumedPrefillItem && onConsumedPrefillItem();
   }, [prefillItem]);
 
-  const myOrders = isAdmin ? purchaseOrders : purchaseOrders.filter(po=>po.vendedor===currentUser.vendedor||po.vendedor===currentUser.name);
+  const myOrders = (isAdmin ? purchaseOrders : purchaseOrders.filter(po=>po.vendedor===currentUser.vendedor||po.vendedor===currentUser.name)).slice().sort(comparePOFechaDesc);
   const [verHistorial, setVerHistorial] = useState(false);
   const myOrdersFiltradas = myOrders.filter(po => verHistorial ? po.estado==="recibido" : po.estado!=="recibido");
   const countCerradas = myOrders.filter(po=>po.estado==="recibido").length;
