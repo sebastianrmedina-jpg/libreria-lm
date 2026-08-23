@@ -6291,6 +6291,15 @@ const ESTADO_CFG = {
   pedido:    {label:"Pedido",     color:"#6c3483", bg:"#f3e8fb",  Icon:Truck},
   recibido:  {label:"Recibida",   color:"#1e8449", bg:"#d5f5e3",  Icon:CheckCircle},
 };
+// "Marcar como Recibido" solo cambia el estado — el stock recién se carga en un
+// segundo paso aparte ("Ingresar al Stock"). Si alguien hace el primero y no el
+// segundo, la solicitud queda con cara de "terminada" (verde, con tilde) sin que
+// la mercadería haya entrado al stock. Esta variante la marca fuerte para que no
+// pase desapercibida hasta que se resuelva.
+const stockPendiente = (po) => po.estado==="recibido" && !po.fechaRecibido;
+const getEstadoCfg = (po) => stockPendiente(po)
+  ? {label:"Recibida — falta cargar stock", color:"#c0392b", bg:"#fdecea", Icon:AlertTriangle}
+  : ESTADO_CFG[po.estado]||{};
 
 function printSolicitudPDF(po, logoSrc) {
   const rows = po.items.map(it=>`
@@ -6539,9 +6548,12 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
 
   const myOrders = (isAdmin ? purchaseOrders : purchaseOrders.filter(po=>po.vendedor===currentUser.vendedor||po.vendedor===currentUser.name)).slice().sort(comparePOFechaDesc);
   const [verHistorial, setVerHistorial] = useState(false);
-  const myOrdersFiltradas = myOrders.filter(po => verHistorial ? po.estado==="recibido" : po.estado!=="recibido");
-  const countCerradas = myOrders.filter(po=>po.estado==="recibido").length;
-  const countActivas = myOrders.filter(po=>po.estado!=="recibido").length;
+  // Una solicitud "recibida" a la que todavía le falta el paso de "Ingresar al
+  // Stock" (stockPendiente) sigue siendo trabajo pendiente, no historial cerrado
+  // — si no, queda enterrada en la pestaña que menos se mira a diario.
+  const myOrdersFiltradas = myOrders.filter(po => verHistorial ? (po.estado==="recibido" && !stockPendiente(po)) : (po.estado!=="recibido" || stockPendiente(po)));
+  const countCerradas = myOrders.filter(po=>po.estado==="recibido" && !stockPendiente(po)).length;
+  const countActivas = myOrders.filter(po=>po.estado!=="recibido" || stockPendiente(po)).length;
 
   const savePO = async (po) => {
     setPurchaseOrders(prev=>prev.find(x=>x.id===po.id)?prev.map(x=>x.id===po.id?po:x):[po,...prev]);
@@ -6617,9 +6629,9 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
             <div style={{fontSize:13,marginTop:4}}>{verHistorial?"Las solicitudes ingresadas aparecen acá":"Creá una para pedir mercadería al proveedor"}</div>
           </div>
         : myOrdersFiltradas.map(po=>{
-            const cfg = ESTADO_CFG[po.estado]||{};
+            const cfg = getEstadoCfg(po);
             return (
-              <div key={po.id} style={{background:"#fff",borderRadius:12,marginBottom:8,boxShadow:"0 1px 6px #0001",overflow:"hidden",margin:isMobile?"0 12px 8px":"0 0 8px",opacity:po.estado==="recibido"?0.85:1}}>
+              <div key={po.id} style={{background:"#fff",borderRadius:12,marginBottom:8,boxShadow:stockPendiente(po)?"0 0 0 1.5px #f5b7b1, 0 1px 6px #0001":"0 1px 6px #0001",overflow:"hidden",margin:isMobile?"0 12px 8px":"0 0 8px",opacity:po.estado==="recibido"&&!stockPendiente(po)?0.85:1}}>
                 <div style={{padding:"13px 16px",display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer"}} onClick={()=>openDetail(po)}>
                   <div style={{width:10,height:10,borderRadius:"50%",background:cfg.color,marginTop:5,flexShrink:0}}/>
                   <div style={{flex:1,minWidth:0}}>
@@ -6648,8 +6660,8 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
 
   // ── DETALLE ──
   if(view==="detalle" && selected) {
-    const cfg = ESTADO_CFG[selected.estado]||{};
     const po = purchaseOrders.find(x=>x.id===selected.id)||selected;
+    const cfg = getEstadoCfg(po);
     // Editable solo mientras está abierta o en revisión — una vez pedida al proveedor
     // (o recibida) la lista ya se cerró y no tiene sentido seguir modificándola.
     const editable = po.estado==="abierta" || po.estado==="revisando";
@@ -6820,11 +6832,13 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
           {isAdmin&&<button onClick={()=>deletePO(po.id)} style={{padding:"11px 16px",borderRadius:10,border:"1.5px solid #fcc",background:"#fff",color:"#c0392b",fontWeight:700,fontSize:13,cursor:"pointer",display:"inline-flex",alignItems:"center"}}><Trash size={13} strokeWidth={2.4}/></button>}
         </div>
 
-        {/* Ingresar mercadería desde solicitud — solo si ya está marcada como Recibida y todavía no se cargó a stock, para no duplicar */}
+        {/* Ingresar mercadería desde solicitud — solo si ya está marcada como Recibida y todavía no se cargó a stock, para no duplicar.
+            Rojo/naranja a propósito (no verde de "éxito"): marcar "Recibido" no carga el stock por sí solo, y este es
+            justamente el paso que queda pendiente hasta que se hace click en "Ingresar al Stock" de acá abajo. */}
         {isAdmin && po.estado==="recibido" && !po.fechaRecibido && (
-          <div style={{background:"#d5f5e3",border:"2px solid #1e8449",borderRadius:12,padding:16,marginTop:12,margin:isMobile?"12px 12px 0":"12px 0 0"}}>
-            <div style={{fontWeight:800,fontSize:14,color:"#1e8449",marginBottom:8,display:"flex",alignItems:"center",gap:6}}><Package size={14} strokeWidth={2.3}/>Dar de alta en stock</div>
-            <div style={{fontSize:12,color:"#1e8449",marginBottom:12,lineHeight:1.5}}>
+          <div style={{background:"#fdecea",border:"2px solid #c0392b",borderRadius:12,padding:16,marginTop:12,margin:isMobile?"12px 12px 0":"12px 0 0"}}>
+            <div style={{fontWeight:800,fontSize:14,color:"#c0392b",marginBottom:8,display:"flex",alignItems:"center",gap:6}}><AlertTriangle size={14} strokeWidth={2.3}/>Falta cargar el stock de esta solicitud</div>
+            <div style={{fontSize:12,color:"#922b21",marginBottom:12,lineHeight:1.5}}>
               Podés ingresar el stock recibido directamente desde esta solicitud. Ajustá las cantidades si recibiste diferente a lo pedido.
             </div>
             <IngresarDesdeSolicitud po={po} products={products} onStock={onStockExternal} onDone={()=>setView("lista")}
