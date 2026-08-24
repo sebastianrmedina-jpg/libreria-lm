@@ -3683,7 +3683,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                     style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48,flexShrink:0}}>
                     <option value="%">%</option><option value="$">$</option>
                   </select>
-                  <input type="number" min="0" value={editGlobalDisc.value} onChange={e=>setEditGlobalDisc(d=>({...d,value:e.target.value}))}
+                  <input type="number" min="0" value={editGlobalDisc.value} onChange={e=>setEditGlobalDisc(d=>({...d,value:e.target.value}))} onFocus={e=>e.target.select()}
                     placeholder="0" style={{flex:1,minWidth:60,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
                   {editDiscAmt>0&&<span style={{fontSize:11,color:"#1e8449",fontWeight:700,whiteSpace:"nowrap"}}>−{fARS(editDiscAmt)}</span>}
                 </div>
@@ -4754,7 +4754,7 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
               {ic?.porEncargue && <div style={{marginBottom:10}}><span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef3e0",color:"#b7770d",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}><Package size={9} strokeWidth={2.5}/>{ic.qtyFaltante} por encargue</span></div>}
               {ic?<div style={{display:"flex",alignItems:"center",gap:5}}>
                 <button onClick={()=>setQ(p.id,ic.qty-step(p))} style={{width:27,height:27,borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:15,fontWeight:700}}>−</button>
-                <input type="number" value={ic.qty} onChange={e=>{
+                <input type="number" value={ic.qty} onFocus={e=>e.target.select()} onChange={e=>{
                   const val = +e.target.value||0;
                   if(loteMode && p.multiploCompra>1 && val>0 && val%p.multiploCompra!==0) {
                     const snapped = Math.max(p.multiploCompra, Math.round(val/p.multiploCompra)*p.multiploCompra);
@@ -4921,7 +4921,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
                   style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48,flexShrink:0}}>
                   <option value="%">%</option><option value="$">$</option>
                 </select>
-                <input type="number" min="0" value={globalDisc.value} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))}
+                <input type="number" min="0" value={globalDisc.value} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))} onFocus={e=>e.target.select()}
                   placeholder="0" style={{flex:1,minWidth:60,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
                 {globalDiscAmt>0&&<span style={{fontSize:11,color:"#1e8449",fontWeight:700,whiteSpace:"nowrap"}}>−{fARS(globalDiscAmt)}</span>}
               </div>
@@ -4980,7 +4980,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
                 style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48}}>
                 <option value="%">%</option><option value="$">$</option>
               </select>
-              <input type="number" min="0" value={globalDisc.value} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))}
+              <input type="number" min="0" value={globalDisc.value} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))} onFocus={e=>e.target.select()}
                 placeholder="0" style={{flex:1,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
               {globalDiscAmt>0&&<span style={{fontSize:11,color:"#1e8449",fontWeight:700,whiteSpace:"nowrap"}}>−{fARS(globalDiscAmt)}</span>}
             </div>
@@ -5342,7 +5342,7 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,on
                 style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48,flexShrink:0}}>
                 <option value="%">%</option><option value="$">$</option>
               </select>
-              <input type="number" min="0" value={globalDisc.value} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))}
+              <input type="number" min="0" value={globalDisc.value} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))} onFocus={e=>e.target.select()}
                 placeholder="0" style={{flex:1,minWidth:60,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
               {globalDiscAmt>0&&<span style={{fontSize:11,color:PURPLE,fontWeight:700,whiteSpace:"nowrap"}}>-{fARS(globalDiscAmt)}</span>}
             </div>
@@ -5426,7 +5426,7 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,on
                 style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48,flexShrink:0}}>
                 <option value="%">%</option><option value="$">$</option>
               </select>
-              <input type="number" min="0" value={globalDisc.value} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))}
+              <input type="number" min="0" value={globalDisc.value} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))} onFocus={e=>e.target.select()}
                 placeholder="0" style={{flex:1,minWidth:60,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
               {globalDiscAmt>0&&<span style={{fontSize:11,color:PURPLE,fontWeight:700,whiteSpace:"nowrap"}}>-{fARS(globalDiscAmt)}</span>}
             </div>
@@ -5691,7 +5691,7 @@ function StockAdjust({products,onDel,onAdjust,addLog}) {
                   <label style={{fontSize:12,fontWeight:600,color:"#666",display:"block",marginBottom:4}}>
                     Cantidad a ajustar <span style={{color:"#aaa",fontWeight:400}}>(positivo para agregar, negativo para restar)</span>
                   </label>
-                  <input type="number" value={qty} onChange={e=>setQty(+e.target.value||0)}
+                  <input type="number" value={qty} onChange={e=>setQty(+e.target.value||0)} onFocus={e=>e.target.select()}
                     style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:14,outline:"none",boxSizing:"border-box",textAlign:"center",fontWeight:700}}/>
                   {qty!==0&&<div style={{fontSize:12,color:qty>0?"#1e8449":RED,marginTop:6,fontWeight:600,textAlign:"center"}}>
                     Stock resultante: {Math.max(0, selected.stock + qty)} unidades
@@ -6017,7 +6017,7 @@ function VariantesModal({producto, onClose, onConfirm}) {
         </div>
 
         <label style={{fontSize:12,fontWeight:600,color:"#666",display:"block",marginBottom:4}}>¿Cuántas unidades trae? (factor)</label>
-        <input type="number" value={factor} onChange={e=>setFactor(Math.max(1,+e.target.value||1))} style={{...inputStyle,marginBottom:12}}/>
+        <input type="number" value={factor} onChange={e=>setFactor(Math.max(1,+e.target.value||1))} onFocus={e=>e.target.select()} style={{...inputStyle,marginBottom:12}}/>
 
         <label style={{fontSize:12,fontWeight:600,color:"#666",display:"block",marginBottom:4}}>Nombre de venta (unidad suelta)</label>
         <input value={nombre} onChange={e=>setNombre(e.target.value)} style={{...inputStyle,marginBottom:12}}/>
@@ -6029,7 +6029,7 @@ function VariantesModal({producto, onClose, onConfirm}) {
           </div>
           <div style={{flex:1}}>
             <label style={{fontSize:12,fontWeight:600,color:"#666",display:"block",marginBottom:4}}>Precio unidad ($)</label>
-            <input type="number" value={precio} onChange={e=>setPrecio(+e.target.value||0)} style={inputStyle}/>
+            <input type="number" value={precio} onChange={e=>setPrecio(+e.target.value||0)} onFocus={e=>e.target.select()} style={inputStyle}/>
           </div>
         </div>
 
@@ -6118,7 +6118,7 @@ function EditModal({p,onSave,onClose}) {
         {[["Precio Costo ($)",cost,setCost],["Precio Venta ($)",sale,setSale],["Stock",stock,setStock]].map(([lbl,val,set])=>(
           <div key={lbl} style={{marginBottom:12}}>
             <label style={{fontSize:12,fontWeight:600,color:"#666",display:"block",marginBottom:4}}>{lbl}</label>
-            <input type="number" value={val} onChange={e=>set(+e.target.value||0)} style={{...inputStyle}}/>
+            <input type="number" value={val} onChange={e=>set(+e.target.value||0)} onFocus={e=>e.target.select()} style={{...inputStyle}}/>
           </div>
         ))}
         <div style={{marginBottom:12}}>
@@ -6256,6 +6256,7 @@ function IngresarDesdeSolicitud({po, products, onStock, onDone, onArrived, onRes
                 <td style={{padding:"8px 10px",textAlign:"center"}}>
                   <input type="number" min="0" value={it.qtyRecibida}
                     onChange={e=>update(it.pid,"qtyRecibida",+e.target.value||0)}
+                    onFocus={e=>e.target.select()}
                     style={{width:56,textAlign:"center",padding:"4px",borderRadius:6,border:`1.5px solid ${it.qtyRecibida<it.qty?"#e67e22":it.qtyRecibida>it.qty?"#3498db":"#1e8449"}`,fontWeight:700,fontSize:13,outline:"none"}}/>
                   {it.qtyRecibida<it.qty&&<div style={{fontSize:9,color:"#e67e22",marginTop:2}}>Falta {it.qty-it.qtyRecibida}</div>}
                   {it.qtyRecibida>it.qty&&<div style={{fontSize:9,color:"#3498db",marginTop:2}}>Extra +{it.qtyRecibida-it.qty}</div>}
@@ -6263,6 +6264,7 @@ function IngresarDesdeSolicitud({po, products, onStock, onDone, onArrived, onRes
                 <td style={{padding:"8px 10px",textAlign:"center"}}>
                   <input type="number" min="0" value={it.cost}
                     onChange={e=>update(it.pid,"cost",+e.target.value||0)}
+                    onFocus={e=>e.target.select()}
                     placeholder="$0"
                     style={{width:72,textAlign:"center",padding:"4px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:12,outline:"none"}}/>
                 </td>
@@ -6763,6 +6765,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
                             savePO(updated); setSelected(updated);
                           }} style={{width:24,height:24,borderRadius:5,border:"1.5px solid #ccc",background:"#fff",cursor:"pointer",fontSize:14,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>-</button>
                           <input type="number" min="1" value={it.qty}
+                            onFocus={e=>e.target.select()}
                             onChange={e=>{
                               const newItems=po.items.map((x,j)=>j===i?{...x,qty:+e.target.value||1}:x);
                               const updated={...po,items:newItems};
@@ -6897,7 +6900,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
                     <span style={{fontWeight:600,fontSize:12,flex:1,lineHeight:1.3,marginRight:8}}>{i.name}</span>
                     <div style={{display:"flex",alignItems:"center",gap:4}}>
                       <button onClick={()=>setQty(i.pid,i.qty-1)} style={{width:24,height:24,borderRadius:5,border:"1.5px solid #ccc",background:"#fff",cursor:"pointer",fontSize:14,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>-</button>
-                      <input type="number" value={i.qty} onChange={e=>setQty(i.pid,+e.target.value||0)} style={{width:40,textAlign:"center",padding:"2px",borderRadius:5,border:"1.5px solid #1a5276",fontWeight:700,fontSize:13,outline:"none"}}/>
+                      <input type="number" value={i.qty} onChange={e=>setQty(i.pid,+e.target.value||0)} onFocus={e=>e.target.select()} style={{width:40,textAlign:"center",padding:"2px",borderRadius:5,border:"1.5px solid #1a5276",fontWeight:700,fontSize:13,outline:"none"}}/>
                       <button onClick={()=>setQty(i.pid,i.qty+1)} style={{width:24,height:24,borderRadius:5,border:"1.5px solid #ccc",background:"#fff",cursor:"pointer",fontSize:14,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
                     </div>
                   </div>
@@ -7274,8 +7277,8 @@ function Compras({products,onStock,isMobile,canScan,onResolverEncargue}) {
                 <Field label="SKU *"><input value={manualForm.sku} onChange={e=>setManualForm(f=>({...f,sku:e.target.value.toUpperCase()}))} placeholder="Ej: PROD-001" style={inputStyle}/></Field>
                 <Field label="Detalle *"><input value={manualForm.name} onChange={e=>setManualForm(f=>({...f,name:e.target.value}))} placeholder="Nombre completo del producto" style={inputStyle}/></Field>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                  <Field label="Cantidad"><input type="number" min={1} value={manualForm.qty} onChange={e=>setManualForm(f=>({...f,qty:e.target.value}))} style={inputStyle}/></Field>
-                  <Field label="Costo ($)"><input type="number" min={0} value={manualForm.cost} onChange={e=>setManualForm(f=>({...f,cost:e.target.value}))} style={inputStyle}/></Field>
+                  <Field label="Cantidad"><input type="number" min={1} value={manualForm.qty} onChange={e=>setManualForm(f=>({...f,qty:e.target.value}))} onFocus={e=>e.target.select()} style={inputStyle}/></Field>
+                  <Field label="Costo ($)"><input type="number" min={0} value={manualForm.cost} onChange={e=>setManualForm(f=>({...f,cost:e.target.value}))} onFocus={e=>e.target.select()} style={inputStyle}/></Field>
                 </div>
                 {manualError && <div style={{display:"flex",alignItems:"center",gap:5,color:"#c0392b",fontSize:12,margin:"6px 0",fontWeight:600}}><AlertTriangle size={11} strokeWidth={2.4}/>{manualError}</div>}
                 <button onClick={addManual} style={{width:"100%",padding:"10px",borderRadius:8,border:"none",background:"#e67e22",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",marginTop:4,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
@@ -7342,14 +7345,14 @@ function Compras({products,onStock,isMobile,canScan,onResolverEncargue}) {
                   <div style={{fontSize:11,color:"#888",fontWeight:700,marginBottom:4}}>CANTIDAD</div>
                   <div style={{display:"flex",alignItems:"center",gap:6}}>
                     <button onClick={()=>updI(it.pid,"qty",Math.max(1,it.qty-1))} style={{width:32,height:32,borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",fontWeight:800,fontSize:16,cursor:"pointer"}}>−</button>
-                    <input type="number" min={1} value={it.qty} onChange={e=>updI(it.pid,"qty",+e.target.value)}
+                    <input type="number" min={1} value={it.qty} onChange={e=>updI(it.pid,"qty",+e.target.value)} onFocus={e=>e.target.select()}
                       style={{width:48,textAlign:"center",padding:"5px",borderRadius:7,border:"1.5px solid #e5e5e5",fontWeight:700,fontSize:14,outline:"none"}}/>
                     <button onClick={()=>updI(it.pid,"qty",it.qty+1)} style={{width:32,height:32,borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",fontWeight:800,fontSize:16,cursor:"pointer"}}>+</button>
                   </div>
                 </div>
                 <div>
                   <div style={{fontSize:11,color:"#888",fontWeight:700,marginBottom:4}}>P. COSTO ($)</div>
-                  <input type="number" value={it.cost} onChange={e=>updI(it.pid,"cost",+e.target.value)}
+                  <input type="number" value={it.cost} onChange={e=>updI(it.pid,"cost",+e.target.value)} onFocus={e=>e.target.select()}
                     style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:14,fontWeight:700,outline:"none",boxSizing:"border-box"}}/>
                 </div>
               </div>
@@ -7412,12 +7415,12 @@ function Compras({products,onStock,isMobile,canScan,onResolverEncargue}) {
                   <div><div style={{fontSize:10,fontWeight:700,color:"#666",marginBottom:4}}>SKU *</div>
                     <input value={manualForm.sku} onChange={e=>setManualForm(f=>({...f,sku:e.target.value.toUpperCase()}))} placeholder="Ej: PROD-001" style={{...inputStyle,fontSize:12,padding:"6px 10px"}}/></div>
                   <div><div style={{fontSize:10,fontWeight:700,color:"#666",marginBottom:4}}>Cantidad *</div>
-                    <input type="number" min={1} value={manualForm.qty} onChange={e=>setManualForm(f=>({...f,qty:e.target.value}))} style={{...inputStyle,fontSize:12,padding:"6px 10px"}}/></div>
+                    <input type="number" min={1} value={manualForm.qty} onChange={e=>setManualForm(f=>({...f,qty:e.target.value}))} onFocus={e=>e.target.select()} style={{...inputStyle,fontSize:12,padding:"6px 10px"}}/></div>
                 </div>
                 <div style={{marginBottom:8}}><div style={{fontSize:10,fontWeight:700,color:"#666",marginBottom:4}}>Detalle *</div>
                   <input value={manualForm.name} onChange={e=>setManualForm(f=>({...f,name:e.target.value}))} placeholder="Nombre completo" style={{...inputStyle,fontSize:12,padding:"6px 10px"}}/></div>
                 <div style={{marginBottom:12}}><div style={{fontSize:10,fontWeight:700,color:"#666",marginBottom:4}}>Precio de costo ($)</div>
-                  <input type="number" min={0} value={manualForm.cost} onChange={e=>setManualForm(f=>({...f,cost:e.target.value}))} style={{...inputStyle,fontSize:12,padding:"6px 10px"}}/></div>
+                  <input type="number" min={0} value={manualForm.cost} onChange={e=>setManualForm(f=>({...f,cost:e.target.value}))} onFocus={e=>e.target.select()} style={{...inputStyle,fontSize:12,padding:"6px 10px"}}/></div>
                 {manualError && <div style={{display:"flex",alignItems:"center",gap:5,color:"#c0392b",fontSize:12,marginBottom:8,fontWeight:600}}><AlertTriangle size={11} strokeWidth={2.4}/>{manualError}</div>}
                 <button onClick={addManual} style={{width:"100%",padding:"8px",borderRadius:8,border:"none",background:"#e67e22",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}><Plus size={12} strokeWidth={2.4}/> Agregar a la compra</button>
               </div>
@@ -7453,9 +7456,9 @@ function Compras({products,onStock,isMobile,canScan,onResolverEncargue}) {
                   <div style={{fontSize:10,color:"#aaa",marginBottom:6}}>SKU: {it.pid}</div>
                   <div style={{display:"flex",gap:8}}>
                     <div style={{flex:1}}><div style={{fontSize:10,color:"#aaa",marginBottom:3}}>Cantidad</div>
-                      <input type="number" min={1} value={it.qty} onChange={e=>updI(it.pid,"qty",+e.target.value)} style={{...inputStyle,padding:"5px 7px",fontSize:12}}/></div>
+                      <input type="number" min={1} value={it.qty} onChange={e=>updI(it.pid,"qty",+e.target.value)} onFocus={e=>e.target.select()} style={{...inputStyle,padding:"5px 7px",fontSize:12}}/></div>
                     <div style={{flex:1}}><div style={{fontSize:10,color:"#aaa",marginBottom:3}}>P. Costo ($)</div>
-                      <input type="number" value={it.cost} onChange={e=>updI(it.pid,"cost",+e.target.value)} style={{...inputStyle,padding:"5px 7px",fontSize:12}}/></div>
+                      <input type="number" value={it.cost} onChange={e=>updI(it.pid,"cost",+e.target.value)} onFocus={e=>e.target.select()} style={{...inputStyle,padding:"5px 7px",fontSize:12}}/></div>
                   </div>
                   <div style={{fontSize:11,color:"#666",marginTop:6}}>Subtotal: <strong>{fARS(it.qty*it.cost)}</strong> · Venta: <strong style={{color:RED}}>{fARS(it.cost*MARKUP_VENTA)}</strong></div>
                 </div>
@@ -7542,7 +7545,7 @@ function SandboxStockManager({products, sandboxStock, updateSandboxStock}) {
               </div>
               <div style={{display:"flex",alignItems:"center",gap:5,flexShrink:0}}>
                 <button onClick={()=>setVal(p.id,sbQty-1)} style={{width:26,height:26,borderRadius:6,border:"1.5px solid #d7bde2",background:"#fff",fontWeight:800,cursor:"pointer",fontSize:14,color:"#6c3483"}}>−</button>
-                <input type="number" value={sbQty} onChange={e=>setVal(p.id,e.target.value)}
+                <input type="number" value={sbQty} onChange={e=>setVal(p.id,+e.target.value||0)} onFocus={e=>e.target.select()}
                   style={{width:44,textAlign:"center",padding:"3px",borderRadius:6,border:`1.5px solid ${changed?"#9b59b6":"#d7bde2"}`,fontWeight:700,fontSize:13,outline:"none",color:changed?"#6c3483":"#1a1a1a",background:changed?"#f5eef8":"#fff"}}/>
                 <button onClick={()=>setVal(p.id,sbQty+1)} style={{width:26,height:26,borderRadius:6,border:"1.5px solid #d7bde2",background:"#fff",fontWeight:800,cursor:"pointer",fontSize:14,color:"#6c3483"}}>+</button>
               </div>
@@ -8482,7 +8485,7 @@ function ComboForm({products, editing, nextSku, onSave, onCancel}) {
           const p = products.find(pr=>pr.id===c.pid);
           return (
             <div key={c.pid} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:"#f9f9f9",borderRadius:8,marginBottom:6,border:"1.5px solid #f0f0f0"}}>
-              <input type="number" min="1" value={c.qty} onChange={e=>setQty(c.pid,+e.target.value||1)} style={{width:46,padding:"4px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontWeight:800,fontSize:12,textAlign:"center"}}/>
+              <input type="number" min="1" value={c.qty} onChange={e=>setQty(c.pid,+e.target.value||1)} onFocus={e=>e.target.select()} style={{width:46,padding:"4px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontWeight:800,fontSize:12,textAlign:"center"}}/>
               <span style={{flex:1,fontSize:13,fontWeight:600}}>{p?.name||c.pid}</span>
               <span style={{fontSize:12,color:"#888"}}>{fARS(p?.salePrice||0)} c/u</span>
               <span onClick={()=>delComp(c.pid)} style={{color:RED,cursor:"pointer",padding:"0 4px"}}>✕</span>
@@ -8493,7 +8496,7 @@ function ComboForm({products, editing, nextSku, onSave, onCancel}) {
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,alignItems:"end"}}>
         <Field label="Precio normal (suma)"><div style={{padding:"8px 12px",fontSize:14,color:"#888",textDecoration:"line-through"}}>{fARS(precioNormal)}</div></Field>
-        <Field label="Precio fijo del combo *"><input type="number" value={precioFijo} onChange={e=>setPrecioFijo(e.target.value)} style={{...inputStyle,fontWeight:800,color:RED,fontSize:15}}/></Field>
+        <Field label="Precio fijo del combo *"><input type="number" value={precioFijo} onChange={e=>setPrecioFijo(e.target.value)} onFocus={e=>e.target.select()} style={{...inputStyle,fontWeight:800,color:RED,fontSize:15}}/></Field>
       </div>
 
       {precioFijo && precioNormal>0 && (
@@ -8594,9 +8597,9 @@ function TresPorDosForm({products, editing, nextSku, onSave, onCancel}) {
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10,background:"#f9f9f9",borderRadius:10,padding:14,flexWrap:"wrap"}}>
           <span style={{fontSize:13,fontWeight:600,color:"#555"}}>Comprando</span>
-          <input type="number" min="2" value={comprar} onChange={e=>{setComprar(+e.target.value||0);setTipoSel("custom");}} style={{width:60,padding:8,textAlign:"center",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:15,fontWeight:800}}/>
+          <input type="number" min="2" value={comprar} onChange={e=>{setComprar(+e.target.value||0);setTipoSel("custom");}} onFocus={e=>e.target.select()} style={{width:60,padding:8,textAlign:"center",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:15,fontWeight:800}}/>
           <span style={{fontSize:13,fontWeight:600,color:"#555"}}>unidades, el cliente paga</span>
-          <input type="number" min="1" value={pagar} onChange={e=>{setPagar(+e.target.value||0);setTipoSel("custom");}} style={{width:60,padding:8,textAlign:"center",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:15,fontWeight:800}}/>
+          <input type="number" min="1" value={pagar} onChange={e=>{setPagar(+e.target.value||0);setTipoSel("custom");}} onFocus={e=>e.target.select()} style={{width:60,padding:8,textAlign:"center",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:15,fontWeight:800}}/>
           <span style={{fontSize:13,fontWeight:600,color:"#555"}}>unidades</span>
         </div>
       </Field>
@@ -8680,7 +8683,7 @@ function DescuentoForm({products, editing, prefillProductId, onSave, onCancel}) 
           <div onClick={()=>setTipoValor("$")} style={{padding:"8px 16px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:13,fontWeight:700,borderColor:tipoValor==="$"?RED:"#e5e5e5",background:tipoValor==="$"?"#fdecea":"#fff",color:tipoValor==="$"?RED:"#666"}}>$ Monto fijo</div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <input type="number" value={valor} onChange={e=>setValor(e.target.value)} style={{width:100,padding:"10px 12px",borderRadius:8,border:`1.5px solid ${RED}`,fontSize:18,fontWeight:800,color:RED,textAlign:"center",outline:"none"}}/>
+          <input type="number" value={valor} onChange={e=>setValor(e.target.value)} onFocus={e=>e.target.select()} style={{width:100,padding:"10px 12px",borderRadius:8,border:`1.5px solid ${RED}`,fontSize:18,fontWeight:800,color:RED,textAlign:"center",outline:"none"}}/>
           <span style={{fontSize:14,color:"#555",fontWeight:600}}>{tipoValor==="%" ? "% de descuento sobre el precio de venta" : "$ de descuento sobre el precio de venta"}</span>
         </div>
       </Field>
@@ -9126,7 +9129,7 @@ function PriceListsPanel({priceLists, setPriceLists}) {
         {modo==="descuento" ? (
           <Field label="Descuento sobre precio normal (%)">
             <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <input type="number" min="0" max="99" value={form.discount} onChange={e=>setForm(f=>({...f,discount:e.target.value}))}
+              <input type="number" min="0" max="99" value={form.discount} onChange={e=>setForm(f=>({...f,discount:e.target.value}))} onFocus={e=>e.target.select()}
                 placeholder="0" style={{...inputStyle,width:100}}/>
               <span style={{fontSize:13,color:"#888"}}>%</span>
               {parseFloat(form.discount)>0&&(
@@ -9141,7 +9144,7 @@ function PriceListsPanel({priceLists, setPriceLists}) {
           <Field label="Multiplicador sobre el costo">
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <span style={{fontSize:13,color:"#888"}}>costo ×</span>
-              <input type="number" min="0" step="0.01" value={form.costMultiplier} onChange={e=>setForm(f=>({...f,costMultiplier:e.target.value}))}
+              <input type="number" min="0" step="0.01" value={form.costMultiplier} onChange={e=>setForm(f=>({...f,costMultiplier:e.target.value}))} onFocus={e=>e.target.select()}
                 placeholder="1.30" style={{...inputStyle,width:100}}/>
               {parseFloat(form.costMultiplier)>0&&(
                 <span style={{fontSize:12,color:"#1e8449",fontWeight:600}}>
