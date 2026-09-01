@@ -399,6 +399,11 @@ const STAGE_COLORS = {
   entregado:   "#6c3483",
 };
 const STAGES = ["reserva","confirmado","en armado","entregado"];
+// El panel "Dinero Disponible" cuenta ingresos y compras recibidas solo desde
+// esta fecha — antes de esto no había forma de saber cuánto costó lo que se
+// recibía en una solicitud (recién se empezó a guardar ese dato). Cambiar
+// esta fecha resetea el conteo del panel.
+const DINERO_DESDE = "1/9/2026";
 // Iconos reales (solo para presentacion visual) — SCFG.icon sigue como string para notificaciones/logs
 const STAGE_ICONS = { reserva: Clock, confirmado: CheckCircle2, "en armado": Package, entregado: PartyPopper };
 const Dot = () => <span style={{width:3,height:3,borderRadius:99,background:"#ccc",display:"inline-block"}}/>;
@@ -6182,7 +6187,10 @@ function IngresarDesdeSolicitud({po, products, onStock, onDone, onArrived, onRes
         const pendientes = await onStock(it.pid, +it.qtyRecibida, +it.cost);
         if(pendientes?.length) todosLosPendientes.push(...pendientes);
       }
-      if(onArrived) { try { await onArrived(); } catch(e) { console.warn(e); } }
+      // Le pasamos a onArrived lo que realmente se ingresó (cantidad y costo) para
+      // que quede guardado en la solicitud — antes se descartaba acá mismo, así que
+      // no había forma de saber después cuánto costó lo que se recibió.
+      if(onArrived) { try { await onArrived(toIngresar.map(it=>({pid:it.pid,qtyRecibida:+it.qtyRecibida,cost:+it.cost}))); } catch(e) { console.warn(e); } }
       // Deduplicar pedidos (un pedido puede tener varios items por encargue del mismo lote)
       const unicos = todosLosPendientes.filter((o,i,arr)=>arr.findIndex(x=>x.id===o.id)===i);
       setPedidosPendientes(unicos);
@@ -6858,8 +6866,15 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
             </div>
             <IngresarDesdeSolicitud po={po} products={products} onStock={onStockExternal} onDone={()=>setView("lista")}
               onResolverEncargue={onResolverEncargue}
-              onArrived={async()=>{
-                const updated = {...po, fechaRecibido: today(), estado:"recibido"};
+              onArrived={async(ingresados)=>{
+                // Guardamos cantidad y costo realmente recibidos en cada item (sin pisar
+                // el "qty" pedido original) — es el único rastro que va a quedar de cuánto
+                // costó esta mercadería, lo usa el panel de Dinero Disponible.
+                const items = po.items.map(it=>{
+                  const rec = ingresados?.find(r=>r.pid===it.pid);
+                  return rec ? {...it, qtyRecibida:rec.qtyRecibida, costRecibido:rec.cost} : it;
+                });
+                const updated = {...po, items, fechaRecibido: today(), estado:"recibido"};
                 setPurchaseOrders(prev=>prev.map(x=>x.id===po.id?updated:x));
                 setSelected(updated);
                 await db.savePurchaseOrder(updated);
@@ -7888,6 +7903,95 @@ function AnalisisComprasPanel({products, purchaseOrders}) {
   );
 }
 
+// ─── DINERO DISPONIBLE ────────────────────────────────────────────────────
+// Ingresos confirmados menos lo que costó la mercadería ya recibida — no es
+// contabilidad completa (no incluye alquiler, sueldos, etc.), es una lectura
+// rápida de "cuánto quedó libre" con lo que ya maneja la app. Solo cuenta
+// desde DINERO_DESDE porque antes de eso no había forma de saber cuánto
+// costó lo que se recibía en una solicitud (ver comentario en IngresarDesdeSolicitud).
+function DineroDisponiblePanel({orders, purchaseOrders}) {
+  const desde = parseFechaLog(DINERO_DESDE);
+
+  const ingresos = useMemo(() => (orders||[]).filter(o =>
+    !o.isSandbox &&
+    (normPagoTipo(o.pagoTipo)==="comprobante_confirmado" || normPagoTipo(o.pagoTipo)==="efectivo_confirmado") &&
+    parseFechaLog(o.date) >= desde
+  ).sort((a,b)=>parseFechaLog(b.date)-parseFechaLog(a.date)), [orders]);
+
+  const compras = useMemo(() => (purchaseOrders||[]).filter(po =>
+    po.fechaRecibido && parseFechaLog(po.fechaRecibido) >= desde
+  ).map(po => ({...po, montoRecibido: (po.items||[]).reduce((s,i)=>s+(i.costRecibido||0)*(i.qtyRecibida||0),0)}))
+    .filter(po=>po.montoRecibido>0)
+    .sort((a,b)=>parseFechaLog(b.fechaRecibido)-parseFechaLog(a.fechaRecibido)), [purchaseOrders]);
+
+  const totalIngresos = ingresos.reduce((s,o)=>s+o.total,0);
+  const totalCompras = compras.reduce((s,po)=>s+po.montoRecibido,0);
+  const disponible = totalIngresos - totalCompras;
+  const colorDisponible = disponible>=0 ? "#1e8449" : "#c0392b";
+
+  return (
+    <div>
+      <div style={{background:"#fff",borderRadius:14,padding:"22px 24px",marginBottom:16,boxShadow:"0 1px 4px #0001",borderLeft:`4px solid ${colorDisponible}`}}>
+        <div style={{fontSize:12,color:"#888",fontWeight:600,display:"flex",alignItems:"center",gap:5,marginBottom:4}}><Wallet size={13} strokeWidth={2.3}/> Disponible</div>
+        <div style={{fontFamily:SERIF,fontSize:36,fontWeight:800,color:colorDisponible}}>{fARS(disponible)}</div>
+        <div style={{fontSize:11.5,color:"#aaa",marginTop:6}}>Se cuenta desde el {DINERO_DESDE} — los pedidos y compras de antes no están incluidos. No es tu saldo real de banco: solo ingresos por pedidos menos mercadería recibida.</div>
+      </div>
+
+      <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+        <div style={{flex:1,minWidth:200,background:"#fff",borderRadius:12,padding:"14px 16px",borderLeft:"3px solid #1e8449",boxShadow:"0 1px 4px #0001"}}>
+          <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11.5,color:"#888",fontWeight:600,marginBottom:2}}><TrendUp size={12} strokeWidth={2.4}/> Ingresos confirmados</div>
+          <div style={{fontFamily:SERIF,fontSize:22,fontWeight:700,color:"#1e8449"}}>{fARS(totalIngresos)}</div>
+          <div style={{fontSize:11,color:"#aaa"}}>{ingresos.length} pedido{ingresos.length!==1?"s":""}</div>
+        </div>
+        <div style={{flex:1,minWidth:200,background:"#fff",borderRadius:12,padding:"14px 16px",borderLeft:"3px solid #c0392b",boxShadow:"0 1px 4px #0001"}}>
+          <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11.5,color:"#888",fontWeight:600,marginBottom:2}}><TrendDown size={12} strokeWidth={2.4}/> Compras recibidas</div>
+          <div style={{fontFamily:SERIF,fontSize:22,fontWeight:700,color:"#c0392b"}}>{fARS(totalCompras)}</div>
+          <div style={{fontSize:11,color:"#aaa"}}>{compras.length} solicitud{compras.length!==1?"es":""}</div>
+        </div>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 4px #0001",overflow:"hidden"}}>
+          <div style={{padding:"12px 16px",borderBottom:"1px solid #f0f0f0",fontWeight:800,fontSize:13.5}}>Pedidos que suman</div>
+          {ingresos.length===0
+            ? <div style={{padding:24,textAlign:"center",color:"#aaa",fontSize:12.5}}>Todavía no hay pedidos confirmados desde el {DINERO_DESDE}</div>
+            : ingresos.map(o=>(
+              <div key={o.id} style={{padding:"10px 16px",borderBottom:"1px solid #f5f5f5",display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:28,height:28,borderRadius:8,background:"#eafaf1",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <TrendUp size={13} color="#1e8449" strokeWidth={2.3}/>
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:12.5,color:"#1a1a1a"}}>{o.client}</div>
+                  <div style={{fontSize:11,color:"#999"}}>{o.date} · {o.vendedor}</div>
+                </div>
+                <div style={{fontWeight:800,fontSize:13,color:"#1e8449",flexShrink:0}}>{fARS(o.total)}</div>
+              </div>
+            ))
+          }
+        </div>
+        <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 4px #0001",overflow:"hidden"}}>
+          <div style={{padding:"12px 16px",borderBottom:"1px solid #f0f0f0",fontWeight:800,fontSize:13.5}}>Solicitudes que restan</div>
+          {compras.length===0
+            ? <div style={{padding:24,textAlign:"center",color:"#aaa",fontSize:12.5}}>Todavía no hay solicitudes recibidas desde el {DINERO_DESDE}</div>
+            : compras.map(po=>(
+              <div key={po.id} style={{padding:"10px 16px",borderBottom:"1px solid #f5f5f5",display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:28,height:28,borderRadius:8,background:"#fdecea",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <TrendDown size={13} color="#c0392b" strokeWidth={2.3}/>
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:12.5,color:"#1a1a1a"}}>Solicitud #{po.id.slice(-6).toUpperCase()}</div>
+                  <div style={{fontSize:11,color:"#999"}}>{po.fechaRecibido} · {po.vendedor}</div>
+                </div>
+                <div style={{fontWeight:800,fontSize:13,color:"#c0392b",flexShrink:0}}>{fARS(po.montoRecibido)}</div>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,purchaseOrders,priceLists,setPriceLists,isMobile,sandboxStock,setSandboxStock,updateSandboxStock,promos,setPromos,productPairs,setProductPairs,settings,onToggleExigirPago,onConfirmarComprobante,onRechazarComprobante,onConfirmarEfectivo,onRechazarEfectivo,autoSection,onConsumedAutoSection,prefillProductId,onConsumedPrefill}) {
   const [section, setSection] = useState("home");
   // Deep-link desde otras pantallas (ej: "Ver en Pagos" desde un pedido bloqueado)
@@ -7902,6 +8006,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
 
   const SECTIONS = [
     {k:"home",        label:"Administración",   Icon:Home,        grp:"home"},
+    {k:"disponible",  label:"Dinero Disponible", Icon:Wallet,      grp:"negocio"},
     {k:"ventas",      label:"Ventas",           Icon:TrendUp,      grp:"negocio"},
     {k:"pagos",       label:"Pagos",            Icon:CreditCard,   grp:"negocio", badge:pagosPendientes, urgentColor:"#b7770d"},
     {k:"ofertas",     label:"Ofertas y Combos", Icon:Gift,         grp:"negocio"},
@@ -8057,6 +8162,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
       {section==="pricelists"  && <PriceListsPanel priceLists={priceLists} setPriceLists={setPriceLists}/>}
       {section==="excel"       && <ExcelPanel     products={products} setProducts={setProducts}/>}
       {section==="compras"     && <AnalisisComprasPanel products={products} purchaseOrders={purchaseOrders}/>}
+      {section==="disponible" && <DineroDisponiblePanel orders={orders} purchaseOrders={purchaseOrders}/>}
       {section==="notifcfg"    && <NotifConfig    users={users} setUsers={setUsers} notifs={notifs} setNotifs={setNotifs}/>}
     </div>
   );
