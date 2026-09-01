@@ -2848,7 +2848,9 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                 {TABS.map(t=>(
                   <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"11px 10px",border:"none",cursor:"pointer",fontSize:14,background:tab===t.k?"#fff":"transparent",color:tab===t.k?RED:"#ffcccc",fontWeight:tab===t.k?800:600,borderRadius:"8px 8px 0 0",position:"relative",display:"inline-flex",alignItems:"center",gap:6}}>
                     <t.icon size={14} strokeWidth={2.25}/> {t.label}
-                    {t.k==="central"&&pending>0&&<span style={{position:"absolute",top:5,right:3,background:"#fff",color:RED,borderRadius:10,fontSize:10,padding:"1px 5px",fontWeight:800,border:`1.5px solid ${RED}`}}>{pending}</span>}
+                    {/* Flota afuera de la esquina del botón (offsets negativos) en vez de
+                        superponerse al texto — antes tapaba la "l" final de "Central". */}
+                    {t.k==="central"&&pending>0&&<span style={{position:"absolute",top:-6,right:-6,background:"#fff",color:RED,borderRadius:10,fontSize:10,padding:"1px 5px",fontWeight:800,border:`1.5px solid ${RED}`,lineHeight:1.4}}>{pending}</span>}
                   </button>
                 ))}
               </nav>
@@ -6819,7 +6821,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
 
         {/* Actions */}
         <div style={{display:"flex",gap:8,flexWrap:"wrap",padding:isMobile?"0 12px":"0"}}>
-          {isAdmin && po.estado==="abierta" && <button onClick={()=>changeEstado(po,"revisando")} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:"#e67e22",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>🔍 Marcar como Revisando</button>}
+          {isAdmin && po.estado==="abierta" && <button onClick={()=>changeEstado(po,"revisando")} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:"#e67e22",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Search size={12} strokeWidth={2.4}/> Marcar como Revisando</button>}
           {isAdmin && po.estado==="revisando" && <button onClick={()=>changeEstado(po,"pedido")} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:"#6c3483",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}><><Truck size={12} strokeWidth={2.4}/> Marcar como Pedido</></button>}
           {isAdmin && po.estado==="pedido" && <button onClick={()=>changeEstado(po,"recibido")} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:"#1e8449",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}><><CheckCircle size={12} strokeWidth={2.4}/> Marcar como Recibido</></button>}
           <button onClick={()=>printSolicitudPDF(po, PDF_LOGO_BANNER)} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #1a5276",background:"#fff",color:"#1a5276",fontWeight:700,fontSize:13,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Printer size={13} strokeWidth={2.4}/> PDF</button>
