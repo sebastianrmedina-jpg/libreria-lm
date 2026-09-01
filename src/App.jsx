@@ -14,6 +14,7 @@ function Ico({ children, size = 16, strokeWidth = 2, color, style }) {
   );
 }
 const Clock = (p) => <Ico {...p}><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></Ico>;
+const Calendar = (p) => <Ico {...p}><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/></Ico>;
 const CheckCircle2 = (p) => <Ico {...p}><circle cx="12" cy="12" r="9"/><polyline points="8 12 11 15 16 9"/></Ico>;
 const Package = (p) => <Ico {...p}><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></Ico>;
 const PartyPopper = (p) => <Ico {...p}><path d="M5 19l3-8 8-3-3 8-8 3z"/><path d="M14 5l1 2"/><path d="M19 9l1 2"/><path d="M17 4l2 1"/></Ico>;
@@ -401,11 +402,13 @@ const STAGES = ["reserva","confirmado","en armado","entregado"];
 // Iconos reales (solo para presentacion visual) — SCFG.icon sigue como string para notificaciones/logs
 const STAGE_ICONS = { reserva: Clock, confirmado: CheckCircle2, "en armado": Package, entregado: PartyPopper };
 const Dot = () => <span style={{width:3,height:3,borderRadius:99,background:"#ccc",display:"inline-block"}}/>;
+// "icon" (emoji) queda para lo que se guarda/envía como notificación —
+// "Icon" (componente) es el que se pinta en pantalla (chip de estado, botón).
 const SCFG = {
-  reserva:     {label:"Reserva",    color:"#b7770d", bg:"#fef9e7", icon:"🕐"},
-  confirmado:  {label:"Confirmado", color:"#1e8449", bg:"#eafaf1", icon:"✅"},
-  "en armado": {label:"En Armado",  color:"#1a5276", bg:"#eaf4fc", icon:"📦"},
-  entregado:   {label:"Entregado",  color:"#6c3483", bg:"#f5eef8", icon:"🎉"},
+  reserva:     {label:"Reserva",    color:"#b7770d", bg:"#fef9e7", icon:"🕐", Icon:Clock},
+  confirmado:  {label:"Confirmado", color:"#1e8449", bg:"#eafaf1", icon:"✅", Icon:CheckCircle},
+  "en armado": {label:"En Armado",  color:"#1a5276", bg:"#eaf4fc", icon:"📦", Icon:Package},
+  entregado:   {label:"Entregado",  color:"#6c3483", bg:"#f5eef8", icon:"🎉", Icon:PartyPopper},
 };
 
 const LOGO = "/logo.png";
@@ -575,11 +578,11 @@ function computeAutoDisc(promo, qty) {
     const remainder = qty - groups*comprar;
     const payableUnits = groups*pagar + remainder;
     const pct = qty>0 ? (1 - payableUnits/qty)*100 : 0;
-    return {disc:{type:"%",value:Math.round(pct*10)/10}, label:`🏷️ ${comprar}×${pagar} aplicado`};
+    return {disc:{type:"%",value:Math.round(pct*10)/10}, label:`${comprar}×${pagar} aplicado`};
   }
   if(promo.tipo==="descuento") {
     const tipoValor = promo.data?.tipoValor||"%", valor = promo.data?.valor||0;
-    return {disc:{type:tipoValor,value:valor}, label:`🔻 -${valor}${tipoValor==="%"?"%":""} aplicado`};
+    return {disc:{type:tipoValor,value:valor}, label:`-${valor}${tipoValor==="%"?"%":""} aplicado`};
   }
   return {disc:null,label:null};
 }
@@ -598,11 +601,11 @@ function useLocalData(key, initial) {
 
 function SPill({n}) {
   const [c,b] = n===0?["#c0392b","#fdecea"]:n<=5?["#e67e22","#fef9e7"]:["#1e8449","#d5f5e3"];
-  return <span style={{background:b,color:c,borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:700}}>{n===0?"Sin stock":n<=5?`🎉 ${n}`:n}</span>;
+  return <span style={{background:b,color:c,borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}>{n===0?"Sin stock":n<=5?<><AlertTriangle size={10} strokeWidth={2.6}/>{n}</>:n}</span>;
 }
 function Bdg({stage}) {
   const c=SCFG[stage]||{};
-  return <span style={{background:c.bg,color:c.color,border:`1px solid ${c.color}44`,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{c.icon} {c.label}</span>;
+  return <span style={{background:c.bg,color:c.color,border:`1px solid ${c.color}44`,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700,whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:4}}>{c.Icon&&<c.Icon size={11} strokeWidth={2.6}/>} {c.label}</span>;
 }
 // ─── SAVE SPINNER ────────────────────────────────────────────────────────────
 function SaveSpinner({label="Guardando...", color="#c0392b"}) {
@@ -1118,35 +1121,39 @@ ${doc.isTest ? `<div class="watermark">PRUEBA</div>` : ""}
 
 
 // ─── NOTIFICATION TYPES CONFIG ───────────────────────────────────────────────
+// "icon" (emoji) se guarda en la fila de notificación (columna de texto en
+// Supabase) y puede terminar en el título de una notificación nativa del
+// sistema operativo — no se puede tocar sin romper eso. "Icon" (componente)
+// es solo para pintarlo acá adentro, en el panel de la app.
 const NOTIF_TYPES = {
-  NUEVO_PEDIDO:   {label:"Nuevo pedido",         icon:"🛒", color:"#1a5276", bg:"#d6eaf8"},
-  CAMBIO_ESTADO:  {label:"Cambio de estado",      icon:"📋", color:"#6c3483", bg:"#e8daef"},
-  ALTA_MERCADERIA:{label:"Alta de mercadería",    icon:"📦", color:"#1e8449", bg:"#d5f5e3"},
-  PEDIDOS_PEND:   {label:"Pedidos pendientes",    icon:"⏰", color:"#e67e22", bg:"#fef9e7"},
+  NUEVO_PEDIDO:   {label:"Nuevo pedido",         icon:"🛒", Icon:ShoppingCart,  color:"#1a5276", bg:"#d6eaf8"},
+  CAMBIO_ESTADO:  {label:"Cambio de estado",      icon:"📋", Icon:ClipboardList, color:"#6c3483", bg:"#e8daef"},
+  ALTA_MERCADERIA:{label:"Alta de mercadería",    icon:"📦", Icon:Package,       color:"#1e8449", bg:"#d5f5e3"},
+  PEDIDOS_PEND:   {label:"Pedidos pendientes",    icon:"⏰", Icon:Clock,         color:"#e67e22", bg:"#fef9e7"},
 };
 
 // Para notificaciones creadas via sendCrossNotif (comprobantes, efectivo, ediciones, bajas, solicitudes
 // de compra) que no tienen un "tipo" de la lista de arriba — se deriva del prefijo del tag.
 // Tambien sirve como clave de agrupacion en el panel.
 const iconForTag = (tag="") => {
-  if(tag.startsWith("comp-ok"))     return {icon:"✅", color:"#1e8449", bg:"#eafaf1", cat:"Comprobantes confirmados"};
-  if(tag.startsWith("comp-no"))     return {icon:"❌", color:"#c0392b", bg:"#fdecea", cat:"Comprobantes rechazados"};
-  if(tag.startsWith("comp"))        return {icon:"📎", color:"#1a5276", bg:"#eaf2f8", cat:"Comprobantes nuevos"};
-  if(tag.startsWith("ef-pend"))     return {icon:"💵", color:"#b7770d", bg:"#fef9e7", cat:"Efectivo pendiente"};
-  if(tag.startsWith("ef-ok"))       return {icon:"✅", color:"#1e8449", bg:"#eafaf1", cat:"Efectivo confirmado"};
-  if(tag.startsWith("ef-no"))       return {icon:"❌", color:"#c0392b", bg:"#fdecea", cat:"Efectivo rechazado"};
-  if(tag.startsWith("edit-req"))    return {icon:"✏️", color:"#1a5276", bg:"#eaf2f8", cat:"Ediciones solicitadas"};
-  if(tag.startsWith("edit"))        return {icon:"✏️", color:"#6c3483", bg:"#f5eef8", cat:"Ediciones"};
-  if(tag.startsWith("del-client"))  return {icon:"👤", color:"#c0392b", bg:"#fdecea", cat:"Bajas de cliente"};
-  if(tag.startsWith("po-"))         return {icon:"📋", color:"#6c3483", bg:"#f5eef8", cat:"Solicitudes de compra"};
-  return {icon:"🔔", color:"#666", bg:"#f5f5f5", cat:"Otras"};
+  if(tag.startsWith("comp-ok"))     return {icon:"✅", Icon:CheckCircle, color:"#1e8449", bg:"#eafaf1", cat:"Comprobantes confirmados"};
+  if(tag.startsWith("comp-no"))     return {icon:"❌", Icon:XCircle,     color:"#c0392b", bg:"#fdecea", cat:"Comprobantes rechazados"};
+  if(tag.startsWith("comp"))        return {icon:"📎", Icon:Paperclip,   color:"#1a5276", bg:"#eaf2f8", cat:"Comprobantes nuevos"};
+  if(tag.startsWith("ef-pend"))     return {icon:"💵", Icon:Banknote,    color:"#b7770d", bg:"#fef9e7", cat:"Efectivo pendiente"};
+  if(tag.startsWith("ef-ok"))       return {icon:"✅", Icon:CheckCircle, color:"#1e8449", bg:"#eafaf1", cat:"Efectivo confirmado"};
+  if(tag.startsWith("ef-no"))       return {icon:"❌", Icon:XCircle,     color:"#c0392b", bg:"#fdecea", cat:"Efectivo rechazado"};
+  if(tag.startsWith("edit-req"))    return {icon:"✏️", Icon:Pencil,      color:"#1a5276", bg:"#eaf2f8", cat:"Ediciones solicitadas"};
+  if(tag.startsWith("edit"))        return {icon:"✏️", Icon:Pencil,      color:"#6c3483", bg:"#f5eef8", cat:"Ediciones"};
+  if(tag.startsWith("del-client"))  return {icon:"👤", Icon:UserMinus,   color:"#c0392b", bg:"#fdecea", cat:"Bajas de cliente"};
+  if(tag.startsWith("po-"))         return {icon:"📋", Icon:ClipboardList, color:"#6c3483", bg:"#f5eef8", cat:"Solicitudes de compra"};
+  return {icon:"🔔", Icon:Bell, color:"#666", bg:"#f5f5f5", cat:"Otras"};
 };
 
 // ─── NOTIF PANEL ─────────────────────────────────────────────────────────────
 function NotifRow({n, isRead, cfg, onClick, onDelete, onNavigate}) {
   return (
     <div onClick={()=>{onClick();onNavigate&&onNavigate(n);}} style={{padding:"12px 16px",borderBottom:"1px solid #f9f9f9",background:isRead?"#fff":"#fafbff",cursor:"pointer",display:"flex",gap:10,alignItems:"flex-start"}}>
-      <span style={{fontSize:20,flexShrink:0,marginTop:2}}>{cfg.icon}</span>
+      <span style={{flexShrink:0,marginTop:2,color:cfg.color}}><cfg.Icon size={20} strokeWidth={2.2}/></span>
       <div style={{flex:1,minWidth:0}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
           <div style={{fontWeight:isRead?500:700,fontSize:13,color:"#1a1a1a",lineHeight:1.3}}>{n.titulo}</div>
@@ -1168,7 +1175,7 @@ function NotifGroup({items, cfg, cat, currentUser, markRead, delNotif, onNavigat
   return (
     <div style={{borderBottom:"1px solid #f5f5f5"}}>
       <div onClick={()=>setOpen(o=>!o)} style={{padding:"11px 16px",display:"flex",alignItems:"center",gap:10,cursor:"pointer",background:unreadN>0?"#fafbff":"#fff"}}>
-        <div style={{width:32,height:32,borderRadius:9,background:cfg.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:16}}>{cfg.icon}</div>
+        <div style={{width:32,height:32,borderRadius:9,background:cfg.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:cfg.color}}><cfg.Icon size={16} strokeWidth={2.3}/></div>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontWeight:700,fontSize:13,color:"#1a1a1a"}}>{cat}</div>
           <div style={{fontSize:11,color:"#888"}}>{items.length} notificaciones{unreadN>0?` · ${unreadN} sin leer`:""}</div>
@@ -1225,7 +1232,7 @@ function NotifPanel({notifs,setNotifs,currentUser,users,onClose,onMarkAllRead,pu
         )}
         <div style={{overflowY:"auto",flex:1}}>
           {myNotifs.length===0
-            ? <div style={{textAlign:"center",padding:40,color:"#aaa"}}><div style={{fontSize:36,marginBottom:8}}>🔕</div><div>No tenés notificaciones</div></div>
+            ? <div style={{textAlign:"center",padding:40,color:"#aaa"}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><Bell size={36} color="#ccc" strokeWidth={1.6}/></div><div>No tenés notificaciones</div></div>
             : (() => {
                 // Notificaciones con ref (cambio de estado, comprobante, edición, etc.)
                 // son eventos de pedidos puntuales → siempre individuales, jamás agrupadas.
@@ -1282,7 +1289,7 @@ function NotifConfig({users,setUsers,notifs,setNotifs}) {
   return (
     <div>
       <div style={{background:"#d6eaf8",border:"1px solid #aed6f1",borderRadius:12,padding:"12px 16px",marginBottom:16,fontSize:13,color:"#1a5276"}}>
-        <strong>🔔 Centro de notificaciones</strong> &mdash; Configurá qué alertas recibe cada usuario dentro de la app.<br/>
+        <strong style={{display:"inline-flex",alignItems:"center",gap:5}}><Bell size={13} strokeWidth={2.4}/> Centro de notificaciones</strong> &mdash; Configurá qué alertas recibe cada usuario dentro de la app.<br/>
         <span style={{fontSize:11,marginTop:4,display:"block",color:"#1a5276bb"}}>Para envío de emails automáticos conectá <strong>EmailJS</strong> cuando la app esté en producción.</span>
       </div>
       {users.map(u=>{
@@ -1290,10 +1297,10 @@ function NotifConfig({users,setUsers,notifs,setNotifs}) {
         return (
           <div key={u.id} style={{background:"#fff",borderRadius:12,padding:18,marginBottom:12,boxShadow:"0 1px 4px #0001"}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-              <span style={{fontSize:24}}>{u.role==="admin"?"👑":"👤"}</span>
+              <span style={{color:u.role==="admin"?GOLD:"#888"}}>{u.role==="admin"?<Crown size={22} strokeWidth={2}/>:<Users size={22} strokeWidth={2}/>}</span>
               <div>
                 <div style={{fontWeight:800,fontSize:14}}>{u.name}</div>
-                <div style={{fontSize:11,color:"#888"}}>@{u.username} . <span style={{color:u.role==="admin"?RED:"#1a5276",fontWeight:600}}>{u.role==="admin"?"Admin":"Vendedor"}</span>{u.email&&<span style={{marginLeft:6,color:"#aaa"}}>. 📧 {u.email}</span>}{!u.email&&<span style={{marginLeft:6,color:"#e67e22",fontSize:10}}>🎉 Sin email configurado</span>}</div>
+                <div style={{fontSize:11,color:"#888"}}>@{u.username} . <span style={{color:u.role==="admin"?RED:"#1a5276",fontWeight:600}}>{u.role==="admin"?"Admin":"Vendedor"}</span>{u.email&&<span style={{marginLeft:6,color:"#aaa",display:"inline-flex",alignItems:"center",gap:3}}>. <Mail size={10} strokeWidth={2.4}/> {u.email}</span>}{!u.email&&<span style={{marginLeft:6,color:"#e67e22",fontSize:10,display:"inline-flex",alignItems:"center",gap:3}}><AlertTriangle size={10} strokeWidth={2.6}/> Sin email configurado</span>}</div>
               </div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:8}}>
@@ -1301,7 +1308,7 @@ function NotifConfig({users,setUsers,notifs,setNotifs}) {
                 const active = prefs[tipo]||false;
                 return (
                   <div key={tipo} onClick={()=>togglePref(u.id,tipo)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderRadius:10,border:`1.5px solid ${active?cfg.color:"#e5e5e5"}`,background:active?cfg.bg:"#fafafa",cursor:"pointer"}}>
-                    <span style={{fontSize:18}}>{cfg.icon}</span>
+                    <span style={{color:active?cfg.color:"#999"}}><cfg.Icon size={18} strokeWidth={2.2}/></span>
                     <div style={{flex:1}}><div style={{fontWeight:600,fontSize:12,color:active?cfg.color:"#666"}}>{cfg.label}</div></div>
                     <div style={{width:18,height:18,borderRadius:4,border:`2px solid ${active?cfg.color:"#ccc"}`,background:active?cfg.color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                       {active&&<span style={{color:"#fff",fontSize:11,fontWeight:800}}>v</span>}
@@ -1313,7 +1320,7 @@ function NotifConfig({users,setUsers,notifs,setNotifs}) {
           </div>
         );
       })}
-      {notifs.length>0&&(<div style={{marginTop:8,textAlign:"right"}}><button onClick={async()=>{setNotifs([]);await db.clearNotifs();}} style={{padding:"7px 14px",borderRadius:8,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:12,fontWeight:600}}>🗑 Limpiar todas las notificaciones ({notifs.length})</button></div>)}
+      {notifs.length>0&&(<div style={{marginTop:8,textAlign:"right"}}><button onClick={async()=>{setNotifs([]);await db.clearNotifs();}} style={{padding:"7px 14px",borderRadius:8,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:12,fontWeight:600,display:"inline-flex",alignItems:"center",gap:6}}><Trash size={12} strokeWidth={2.4}/> Limpiar todas las notificaciones ({notifs.length})</button></div>)}
     </div>
   );
 }
@@ -1352,7 +1359,7 @@ function Login() {
         <Field label="Contraseña">
           <div style={{position:"relative"}}>
             <input type={showPass?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()} placeholder="Tu contraseña" style={{...inputStyle,paddingRight:40}}/>
-            <button onClick={()=>setShowPass(s=>!s)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:16,color:"#aaa"}}>{showPass?"🙈":"👁️"}</button>
+            <button onClick={()=>setShowPass(s=>!s)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"#aaa",display:"flex"}}>{showPass?<EyeOff size={16} strokeWidth={2}/>:<Eye size={16} strokeWidth={2}/>}</button>
           </div>
         </Field>
         {error && <div style={{background:"#fdecea",color:RED,borderRadius:8,padding:"8px 12px",fontSize:13,marginBottom:12,textAlign:"center"}}>{error}</div>}
@@ -1445,7 +1452,7 @@ function PublicQuoteView({token}) {
   if(error || !quote) {
     return (
       <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#fdfbf7",fontFamily:"-apple-system,sans-serif",padding:24,textAlign:"center"}}>
-        <div style={{fontSize:40,marginBottom:12}}>📄</div>
+        <div style={{marginBottom:12,display:"flex",justifyContent:"center"}}><FileText size={40} color="#ccc" strokeWidth={1.6}/></div>
         <div style={{fontWeight:800,fontSize:16,color:"#1a1a1a",marginBottom:6}}>No pudimos encontrar esta cotización</div>
         <div style={{fontSize:13,color:"#888"}}>El link puede haber vencido o ser incorrecto.</div>
       </div>
@@ -1686,7 +1693,7 @@ function AppInner() {
   if(error) return (
     <div style={{minHeight:"100vh",background:"#f5f5f5",display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{background:"#fff",borderRadius:16,padding:32,maxWidth:400,textAlign:"center",boxShadow:"0 4px 20px #0002"}}>
-        <div style={{fontSize:48,marginBottom:12}}>🎉️</div>
+        <div style={{marginBottom:12,display:"flex",justifyContent:"center"}}><AlertTriangle size={44} color={RED} strokeWidth={1.8}/></div>
         <div style={{fontWeight:800,fontSize:16,marginBottom:8}}>Error de conexión</div>
         <div style={{color:"#666",fontSize:13,marginBottom:20}}>{error}</div>
         <button onClick={()=>window.location.reload()} style={{padding:"10px 24px",borderRadius:8,border:"none",background:"#c0392b",color:"#fff",fontWeight:700,cursor:"pointer"}}>Reintentar</button>
@@ -1825,7 +1832,7 @@ class ErrorBoundary extends React.Component {
     return (
       <div style={{minHeight:"100vh",background:"#fdecea",padding:20,fontFamily:"system-ui,-apple-system,sans-serif",boxSizing:"border-box"}}>
         <div style={{background:"#fff",borderRadius:14,padding:20,boxShadow:"0 1px 6px #0001",maxWidth:480,margin:"30px auto"}}>
-          <div style={{fontSize:32,marginBottom:8,textAlign:"center"}}>⚠️</div>
+          <div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><AlertTriangle size={32} color="#c0392b" strokeWidth={1.8}/></div>
           <div style={{fontWeight:800,fontSize:16,color:"#c0392b",marginBottom:8,textAlign:"center"}}>Algo se rompió</div>
           <div style={{fontSize:13,color:"#666",marginBottom:14,textAlign:"center"}}>Mandale una foto de esto a Claude para que lo arregle.</div>
           <div style={{background:"#1a1a1a",color:"#f5b7b1",borderRadius:8,padding:12,fontSize:12,fontFamily:"monospace",overflowX:"auto",marginBottom:14,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>
@@ -3064,25 +3071,25 @@ function ChangePasswordModal({currentUser, onClose}) {
       <div style={{background:"#fff",borderRadius:20,padding:32,maxWidth:400,width:"100%",boxShadow:"0 24px 64px #0005"}}>
         {ok
           ? <div style={{textAlign:"center",padding:"16px 0"}}>
-              <div style={{fontSize:52,marginBottom:8}}>✅</div>
+              <div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><CheckCircle size={48} color="#1e8449" strokeWidth={1.8}/></div>
               <div style={{fontWeight:800,fontSize:18,color:"#1e8449"}}>Contraseña actualizada</div>
             </div>
           : <>
-            <div style={{fontWeight:800,fontSize:18,marginBottom:6}}>🔑 Cambiar contraseña</div>
+            <div style={{fontWeight:800,fontSize:18,marginBottom:6,display:"flex",alignItems:"center",gap:7}}><Key size={17} strokeWidth={2.3}/> Cambiar contraseña</div>
             <div style={{fontSize:12,color:"#888",marginBottom:20}}>Usuario: <strong>{currentUser.name}</strong></div>
 
             <Field label="Contraseña actual">
               <div style={{position:"relative"}}>
                 <input type={showCurrent?"text":"password"} value={current} onChange={e=>setCurrent(e.target.value)}
                   placeholder="Tu contraseña actual" style={{...inputStyle,paddingRight:40}}/>
-                <button onClick={()=>setShowCurrent(s=>!s)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:15,color:"#aaa"}}>{showCurrent?"🙈":"👁️"}</button>
+                <button onClick={()=>setShowCurrent(s=>!s)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"#aaa",display:"flex"}}>{showCurrent?<EyeOff size={15} strokeWidth={2}/>:<Eye size={15} strokeWidth={2}/>}</button>
               </div>
             </Field>
             <Field label="Nueva contraseña">
               <div style={{position:"relative"}}>
                 <input type={showNew?"text":"password"} value={newPass} onChange={e=>setNewPass(e.target.value)}
                   placeholder="Mínimo 4 caracteres" style={{...inputStyle,paddingRight:40}}/>
-                <button onClick={()=>setShowNew(s=>!s)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:15,color:"#aaa"}}>{showNew?"🙈":"👁️"}</button>
+                <button onClick={()=>setShowNew(s=>!s)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"#aaa",display:"flex"}}>{showNew?<EyeOff size={15} strokeWidth={2}/>:<Eye size={15} strokeWidth={2}/>}</button>
               </div>
             </Field>
             <Field label="Confirmar nueva contraseña">
@@ -3091,7 +3098,7 @@ function ChangePasswordModal({currentUser, onClose}) {
                   ...inputStyle,
                   borderColor: confirm && newPass && confirm!==newPass ? "#e74c3c" : confirm && confirm===newPass ? "#1e8449" : undefined
                 }}/>
-              {confirm && newPass && confirm===newPass && <div style={{fontSize:11,color:"#1e8449",marginTop:3}}>✅ Las contraseñas coinciden</div>}
+              {confirm && newPass && confirm===newPass && <div style={{fontSize:11,color:"#1e8449",marginTop:3,display:"flex",alignItems:"center",gap:4}}><CheckCircle size={11} strokeWidth={2.6}/> Las contraseñas coinciden</div>}
             </Field>
 
             {error && <div style={{background:"#fdecea",color:"#c0392b",borderRadius:8,padding:"8px 12px",fontSize:13,marginBottom:12}}>{error}</div>}
@@ -3120,7 +3127,7 @@ function CompPopup({order, onClose}) {
   return (
     <div style={{position:"fixed",inset:0,background:"#0007",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,padding:16}}>
       <div style={{background:"#fff",borderRadius:20,padding:32,maxWidth:420,width:"100%",boxShadow:"0 24px 64px #0005",textAlign:"center"}}>
-        <div style={{fontSize:52,marginBottom:8}}>✅</div>
+        <div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><CheckCircle size={48} color="#1a5276" strokeWidth={1.8}/></div>
         <div style={{fontWeight:800,fontSize:20,color:"#1a5276",marginBottom:6}}>Pedido Confirmado</div>
         <div style={{fontSize:13,color:"#666",marginBottom:20}}>Se generó el comprobante para <strong>{order.client}</strong></div>
 
@@ -3132,8 +3139,8 @@ function CompPopup({order, onClose}) {
 
         <div style={{display:"flex",gap:10}}>
           <button onClick={()=>{ printDoc(order,"confirmado"); onClose(); }}
-            style={{flex:1,padding:"12px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#1a5276,#2980b9)",color:"#fff",fontWeight:800,fontSize:14,cursor:"pointer"}}>
-            🖨️️ Imprimir Comp.
+            style={{flex:1,padding:"12px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#1a5276,#2980b9)",color:"#fff",fontWeight:800,fontSize:14,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}>
+            <Printer size={14} strokeWidth={2.3}/> Imprimir Comp.
           </button>
           <button onClick={onClose}
             style={{padding:"12px 16px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer"}}>
@@ -3148,7 +3155,7 @@ function CompPopup({order, onClose}) {
 
 // ─── CONSOLA DE APROBACIONES — todo lo que el admin necesita revisar, en un solo lugar ──
 function ConsolaAprobAccionBtn({color,bg="#fff",children,onClick,disabled}) {
-  return <button disabled={disabled} onClick={onClick} style={{padding:"6px 12px",borderRadius:7,border:`1px solid ${color}55`,background:bg,color,fontWeight:700,fontSize:11.5,cursor:disabled?"default":"pointer",opacity:disabled?0.6:1}}>{children}</button>;
+  return <button disabled={disabled} onClick={onClick} style={{padding:"6px 12px",borderRadius:7,border:`1px solid ${color}55`,background:bg,color,fontWeight:700,fontSize:11.5,cursor:disabled?"default":"pointer",opacity:disabled?0.6:1,display:"inline-flex",alignItems:"center",gap:5}}>{children}</button>;
 }
 function ConsolaAprobItem({children}) {
   return <div style={{background:"#fafafa",borderRadius:9,padding:"10px 12px",marginBottom:8}}>{children}</div>;
@@ -3178,15 +3185,15 @@ function ConsolaAprobEdicion({o,onApproveEditRequest,onRejectEditRequest,onAppro
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
         <div>
           <div style={{fontWeight:700,fontSize:12.5,color:"#1a1a1a"}}>{o.client}</div>
-          <div style={{fontSize:11,color:"#999",margin:"2px 0 5px"}}>👤 {o.vendedor} · {esSolicitud?"pide permiso para editar":"envió cambios para revisar"}</div>
+          <div style={{fontSize:11,color:"#999",margin:"2px 0 5px",display:"flex",alignItems:"center",gap:4}}><Users size={11} strokeWidth={2.4}/> {o.vendedor} · {esSolicitud?"pide permiso para editar":"envió cambios para revisar"}</div>
         </div>
         <button onClick={()=>onViewOrder(o.id)} style={{display:"flex",alignItems:"center",gap:4,background:"none",border:"none",color:"#1a5276",fontWeight:700,fontSize:11,cursor:"pointer",padding:0,flexShrink:0}}><Eye size={12} strokeWidth={2.3}/>Ver pedido</button>
       </div>
       {o.editReason&&<div style={{fontSize:11.5,color:"#666",marginBottom:8,fontStyle:"italic"}}>"{o.editReason}"</div>}
       {!rejecting ? (
         <div style={{display:"flex",gap:6}}>
-          <ConsolaAprobAccionBtn color="#1e8449" disabled={busy} onClick={async()=>{setBusy(true);try{await aprobar(o.id);toast.success(`Edición ${esSolicitud?"habilitada":"aprobada"} — ${o.client}`);}catch(e){console.warn(e);toast.error("No se pudo aprobar. Probá de nuevo.");}finally{setBusy(false);}}}>✅ Aprobar</ConsolaAprobAccionBtn>
-          <ConsolaAprobAccionBtn color="#c0392b" disabled={busy} onClick={()=>setRejecting(true)}>❌ Rechazar</ConsolaAprobAccionBtn>
+          <ConsolaAprobAccionBtn color="#1e8449" disabled={busy} onClick={async()=>{setBusy(true);try{await aprobar(o.id);toast.success(`Edición ${esSolicitud?"habilitada":"aprobada"} — ${o.client}`);}catch(e){console.warn(e);toast.error("No se pudo aprobar. Probá de nuevo.");}finally{setBusy(false);}}}><CheckCircle size={11} strokeWidth={2.6}/> Aprobar</ConsolaAprobAccionBtn>
+          <ConsolaAprobAccionBtn color="#c0392b" disabled={busy} onClick={()=>setRejecting(true)}><XCircle size={11} strokeWidth={2.6}/> Rechazar</ConsolaAprobAccionBtn>
         </div>
       ) : (
         <div>
@@ -3211,7 +3218,7 @@ function ConsolaAprobPago({o,onConfirmarComprobante,onRechazarComprobante,onConf
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
         <div>
           <div style={{fontWeight:700,fontSize:12.5,color:"#1a1a1a"}}>{o.client}</div>
-          <div style={{fontSize:11,color:"#999"}}>{esComprobante?"📎 Comprobante":"💵 Efectivo"} · 👤 {o.vendedor}</div>
+          <div style={{fontSize:11,color:"#999",display:"flex",alignItems:"center",gap:4}}>{esComprobante?<><Paperclip size={11} strokeWidth={2.4}/> Comprobante</>:<><Banknote size={11} strokeWidth={2.4}/> Efectivo</>} · <Users size={11} strokeWidth={2.4}/> {o.vendedor}</div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
           <div style={{fontWeight:800,fontSize:13,color:"#c0392b"}}>{fARS(o.total)}</div>
@@ -3220,10 +3227,10 @@ function ConsolaAprobPago({o,onConfirmarComprobante,onRechazarComprobante,onConf
       </div>
       {!rejecting ? (
         <div style={{display:"flex",gap:6,marginTop:8}}>
-          <ConsolaAprobAccionBtn color="#1e8449" disabled={busy} onClick={async()=>{setBusy(true);try{await (esComprobante?onConfirmarComprobante(o.id):onConfirmarEfectivo(o.id));toast.success(`Pago de ${o.client} confirmado`);}catch(e){console.warn(e);toast.error("No se pudo confirmar. Probá de nuevo.");}finally{setBusy(false);}}}>✅ Confirmar</ConsolaAprobAccionBtn>
+          <ConsolaAprobAccionBtn color="#1e8449" disabled={busy} onClick={async()=>{setBusy(true);try{await (esComprobante?onConfirmarComprobante(o.id):onConfirmarEfectivo(o.id));toast.success(`Pago de ${o.client} confirmado`);}catch(e){console.warn(e);toast.error("No se pudo confirmar. Probá de nuevo.");}finally{setBusy(false);}}}><CheckCircle size={11} strokeWidth={2.6}/> Confirmar</ConsolaAprobAccionBtn>
           {esComprobante
-            ? <ConsolaAprobAccionBtn color="#c0392b" disabled={busy} onClick={()=>setRejecting(true)}>❌ Rechazar</ConsolaAprobAccionBtn>
-            : <ConsolaAprobAccionBtn color="#c0392b" disabled={busy} onClick={async()=>{setBusy(true);try{await onRechazarEfectivo(o.id);toast.info(`Pago de ${o.client} rechazado`);}catch(e){console.warn(e);toast.error("No se pudo rechazar. Probá de nuevo.");}finally{setBusy(false);}}}>❌ Rechazar</ConsolaAprobAccionBtn>}
+            ? <ConsolaAprobAccionBtn color="#c0392b" disabled={busy} onClick={()=>setRejecting(true)}><XCircle size={11} strokeWidth={2.6}/> Rechazar</ConsolaAprobAccionBtn>
+            : <ConsolaAprobAccionBtn color="#c0392b" disabled={busy} onClick={async()=>{setBusy(true);try{await onRechazarEfectivo(o.id);toast.info(`Pago de ${o.client} rechazado`);}catch(e){console.warn(e);toast.error("No se pudo rechazar. Probá de nuevo.");}finally{setBusy(false);}}}><XCircle size={11} strokeWidth={2.6}/> Rechazar</ConsolaAprobAccionBtn>}
         </div>
       ) : (
         <div style={{marginTop:8}}>
@@ -3244,12 +3251,12 @@ function ConsolaAprobSolicitud({po,onQuickReviewPO,onViewPO}) {
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
           <div style={{fontWeight:700,fontSize:12.5,color:"#1a1a1a"}}>Solicitud de compra</div>
-          <div style={{fontSize:11,color:"#999"}}>{po.items?.length||0} productos · 👤 {po.vendedor}</div>
+          <div style={{fontSize:11,color:"#999",display:"flex",alignItems:"center",gap:4}}>{po.items?.length||0} productos · <Users size={11} strokeWidth={2.4}/> {po.vendedor}</div>
         </div>
         <button onClick={()=>onViewPO(po.id)} style={{display:"flex",alignItems:"center",gap:4,background:"none",border:"none",color:"#1a5276",fontWeight:700,fontSize:11,cursor:"pointer",padding:0}}><Eye size={12} strokeWidth={2.3}/>Ver detalle</button>
       </div>
       <div style={{marginTop:8}}>
-        <ConsolaAprobAccionBtn color="#b7770d" disabled={busy} onClick={async()=>{setBusy(true);try{await onQuickReviewPO(po.id);toast.info("Marcada como revisando");}catch(e){console.warn(e);toast.error("No se pudo actualizar.");}finally{setBusy(false);}}}>🔍 Marcar revisando</ConsolaAprobAccionBtn>
+        <ConsolaAprobAccionBtn color="#b7770d" disabled={busy} onClick={async()=>{setBusy(true);try{await onQuickReviewPO(po.id);toast.info("Marcada como revisando");}catch(e){console.warn(e);toast.error("No se pudo actualizar.");}finally{setBusy(false);}}}><Search size={11} strokeWidth={2.6}/> Marcar revisando</ConsolaAprobAccionBtn>
       </div>
     </ConsolaAprobItem>
   );
@@ -3259,14 +3266,14 @@ function ConsolaAprobBaja({c,onDeleteClient,onRejectDeleteClient}) {
   return (
     <ConsolaAprobItem>
       <div style={{fontWeight:700,fontSize:12.5,color:"#1a1a1a"}}>{c.name}</div>
-      <div style={{fontSize:11,color:"#999",margin:"2px 0 6px"}}>👤 solicitado por {c.createdBy||"—"}</div>
+      <div style={{fontSize:11,color:"#999",margin:"2px 0 6px",display:"flex",alignItems:"center",gap:4}}><Users size={11} strokeWidth={2.4}/> solicitado por {c.createdBy||"—"}</div>
       {c.deleteReason&&<div style={{fontSize:11.5,color:"#666",marginBottom:8,fontStyle:"italic"}}>"{c.deleteReason}"</div>}
       <div style={{display:"flex",gap:6}}>
         <ConsolaAprobAccionBtn color="#c0392b" disabled={busy} onClick={async()=>{
           const ok = await confirmDialog("¿Eliminar cliente?",`Vas a eliminar a "${c.name}" definitivamente. Esta acción no se puede deshacer.`,true);
           if(!ok) return;
           setBusy(true);try{await onDeleteClient(c.id);toast.success("Cliente eliminado");}catch(e){console.warn(e);toast.error("No se pudo eliminar.");}finally{setBusy(false);}
-        }}>🗑️ Aprobar baja</ConsolaAprobAccionBtn>
+        }}><Trash size={11} strokeWidth={2.6}/> Aprobar baja</ConsolaAprobAccionBtn>
         <ConsolaAprobAccionBtn color="#999" disabled={busy} onClick={async()=>{setBusy(true);try{await onRejectDeleteClient(c.id);toast.info("Baja rechazada, el cliente sigue activo");}catch(e){console.warn(e);toast.error("No se pudo actualizar.");}finally{setBusy(false);}}}>Rechazar</ConsolaAprobAccionBtn>
       </div>
     </ConsolaAprobItem>
@@ -3285,7 +3292,7 @@ function ConsolaAprobaciones({orders,clients,purchaseOrders,onApproveEditRequest
   return (
     <div style={{background:"#fff",borderRadius:14,padding:"16px 18px",marginBottom:18,boxShadow:"0 1px 4px #0001"}}>
       <div onClick={()=>setOpen(o=>!o)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",marginBottom:open?14:0}}>
-        <div style={{fontWeight:800,fontSize:14.5,color:"#1a1a1a"}}>📋 Necesita tu aprobación</div>
+        <div style={{fontWeight:800,fontSize:14.5,color:"#1a1a1a",display:"flex",alignItems:"center",gap:6}}><ClipboardList size={15} strokeWidth={2.3}/> Necesita tu aprobación</div>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <span style={{background:"#c0392b",color:"#fff",borderRadius:20,fontSize:11,fontWeight:800,padding:"2px 9px"}}>{total}</span>
           <ChevronDown size={14} strokeWidth={2.3} color="#bbb" style={{transform:open?"rotate(180deg)":"none",transition:"transform .15s"}}/>
@@ -3395,7 +3402,7 @@ function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onAppro
         </div>
         {vendedores.length>1&&<select value={fVendedor} onChange={e=>setFVendedor(e.target.value)}
           style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",cursor:"pointer",background:"#fff"}}>
-          <option value="todos">👤 Todos los vendedores</option>
+          <option value="todos">Todos los vendedores</option>
           {vendedores.map(v=><option key={v} value={v}>{v}</option>)}
         </select>}
         <select value={sortBy} onChange={e=>setSortBy(e.target.value)}
@@ -3414,7 +3421,7 @@ function Central({orders,products,onStage,onDel,onSaveNote,onRequestEdit,onAppro
       </div>
       {sorted.length===0
         ? <div style={{textAlign:"center",padding:60,color:"#aaa"}}>
-            <div style={{fontSize:48}}>📭</div>
+            <div style={{display:"flex",justifyContent:"center"}}><ShoppingCart size={44} color="#ccc" strokeWidth={1.6}/></div>
             <div style={{marginTop:8}}>
               {fStage==="todos"&&orders.some(o=>o.stage==="entregado")
                 ? "No hay pedidos activos — están todos entregados. Filtrá por \"Entregado\" para verlos."
@@ -4018,7 +4025,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
                 )}
               </div>
             ) : (
-              next&&!es&&<button onClick={()=>onStage(o.id,next)} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",background:SCFG[next].color,color:"#fff",fontWeight:700,fontSize:13}}>{SCFG[next].icon} Pasar a {SCFG[next].label}</button>
+              next&&!es&&(()=>{const NextIcon=SCFG[next].Icon;return <button onClick={()=>onStage(o.id,next)} style={{padding:"8px 14px",borderRadius:8,border:"none",cursor:"pointer",background:SCFG[next].color,color:"#fff",fontWeight:700,fontSize:13,display:"inline-flex",alignItems:"center",gap:6}}><NextIcon size={13} strokeWidth={2.4}/> Pasar a {SCFG[next].label}</button>;})()
             )}
             {idx>0&&!es&&(isAdmin||o.stage!=="entregado")&&<button onClick={async()=>{
               const label = STAGES[idx-1]; const cfg = SCFG[label];
@@ -4601,7 +4608,7 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
       const nuevos = componentes.map(comp=>{
         const pr = products.find(x=>x.id===comp.pid);
         return {pid:comp.pid,cartKey:promo.id+":"+comp.pid,qty:comp.qty*newQty,price:pr?pr.salePrice:0,name:pr?pr.name:comp.pid,
-          disc:{type:"%",value:Math.round(pct*10)/10},promoLabel:`🎁 ${promo.nombre}`,comboId:promo.id,comboNombre:promo.nombre};
+          disc:{type:"%",value:Math.round(pct*10)/10},promoLabel:promo.nombre,comboId:promo.id,comboNombre:promo.nombre};
       });
       return [...without,...nuevos];
     });
@@ -4882,7 +4889,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
               <select value={previewListId||"default"} onChange={e=>onChangeList&&onChangeList(e.target.value==="default"?null:e.target.value)} style={{...inputStyle,cursor:"pointer"}}>
                 {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}{pl.cost_multiplier>0?` (×${pl.cost_multiplier})`:pl.discount>0?` (-${pl.discount}%)`:""}  </option>)}
               </select>
-              {previewListId&&previewListId!=="default"&&<div style={{fontSize:11,color:"#b7770d",marginTop:4,fontWeight:600}}>⚠️ Los precios ya muestran el descuento aplicado</div>}
+              {previewListId&&previewListId!=="default"&&<div style={{fontSize:11,color:"#b7770d",marginTop:4,fontWeight:600,display:"flex",alignItems:"center",gap:4}}><AlertTriangle size={11} strokeWidth={2.6}/> Los precios ya muestran el descuento aplicado</div>}
             </Field>}
             <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
             <button onClick={()=>{if(!selectedClient){toast.error("Seleccioná un cliente");return;}if(!vendedor&&currentUser.role==="admin"){toast.error("Seleccioná un vendedor");return;}setMStep(2);}}
@@ -4968,7 +4975,7 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
             <select value={previewListId||"default"} onChange={e=>onChangeList&&onChangeList(e.target.value==="default"?null:e.target.value)} style={{...inputStyle,cursor:"pointer"}}>
               {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}{pl.cost_multiplier>0?` (×${pl.cost_multiplier})`:pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
             </select>
-            {previewListId&&previewListId!=="default"&&<div style={{fontSize:11,color:"#b7770d",marginTop:4,fontWeight:600}}>⚠️ Los precios ya muestran el descuento aplicado</div>}
+            {previewListId&&previewListId!=="default"&&<div style={{fontSize:11,color:"#b7770d",marginTop:4,fontWeight:600,display:"flex",alignItems:"center",gap:4}}><AlertTriangle size={11} strokeWidth={2.6}/> Los precios ya muestran el descuento aplicado</div>}
           </Field>}
           <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
           <div style={{borderTop:"1px solid #f5f5f5",margin:"4px 0 8px",paddingTop:10}}>
@@ -5217,7 +5224,7 @@ function QuoteDelBtn({onConfirm}) {
     <button onClick={onConfirm} style={{padding:"4px 10px",borderRadius:6,border:"none",background:RED,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:12}}>Sí</button>
     <button onClick={()=>setC(false)} style={{padding:"4px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12}}>No</button>
   </div>;
-  return <button onClick={()=>setC(true)} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13}}>🗑 Eliminar</button>;
+  return <button onClick={()=>setC(true)} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #fcc",cursor:"pointer",background:"#fff",color:RED,fontWeight:600,fontSize:13,display:"inline-flex",alignItems:"center",gap:6}}><Trash size={12} strokeWidth={2.4}/> Eliminar</button>;
 }
 
 function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,onSaveClient,orders,priceLists,previewListId,onChangeList,promos,productPairs,stockLog}) {
@@ -5292,7 +5299,7 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,on
             <select value={previewListId||"default"} onChange={e=>onChangeList&&onChangeList(e.target.value==="default"?null:e.target.value)} style={{...inputStyle,cursor:"pointer"}}>
               {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}{pl.cost_multiplier>0?` (×${pl.cost_multiplier})`:pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
             </select>
-            {previewListId&&previewListId!=="default"&&<div style={{fontSize:11,color:"#b7770d",marginTop:4,fontWeight:600}}>⚠️ Los precios ya muestran el descuento aplicado</div>}
+            {previewListId&&previewListId!=="default"&&<div style={{fontSize:11,color:"#b7770d",marginTop:4,fontWeight:600,display:"flex",alignItems:"center",gap:4}}><AlertTriangle size={11} strokeWidth={2.6}/> Los precios ya muestran el descuento aplicado</div>}
           </Field>}
           <Field label="Válida hasta"><input value={validity} onChange={e=>setValidity(e.target.value)} placeholder="Ej: 48 horas" style={inputStyle}/></Field>
           <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones, condiciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
@@ -5402,7 +5409,7 @@ function NuevaCotizacion({products,vendors,onAdd,currentUser,isMobile,clients,on
             <select value={previewListId||"default"} onChange={e=>onChangeList&&onChangeList(e.target.value==="default"?null:e.target.value)} style={{...inputStyle,cursor:"pointer"}}>
               {priceLists.map(pl=><option key={pl.id} value={pl.id}>{pl.name}{pl.cost_multiplier>0?` (×${pl.cost_multiplier})`:pl.discount>0?` (-${pl.discount}%)`:""}</option>)}
             </select>
-            {previewListId&&previewListId!=="default"&&<div style={{fontSize:11,color:"#b7770d",marginTop:4,fontWeight:600}}>⚠️ Los precios ya muestran el descuento aplicado</div>}
+            {previewListId&&previewListId!=="default"&&<div style={{fontSize:11,color:"#b7770d",marginTop:4,fontWeight:600,display:"flex",alignItems:"center",gap:4}}><AlertTriangle size={11} strokeWidth={2.6}/> Los precios ya muestran el descuento aplicado</div>}
           </Field>}
           <Field label="Válida hasta"><input value={validity} onChange={e=>setValidity(e.target.value)} placeholder="Ej: 48 horas" style={inputStyle}/></Field>
           <Field label="Notas"><textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Observaciones, condiciones..." style={{...inputStyle,resize:"vertical",minHeight:55,fontSize:12}}/></Field>
@@ -5453,7 +5460,7 @@ function StockAlert({low, onPedirReposicion}) {
   return (
     <div style={{background:"#fef9e7",border:"1px solid #f1c40f",borderRadius:12,marginBottom:14,overflow:"hidden"}}>
       <div onClick={()=>setOpen(o=>!o)} style={{padding:"11px 16px",display:"flex",gap:10,alignItems:"center",cursor:"pointer",userSelect:"none"}}>
-        <span style={{fontSize:20}}>🎉️</span>
+        <span style={{color:"#e0a000"}}><AlertTriangle size={20} strokeWidth={1.9}/></span>
         <div style={{flex:1}}>
           <span style={{fontWeight:700,color:"#7d6608",fontSize:13}}>Stock bajo en {low.length} producto(s)</span>
           {!open && <span style={{fontSize:11,color:"#9a7d0a",marginLeft:8}}>- hacé clic para ver el detalle</span>}
@@ -5470,13 +5477,13 @@ function StockAlert({low, onPedirReposicion}) {
                 {p.multiploCompra>1&&<span style={{fontSize:10,color:"#9a7d0a",marginLeft:6}}>(caja de {p.multiploCompra})</span>}
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{background:p.stock===0?"#fdecea":"#fff3cd",color:p.stock===0?RED:"#856404",borderRadius:8,padding:"2px 8px",fontSize:12,fontWeight:700,border:`1px solid ${p.stock===0?"#f5c6cb":"#ffc107"}`}}>
-                  {p.stock===0?"Sin stock":`🎉 ${p.stock} u.`}
+                <span style={{background:p.stock===0?"#fdecea":"#fff3cd",color:p.stock===0?RED:"#856404",borderRadius:8,padding:"2px 8px",fontSize:12,fontWeight:700,border:`1px solid ${p.stock===0?"#f5c6cb":"#ffc107"}`,display:"inline-flex",alignItems:"center",gap:3}}>
+                  {p.stock===0?"Sin stock":<><AlertTriangle size={11} strokeWidth={2.6}/>{p.stock} u.</>}
                 </span>
                 {onPedirReposicion && (
                   <button onClick={(e)=>{e.stopPropagation();onPedirReposicion(p.id,p.multiploCompra||1);}}
                     style={{display:"flex",alignItems:"center",gap:4,padding:"3px 9px",borderRadius:7,border:"1px solid #6c348355",background:"#f5eef8",color:"#6c3483",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
-                    📦 Pedir reposición
+                    <Package size={11} strokeWidth={2.4}/> Pedir reposición
                   </button>
                 )}
               </div>
@@ -5493,9 +5500,9 @@ function StockLog({log, onClear}) {
   const [search,setSearch] = useState("");
 
   const TIPOS = {
-    "ENTRADA": {color:"#1e8449", bg:"#d5f5e3", icon:"📥"},
-    "SALIDA":  {color:"#e67e22", bg:"#fef9e7", icon:"📤"},
-    "BAJA":    {color:"#c0392b", bg:"#fdecea", icon:"🗑"},
+    "ENTRADA": {color:"#1e8449", bg:"#d5f5e3", Icon:TrendUp},
+    "SALIDA":  {color:"#e67e22", bg:"#fef9e7", Icon:TrendDown},
+    "BAJA":    {color:"#c0392b", bg:"#fdecea", Icon:Trash},
   };
 
   const filtered = log.filter(e=>{
@@ -5516,22 +5523,25 @@ function StockLog({log, onClear}) {
           const cnt = log.filter(e=>e.tipo===tipo).length;
           return <div key={tipo} style={{background:"#fff",borderRadius:10,padding:"12px 14px",boxShadow:"0 1px 4px #0001",borderLeft:`4px solid ${cfg.color}`}}>
             <div style={{fontSize:22,fontWeight:800,color:cfg.color}}>{cnt}</div>
-            <div style={{fontSize:12,color:"#666",fontWeight:600}}>{cfg.icon} {tipo === "ENTRADA" ? "Entradas" : tipo === "SALIDA" ? "Salidas" : "Bajas"}</div>
+            <div style={{fontSize:12,color:"#666",fontWeight:600,display:"flex",alignItems:"center",gap:4}}><cfg.Icon size={12} strokeWidth={2.4}/> {tipo === "ENTRADA" ? "Entradas" : tipo === "SALIDA" ? "Salidas" : "Bajas"}</div>
           </div>;
         })}
         <div style={{background:"#fff",borderRadius:10,padding:"12px 14px",boxShadow:"0 1px 4px #0001",borderLeft:"4px solid #1a5276"}}>
           <div style={{fontSize:22,fontWeight:800,color:"#1a5276"}}>{log.length}</div>
-          <div style={{fontSize:12,color:"#666",fontWeight:600}}>📜 Total movimientos</div>
+          <div style={{fontSize:12,color:"#666",fontWeight:600,display:"flex",alignItems:"center",gap:4}}><BarChart size={12} strokeWidth={2.4}/> Total movimientos</div>
         </div>
       </div>
       <div style={{background:"#fff",borderRadius:12,padding:12,marginBottom:12,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",boxShadow:"0 1px 4px #0001"}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar por producto, usuario o motivo..."
-          style={{flex:1,minWidth:200,padding:"7px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none"}}/>
+        <div style={{position:"relative",flex:1,minWidth:200}}>
+          <Search size={13} color="#aaa" strokeWidth={2.3} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)"}}/>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar por producto, usuario o motivo..."
+            style={{width:"100%",padding:"7px 12px 7px 30px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+        </div>
         <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
           {["todos","ENTRADA","SALIDA","BAJA"].map(t=>{
             const cfg = TIPOS[t];
-            return <button key={t} onClick={()=>setFilter(t)} style={{padding:"5px 12px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:filter===t?(cfg?.color||RED):"#e5e5e5",background:filter===t?(cfg?.bg||"#fdecea"):"#fff",color:filter===t?(cfg?.color||RED):"#666"}}>
-              {t==="todos"?"Todos":`${cfg.icon} ${t}`}
+            return <button key={t} onClick={()=>setFilter(t)} style={{padding:"5px 12px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:11,fontWeight:600,borderColor:filter===t?(cfg?.color||RED):"#e5e5e5",background:filter===t?(cfg?.bg||"#fdecea"):"#fff",color:filter===t?(cfg?.color||RED):"#666",display:"inline-flex",alignItems:"center",gap:4}}>
+              {t==="todos"?"Todos":<><cfg.Icon size={11} strokeWidth={2.6}/> {t}</>}
             </button>;
           })}
         </div>
@@ -5542,12 +5552,12 @@ function StockLog({log, onClear}) {
                 <button onClick={()=>{onClear();setConfirmClear(false);}} style={{padding:"3px 10px",borderRadius:6,border:"none",background:RED,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:12}}>Sí</button>
                 <button onClick={()=>setConfirmClear(false)} style={{padding:"3px 10px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:12}}>No</button>
               </div>
-            : <button onClick={()=>setConfirmClear(true)} style={{padding:"5px 12px",borderRadius:8,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:11,fontWeight:600,whiteSpace:"nowrap"}}>🗑 Limpiar historial</button>
+            : <button onClick={()=>setConfirmClear(true)} style={{padding:"5px 12px",borderRadius:8,border:"1.5px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:11,fontWeight:600,whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:5}}><Trash size={11} strokeWidth={2.6}/> Limpiar historial</button>
         )}
       </div>
       {filtered.length===0
         ? <div style={{textAlign:"center",padding:50,color:"#aaa",background:"#fff",borderRadius:12}}>
-            <div style={{fontSize:40,marginBottom:8}}>📭</div>
+            <div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><ClipboardList size={36} color="#ccc" strokeWidth={1.6}/></div>
             <div>{log.length===0?"No hay movimientos registrados aún.":"No hay movimientos que coincidan con el filtro."}</div>
           </div>
         : <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 4px #0001",overflow:"auto"}}>
@@ -5620,7 +5630,7 @@ function StockAdjust({products,onDel,onAdjust,addLog}) {
         cambio:       -selected.stock,
         motivo:       reason.trim(),
       });
-      setDone({msg:`✅ Producto "${selected.name}" dado de baja.`, color:"#c0392b"});
+      setDone({msg:`Producto "${selected.name}" dado de baja.`, color:"#c0392b"});
     } else {
       if(qty===0){toast.error("El ajuste no puede ser 0");return;}
       const stockDespues = Math.max(0, selected.stock + qty);
@@ -5635,7 +5645,7 @@ function StockAdjust({products,onDel,onAdjust,addLog}) {
         motivo:       reason.trim(),
       });
       const signo = qty>0?"+":"";
-      setDone({msg:`✅ Stock de "${selected.name}" ajustado en ${signo}${qty} unidades. Nuevo stock: ${stockDespues}`, color:"#1e8449"});
+      setDone({msg:`Stock de "${selected.name}" ajustado en ${signo}${qty} unidades. Nuevo stock: ${stockDespues}`, color:"#1e8449"});
     }
     reset();
     setTimeout(()=>setDone(null),5000);
@@ -5644,11 +5654,11 @@ function StockAdjust({products,onDel,onAdjust,addLog}) {
   return (
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,alignItems:"start"}}>
       <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 1px 4px #0001"}}>
-        <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>🔍 Buscar producto</div>
+        <div style={{fontWeight:800,fontSize:15,marginBottom:12,display:"flex",alignItems:"center",gap:7}}><Search size={15} strokeWidth={2.3}/> Buscar producto</div>
         <input value={search} onChange={e=>{setSearch(e.target.value);setSelected(null);}}
           placeholder="Nombre o código del producto..."
           style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e5e5e5",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:10}}/>
-        {done&&<div style={{background:done.color==="#c0392b"?"#fdecea":"#d5f5e3",color:done.color,borderRadius:8,padding:"9px 12px",fontSize:13,fontWeight:600,marginBottom:10}}>{done.msg}</div>}
+        {done&&<div style={{background:done.color==="#c0392b"?"#fdecea":"#d5f5e3",color:done.color,borderRadius:8,padding:"9px 12px",fontSize:13,fontWeight:600,marginBottom:10,display:"flex",alignItems:"center",gap:6}}><CheckCircle size={14} strokeWidth={2.4}/> {done.msg}</div>}
         <div style={{maxHeight:380,overflowY:"auto"}}>
           {search.length<=1
             ? <div style={{color:"#aaa",fontSize:13,textAlign:"center",padding:20}}>Escribí al menos 2 caracteres para buscar</div>
@@ -5669,7 +5679,7 @@ function StockAdjust({products,onDel,onAdjust,addLog}) {
         </div>
       </div>
       <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 1px 4px #0001"}}>
-        <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>⚙️ Acción sobre el producto</div>
+        <div style={{fontWeight:800,fontSize:15,marginBottom:14,display:"flex",alignItems:"center",gap:7}}><Wrench size={15} strokeWidth={2.3}/> Acción sobre el producto</div>
         {!selected
           ? <div style={{color:"#aaa",fontSize:13,textAlign:"center",padding:30}}>Seleccioná un producto de la lista</div>
           : <>
@@ -5682,9 +5692,9 @@ function StockAdjust({products,onDel,onAdjust,addLog}) {
                 </div>
               </div>
               <div style={{display:"flex",gap:8,marginBottom:16}}>
-                {[{v:"ajuste",l:"⚖️ Ajustar stock",c:"#1a5276",bg:"#d6eaf8"},{v:"baja",l:"🗑 Dar de baja",c:RED,bg:"#fdecea"}].map(opt=>(
-                  <button key={opt.v} onClick={()=>setMode(opt.v)} style={{flex:1,padding:"9px",borderRadius:9,border:`2px solid ${mode===opt.v?opt.c:"#e5e5e5"}`,background:mode===opt.v?opt.bg:"#fff",color:mode===opt.v?opt.c:"#666",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-                    {opt.l}
+                {[{v:"ajuste",l:"Ajustar stock",Icon:Scale,c:"#1a5276",bg:"#d6eaf8"},{v:"baja",l:"Dar de baja",Icon:Trash,c:RED,bg:"#fdecea"}].map(opt=>(
+                  <button key={opt.v} onClick={()=>setMode(opt.v)} style={{flex:1,padding:"9px",borderRadius:9,border:`2px solid ${mode===opt.v?opt.c:"#e5e5e5"}`,background:mode===opt.v?opt.bg:"#fff",color:mode===opt.v?opt.c:"#666",fontWeight:700,fontSize:12,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                    <opt.Icon size={13} strokeWidth={2.4}/> {opt.l}
                   </button>
                 ))}
               </div>
@@ -5705,13 +5715,13 @@ function StockAdjust({products,onDel,onAdjust,addLog}) {
                     style={{width:"100%",padding:"8px 12px",borderRadius:8,border:`1.5px solid ${!reason.trim()?"#e5e5e5":"#1e8449"}`,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
                   <div style={{fontSize:11,color:"#aaa",marginTop:3}}>Obligatorio - quedará registrado en el historial de movimientos</div>
                 </div>
-                <button onClick={confirmAction} disabled={qty===0||!reason.trim()} style={{width:"100%",padding:"10px",borderRadius:9,border:"none",background:(qty===0||!reason.trim())?"#e5e5e5":"linear-gradient(135deg,#1a5e20,#1e8449)",color:(qty===0||!reason.trim())?"#aaa":"#fff",fontWeight:800,fontSize:14,cursor:(qty===0||!reason.trim())?"not-allowed":"pointer"}}>
-                  ✅ Confirmar ajuste
+                <button onClick={confirmAction} disabled={qty===0||!reason.trim()} style={{width:"100%",padding:"10px",borderRadius:9,border:"none",background:(qty===0||!reason.trim())?"#e5e5e5":"linear-gradient(135deg,#1a5e20,#1e8449)",color:(qty===0||!reason.trim())?"#aaa":"#fff",fontWeight:800,fontSize:14,cursor:(qty===0||!reason.trim())?"not-allowed":"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}>
+                  <CheckCircle size={14} strokeWidth={2.4}/> Confirmar ajuste
                 </button>
               </>}
               {mode==="baja" && <>
                 <div style={{background:"#fdecea",border:"1px solid #f5c6cb",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
-                  <div style={{fontWeight:700,color:RED,fontSize:13,marginBottom:4}}>🎉️ Dar de baja elimina el producto del catálogo</div>
+                  <div style={{fontWeight:700,color:RED,fontSize:13,marginBottom:4,display:"flex",alignItems:"center",gap:6}}><AlertTriangle size={13} strokeWidth={2.4}/> Dar de baja elimina el producto del catálogo</div>
                   <div style={{fontSize:12,color:"#666"}}>Esta acción no se puede deshacer. El producto dejará de aparecer en Nuevo Pedido y Stock.</div>
                 </div>
                 <div style={{marginBottom:14}}>
@@ -5740,8 +5750,8 @@ function BajaConfirm({onConfirm,disabled}) {
     </div>
   );
   return (
-    <button onClick={()=>setStep(true)} disabled={disabled} style={{width:"100%",padding:"10px",borderRadius:9,border:"none",background:disabled?"#e5e5e5":RED,color:disabled?"#aaa":"#fff",fontWeight:800,fontSize:14,cursor:disabled?"not-allowed":"pointer"}}>
-      🗑 Dar de baja este producto
+    <button onClick={()=>setStep(true)} disabled={disabled} style={{width:"100%",padding:"10px",borderRadius:9,border:"none",background:disabled?"#e5e5e5":RED,color:disabled?"#aaa":"#fff",fontWeight:800,fontSize:14,cursor:disabled?"not-allowed":"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}>
+      <Trash size={14} strokeWidth={2.4}/> Dar de baja este producto
     </button>
   );
 }
@@ -6280,8 +6290,8 @@ function IngresarDesdeSolicitud({po, products, onStock, onDone, onArrived, onRes
           <strong>{items.filter(i=>i.incluir).length}</strong> productos · <strong>{items.filter(i=>i.incluir).reduce((s,i)=>s+i.qtyRecibida,0)}</strong> unidades a ingresar
         </div>
         <button onClick={submit} disabled={saving}
-          style={{padding:"10px 20px",borderRadius:10,border:"none",background:saving?"#e5e5e5":"linear-gradient(135deg,#1a5e20,#1e8449)",color:saving?"#aaa":"#fff",fontWeight:800,fontSize:13,cursor:saving?"not-allowed":"pointer",whiteSpace:"nowrap"}}>
-          {saving?"Ingresando...":"📦 Ingresar al Stock"}
+          style={{padding:"10px 20px",borderRadius:10,border:"none",background:saving?"#e5e5e5":"linear-gradient(135deg,#1a5e20,#1e8449)",color:saving?"#aaa":"#fff",fontWeight:800,fontSize:13,cursor:saving?"not-allowed":"pointer",whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:7}}>
+          {saving?"Ingresando...":<><Package size={13} strokeWidth={2.4}/> Ingresar al Stock</>}
         </button>
       </div>
     </div>
@@ -7055,10 +7065,10 @@ function BarcodeScanner({onDetected, onClose}) {
     <div style={{position:"fixed",inset:0,background:"#000",zIndex:500,display:"flex",flexDirection:"column"}}>
       {/* Header */}
       <div style={{background:"#1a1a1a",padding:"14px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-        <div style={{fontWeight:800,fontSize:16,color:"#fff"}}>📷 Escanear código de barras</div>
+        <div style={{fontWeight:800,fontSize:16,color:"#fff",display:"flex",alignItems:"center",gap:8}}><Camera size={16} strokeWidth={2.3}/> Escanear código de barras</div>
         <button onClick={handleClose}
-          style={{background:"#c0392b",border:"none",color:"#fff",borderRadius:10,padding:"8px 18px",cursor:"pointer",fontSize:14,fontWeight:800}}>
-          ✕ Cerrar
+          style={{background:"#c0392b",border:"none",color:"#fff",borderRadius:10,padding:"8px 18px",cursor:"pointer",fontSize:14,fontWeight:800,display:"inline-flex",alignItems:"center",gap:6}}>
+          <XIcon size={13} strokeWidth={2.6}/> Cerrar
         </button>
       </div>
 
@@ -7093,7 +7103,7 @@ function BarcodeScanner({onDetected, onClose}) {
         {error && (
           <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
             <div style={{background:"#fdecea",borderRadius:12,padding:20,textAlign:"center",maxWidth:320}}>
-              <div style={{fontSize:36,marginBottom:10}}>📵</div>
+              <div style={{marginBottom:10,display:"flex",justifyContent:"center"}}><XCircle size={32} color="#c0392b" strokeWidth={1.8}/></div>
               <div style={{fontWeight:700,color:"#c0392b",fontSize:14,marginBottom:8}}>{error}</div>
               <button onClick={handleClose} style={{padding:"8px 20px",borderRadius:8,border:"none",background:"#c0392b",color:"#fff",fontWeight:700,cursor:"pointer"}}>Volver</button>
             </div>
@@ -7501,16 +7511,19 @@ function SandboxStockManager({products, sandboxStock, updateSandboxStock}) {
 
   return (
     <div>
-      <input value={search} onChange={e=>handleSearch(e.target.value)}
-        placeholder="🔍 Buscar producto para editar su stock sandbox..."
-        style={{width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #d7bde2",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:12,background:"#fff"}}/>
+      <div style={{position:"relative",marginBottom:12}}>
+        <Search size={14} color="#aaa" strokeWidth={2.3} style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)"}}/>
+        <input value={search} onChange={e=>handleSearch(e.target.value)}
+          placeholder="Buscar producto para editar su stock sandbox..."
+          style={{width:"100%",padding:"9px 12px 9px 32px",borderRadius:8,border:"1.5px solid #d7bde2",fontSize:13,outline:"none",boxSizing:"border-box",background:"#fff"}}/>
+      </div>
 
       {hasChanges && (
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#6c3483",borderRadius:10,padding:"10px 16px",marginBottom:12}}>
           <span style={{color:"#fff",fontWeight:700,fontSize:13}}>{Object.keys(edited).length} cambio{Object.keys(edited).length!==1?"s":""} sin guardar</span>
           <div style={{display:"flex",gap:8}}>
             <button onClick={()=>setEdited({})} style={{padding:"6px 12px",borderRadius:7,border:"1px solid #ffffff44",background:"transparent",color:"#fff",fontSize:12,cursor:"pointer"}}>Descartar</button>
-            <button onClick={applyChanges} style={{padding:"6px 14px",borderRadius:7,border:"none",background:"#fff",color:"#6c3483",fontWeight:800,fontSize:12,cursor:"pointer"}}>✅ Aplicar</button>
+            <button onClick={applyChanges} style={{padding:"6px 14px",borderRadius:7,border:"none",background:"#fff",color:"#6c3483",fontWeight:800,fontSize:12,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}><CheckCircle size={12} strokeWidth={2.6}/> Aplicar</button>
           </div>
         </div>
       )}
@@ -7773,11 +7786,11 @@ function AnalisisComprasPanel({products, purchaseOrders}) {
   return (
     <div>
       <div style={{display:"flex",gap:8,marginBottom:18,maxWidth:640}}>
-        <button onClick={()=>setTab("costos")} style={{flex:1,padding:"9px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,fontSize:12.5,background:tab==="costos"?"#1a1a1a":"#fff",color:tab==="costos"?"#fff":"#666",boxShadow:"0 1px 4px #0001"}}>
-          🔺 Cambios de Costo {cambios.length>0&&`(${cambios.length})`}
+        <button onClick={()=>setTab("costos")} style={{flex:1,padding:"9px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,fontSize:12.5,background:tab==="costos"?"#1a1a1a":"#fff",color:tab==="costos"?"#fff":"#666",boxShadow:"0 1px 4px #0001",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}>
+          <TrendUp size={12} strokeWidth={2.4}/> Cambios de Costo {cambios.length>0&&`(${cambios.length})`}
         </button>
-        <button onClick={()=>setTab("entregas")} style={{flex:1,padding:"9px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,fontSize:12.5,background:tab==="entregas"?"#1a1a1a":"#fff",color:tab==="entregas"?"#fff":"#666",boxShadow:"0 1px 4px #0001"}}>
-          🚚 Trazabilidad de Entregas
+        <button onClick={()=>setTab("entregas")} style={{flex:1,padding:"9px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,fontSize:12.5,background:tab==="entregas"?"#1a1a1a":"#fff",color:tab==="entregas"?"#fff":"#666",boxShadow:"0 1px 4px #0001",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}>
+          <Truck size={12} strokeWidth={2.4}/> Trazabilidad de Entregas
         </button>
       </div>
 
@@ -7785,7 +7798,7 @@ function AnalisisComprasPanel({products, purchaseOrders}) {
         {tab==="costos" ? (
           cambios.length===0 ? (
             <div style={{textAlign:"center",padding:40,background:"#fff",borderRadius:12,color:"#aaa"}}>
-              <div style={{fontSize:36,marginBottom:6}}>📭</div>
+              <div style={{marginBottom:6,display:"flex",justifyContent:"center"}}><TrendUp size={32} color="#ccc" strokeWidth={1.6}/></div>
               <div style={{fontWeight:600,fontSize:13}}>Todavía no hay cambios de costo registrados</div>
               <div style={{fontSize:11.5,marginTop:4}}>Aparecen acá la próxima vez que reimportes la lista de precios y algún costo cambie.</div>
             </div>
@@ -7813,7 +7826,7 @@ function AnalisisComprasPanel({products, purchaseOrders}) {
                     <div style={{flex:1,minWidth:160}}>
                       <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                         <span style={{fontWeight:700,fontSize:12.5,color:"#1a1a1a"}}>{c.name}</span>
-                        {c.negativo && <span style={{background:"#fdecea",color:"#c0392b",borderRadius:20,padding:"2px 9px",fontSize:10.5,fontWeight:700}}>🔴 Margen negativo</span>}
+                        {c.negativo && <span style={{background:"#fdecea",color:"#c0392b",borderRadius:20,padding:"2px 9px",fontSize:10.5,fontWeight:700,display:"inline-flex",alignItems:"center",gap:4}}><AlertCircle size={10} strokeWidth={2.6}/> Margen negativo</span>}
                       </div>
                       <div style={{fontSize:11,color:"#999",marginTop:2}}>{c.id} · venta actual {fARS(c.salePrice)}</div>
                     </div>
@@ -7832,7 +7845,7 @@ function AnalisisComprasPanel({products, purchaseOrders}) {
         ) : (
           entregas.length===0 ? (
             <div style={{textAlign:"center",padding:40,background:"#fff",borderRadius:12,color:"#aaa"}}>
-              <div style={{fontSize:36,marginBottom:6}}>📭</div>
+              <div style={{marginBottom:6,display:"flex",justifyContent:"center"}}><Truck size={32} color="#ccc" strokeWidth={1.6}/></div>
               <div style={{fontWeight:600,fontSize:13}}>Todavía no hay entregas registradas</div>
               <div style={{fontSize:11.5,marginTop:4}}>Aparecen acá cada vez que confirmes "Ingresar mercadería" en una solicitud cerrada.</div>
             </div>
@@ -7858,7 +7871,7 @@ function AnalisisComprasPanel({products, purchaseOrders}) {
                     </div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontWeight:700,fontSize:12.5,color:"#1a1a1a"}}>{e.items?.length||0} productos</div>
-                      <div style={{fontSize:11,color:"#999"}}>👤 {e.vendedor} · cerrada {e.fechaCierre} → recibida {e.fechaRecibido}</div>
+                      <div style={{fontSize:11,color:"#999",display:"flex",alignItems:"center",gap:4}}><Users size={10} strokeWidth={2.4}/> {e.vendedor} · cerrada {e.fechaCierre} → recibida {e.fechaRecibido}</div>
                     </div>
                     <div style={{display:"flex",alignItems:"center",gap:5,flexShrink:0}}>
                       <Clock size={12} color={e.dias>7?"#c0392b":e.dias>4?"#b7770d":"#1e8449"} strokeWidth={2.3}/>
@@ -7903,7 +7916,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
     {k:"excel",       label:"Importar Precios", Icon:BarChart,     grp:"config"},
     {k:"notifcfg",    label:"Notificaciones",   Icon:Bell,         grp:"config"},
   ];
-  const GRP_LABELS = {negocio:"📈 Negocio", equipo:"👥 Equipo", config:"⚙️ Configuración"};
+  const GRP_LABELS = {negocio:{label:"Negocio",Icon:TrendUp}, equipo:{label:"Equipo",Icon:Users}, config:{label:"Configuración",Icon:Wrench}};
 
   const sandboxOrders = orders.filter(o=>o.isSandbox);
   const realOrders    = orders.filter(o=>!o.isSandbox);
@@ -7934,14 +7947,17 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
   const AdminGrid = ({cols}) => {
     const grouped = {};
     SECTIONS.filter(s=>s.k!=="home").forEach(s=>{ (grouped[s.grp]=grouped[s.grp]||[]).push(s); });
-    return Object.entries(grouped).map(([grp,items])=>(
+    return Object.entries(grouped).map(([grp,items])=>{
+      const GrpIcon = GRP_LABELS[grp].Icon;
+      return (
       <div key={grp} style={{marginBottom:18}}>
-        <div style={{fontSize:11.5,fontWeight:700,color:"#999",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>{GRP_LABELS[grp]}</div>
+        <div style={{fontSize:11.5,fontWeight:700,color:"#999",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,display:"flex",alignItems:"center",gap:5}}><GrpIcon size={12} strokeWidth={2.4}/> {GRP_LABELS[grp].label}</div>
         <div style={{display:"grid",gridTemplateColumns:cols,gap:10}}>
           {items.map(s=><AdminCard key={s.k} s={s}/>)}
         </div>
       </div>
-    ));
+      );
+    });
   };
 
   // Mobile: show icon grid when no section selected, back button when inside
@@ -7981,13 +7997,13 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
             <div style={{display:"flex",gap:8,marginBottom:14}}>
               <button onClick={()=>setVentasView("real")}
                 style={{padding:"6px 14px",borderRadius:8,border:"1.5px solid #e5e5e5",cursor:"pointer",fontWeight:700,fontSize:12,
-                  background:ventasView==="real"?RED:"#fff",color:ventasView==="real"?"#fff":"#666"}}>
-                📊 Datos reales
+                  background:ventasView==="real"?RED:"#fff",color:ventasView==="real"?"#fff":"#666",display:"inline-flex",alignItems:"center",gap:6}}>
+                <BarChart size={12} strokeWidth={2.4}/> Datos reales
               </button>
               <button onClick={()=>setVentasView("sandbox")}
                 style={{padding:"6px 14px",borderRadius:8,border:"1.5px solid #9b59b6",cursor:"pointer",fontWeight:700,fontSize:12,
-                  background:ventasView==="sandbox"?"#9b59b6":"#fff",color:ventasView==="sandbox"?"#fff":"#6c3483"}}>
-                🧪 Datos de prueba (sandbox)
+                  background:ventasView==="sandbox"?"#9b59b6":"#fff",color:ventasView==="sandbox"?"#fff":"#6c3483",display:"inline-flex",alignItems:"center",gap:6}}>
+                <Beaker size={12} strokeWidth={2.4}/> Datos de prueba (sandbox)
               </button>
             </div>
           )}
@@ -8005,12 +8021,12 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
         <div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10,marginBottom:16}}>
             <div>
-              <div style={{fontWeight:800,fontSize:15,color:"#6c3483"}}>📦 Stock Sandbox</div>
+              <div style={{fontWeight:800,fontSize:15,color:"#6c3483",display:"flex",alignItems:"center",gap:7}}><Package size={15} strokeWidth={2.3}/> Stock Sandbox</div>
               <div style={{fontSize:12,color:"#888",marginTop:2}}>Configurá el stock que verá el vendedor Prueba para simular pedidos</div>
             </div>
             <button onClick={()=>{const sb={};products.forEach(p=>{sb[p.id]=p.stock;});updateSandboxStock(sb);}}
-              style={{padding:"7px 14px",borderRadius:8,border:"1.5px solid #9b59b6",background:"#fff",color:"#6c3483",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-              🔄 Resetear al stock real
+              style={{padding:"7px 14px",borderRadius:8,border:"1.5px solid #9b59b6",background:"#fff",color:"#6c3483",fontWeight:700,fontSize:12,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6}}>
+              <RefreshCw size={12} strokeWidth={2.4}/> Resetear al stock real
             </button>
           </div>
           <SandboxStockManager products={products} sandboxStock={sandboxStock} updateSandboxStock={updateSandboxStock}/>
@@ -8019,7 +8035,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
       {section==="sandbox"     && (
         <div>
           <div style={{background:"#f5eef8",border:"1.5px solid #9b59b6",borderRadius:12,padding:"12px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
-            <span style={{fontSize:28}}>🧪</span>
+            <span style={{color:"#6c3483"}}><Beaker size={26} strokeWidth={1.9}/></span>
             <div>
               <div style={{fontWeight:800,fontSize:14,color:"#6c3483"}}>Dashboard Demo — Vendedor Prueba</div>
               <div style={{fontSize:12,color:"#888",marginTop:2}}>Mostrá a los vendedores cómo funciona el sistema. Estos datos son del sandbox y no afectan las estadísticas reales.</div>
@@ -8027,7 +8043,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
           </div>
           {sandboxOrders.length===0
             ? <div style={{textAlign:"center",padding:60,background:"#fff",borderRadius:12,color:"#aaa"}}>
-                <div style={{fontSize:48,marginBottom:8}}>🧪</div>
+                <div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><Beaker size={44} color="#ccc" strokeWidth={1.6}/></div>
                 <div style={{fontWeight:700,fontSize:15}}>Sin datos de prueba aún</div>
                 <div style={{fontSize:13,marginTop:4}}>Ingresá con el usuario Prueba y generá algunos pedidos para ver el demo aquí.</div>
               </div>
@@ -8118,7 +8134,7 @@ function VentasPanel({orders}) {
 
   if(vendidas.length===0) return (
     <div style={{textAlign:"center",padding:60,background:"#fff",borderRadius:12,color:"#aaa"}}>
-      <div style={{fontSize:48,marginBottom:8}}>📈</div>
+      <div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><TrendUp size={44} color="#ccc" strokeWidth={1.6}/></div>
       <div style={{fontWeight:700,fontSize:15}}>No hay pedidos entregados aún</div>
       <div style={{fontSize:13,marginTop:4}}>Las ventas aparecerán aquí cuando los pedidos pasen a "Entregado"</div>
     </div>
@@ -8129,13 +8145,13 @@ function VentasPanel({orders}) {
       {/* KPIs */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginBottom:20}}>
         {[
-          {label:"Total vendido",    value:fARS(totalGeneral),      color:RED,   icon:"💰"},
-          {label:"Pedidos entregados",value:cantGeneral,            color:"#1a5276", icon:"📦"},
-          {label:"Ticket promedio",  value:fARS(totalGeneral/Math.max(cantGeneral,1)), color:"#1e8449", icon:"📊"},
-          {label:"Vendedores activos",value:byVendedor.length,      color:"#6c3483", icon:"👥"},
+          {label:"Total vendido",    value:fARS(totalGeneral),      color:RED,   Icon:CircleDollarSign},
+          {label:"Pedidos entregados",value:cantGeneral,            color:"#1a5276", Icon:Package},
+          {label:"Ticket promedio",  value:fARS(totalGeneral/Math.max(cantGeneral,1)), color:"#1e8449", Icon:TrendUp},
+          {label:"Vendedores activos",value:byVendedor.length,      color:"#6c3483", Icon:Users},
         ].map(k=>(
           <div key={k.label} style={{background:"#fff",borderRadius:12,padding:"16px 18px",boxShadow:"0 1px 6px #0001",borderLeft:`4px solid ${k.color}`}}>
-            <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>{k.icon} {k.label}</div>
+            <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4,display:"flex",alignItems:"center",gap:4}}><k.Icon size={11} strokeWidth={2.4}/> {k.label}</div>
             <div style={{fontSize:20,fontWeight:900,color:k.color}}>{k.value}</div>
           </div>
         ))}
@@ -8143,9 +8159,9 @@ function VentasPanel({orders}) {
 
       {/* Tab selector */}
       <div style={{background:"#fff",borderRadius:12,padding:4,marginBottom:16,display:"flex",gap:4,boxShadow:"0 1px 4px #0001"}}>
-        {[{k:"dia",l:"📅 Por día"},{k:"mes",l:"📆 Por mes"},{k:"vendedor",l:"👤 Por vendedor"}].map(t=>(
-          <button key={t.k} onClick={()=>setPeriodo(t.k)} style={{flex:1,padding:"9px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:periodo===t.k?`linear-gradient(135deg,${REDD},${RED})`:"transparent",color:periodo===t.k?"#fff":"#555"}}>
-            {t.l}
+        {[{k:"dia",l:"Por día",Icon:Calendar},{k:"mes",l:"Por mes",Icon:Calendar},{k:"vendedor",l:"Por vendedor",Icon:Users}].map(t=>(
+          <button key={t.k} onClick={()=>setPeriodo(t.k)} style={{flex:1,padding:"9px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:periodo===t.k?`linear-gradient(135deg,${REDD},${RED})`:"transparent",color:periodo===t.k?"#fff":"#555",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}>
+            <t.Icon size={12} strokeWidth={2.4}/> {t.l}
           </button>
         ))}
       </div>
@@ -8153,21 +8169,21 @@ function VentasPanel({orders}) {
       {/* Chart */}
       <div style={{background:"#fff",borderRadius:12,padding:20,boxShadow:"0 1px 4px #0001"}}>
         {periodo==="dia" && <>
-          <div style={{fontWeight:800,fontSize:15,marginBottom:16}}>📅 Ventas por día (últimos 30 días)</div>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:16,display:"flex",alignItems:"center",gap:7}}><Calendar size={15} strokeWidth={2.3}/> Ventas por día (últimos 30 días)</div>
           {byDay.length===0
             ? <div style={{color:"#aaa",textAlign:"center",padding:20}}>Sin datos</div>
             : <BarChart data={byDay} colorFn={()=>RED}/>
           }
         </>}
         {periodo==="mes" && <>
-          <div style={{fontWeight:800,fontSize:15,marginBottom:16}}>📆 Ventas por mes</div>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:16,display:"flex",alignItems:"center",gap:7}}><Calendar size={15} strokeWidth={2.3}/> Ventas por mes</div>
           {byMonth.length===0
             ? <div style={{color:"#aaa",textAlign:"center",padding:20}}>Sin datos</div>
             : <BarChart data={byMonth} colorFn={()=>"#1a5276"}/>
           }
         </>}
         {periodo==="vendedor" && <>
-          <div style={{fontWeight:800,fontSize:15,marginBottom:16}}>👤 Dashboard por vendedor</div>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:16,display:"flex",alignItems:"center",gap:7}}><Users size={15} strokeWidth={2.3}/> Dashboard por vendedor</div>
           {byVendedor.length===0
             ? <div style={{color:"#aaa",textAlign:"center",padding:20}}>Sin datos</div>
             : <>
@@ -8223,13 +8239,13 @@ function VentasPanel({orders}) {
 // ── Panel de Ofertas y Combos ──────────────────────────────────────────────
 function TypeBadge({tipo}) {
   const CFG = {
-    combo:     {label:"🎁 COMBO",  bg:"#7b1a1a", color:"#fff",    border:"none"},
-    "3x2":     {label:"🏷️ OFERTA", bg:"#fef9e7", color:"#b7770d", border:"1px solid #f3d98a"},
-    descuento: {label:"🔻 DESC.",  bg:"#fdecea", color:"#c0392b", border:"1px solid #f5b7b1"},
-    destacado: {label:"📣 AVISO",  bg:"#eaf4fc", color:"#1a5276", border:"1px solid #aed6f1"},
+    combo:     {label:"COMBO",  Icon:Gift,      bg:"#7b1a1a", color:"#fff",    border:"none"},
+    "3x2":     {label:"OFERTA", Icon:Tag,       bg:"#fef9e7", color:"#b7770d", border:"1px solid #f3d98a"},
+    descuento: {label:"DESC.",  Icon:TrendDown, bg:"#fdecea", color:"#c0392b", border:"1px solid #f5b7b1"},
+    destacado: {label:"AVISO",  Icon:Star,      bg:"#eaf4fc", color:"#1a5276", border:"1px solid #aed6f1"},
   };
   const c = CFG[tipo] || CFG.descuento;
-  return <span style={{fontSize:10,fontWeight:800,borderRadius:6,padding:"3px 8px",whiteSpace:"nowrap",background:c.bg,color:c.color,border:c.border,display:"inline-block"}}>{c.label}</span>;
+  return <span style={{fontSize:10,fontWeight:800,borderRadius:6,padding:"3px 8px",whiteSpace:"nowrap",background:c.bg,color:c.color,border:c.border,display:"inline-flex",alignItems:"center",gap:3}}><c.Icon size={10} strokeWidth={2.6}/>{c.label}</span>;
 }
 
 function nextPromoSku(promos) {
@@ -8247,7 +8263,7 @@ function promoDisplay(promo, products) {
   const d = promo.data || {};
   let titulo = promo.nombre, sub = "";
   if(promo.tipo==="combo") {
-    sub = `${promo.id} · ${(d.componentes||[]).length} productos · ${fARS(d.precioFijo||0)}${d.mostrarEnFiesta?" · 🎉 Fiesta":""}`;
+    sub = `${promo.id} · ${(d.componentes||[]).length} productos · ${fARS(d.precioFijo||0)}${d.mostrarEnFiesta?" · Fiesta":""}`;
   } else if(promo.tipo==="3x2") {
     const prod = products.find(p=>p.id===d.productoId);
     titulo = prod?.name || promo.nombre;
@@ -8490,7 +8506,7 @@ function ComboForm({products, editing, nextSku, onSave, onCancel}) {
               <input type="number" min="1" value={c.qty} onChange={e=>setQty(c.pid,+e.target.value||1)} onFocus={e=>e.target.select()} style={{width:46,padding:"4px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontWeight:800,fontSize:12,textAlign:"center"}}/>
               <span style={{flex:1,fontSize:13,fontWeight:600}}>{p?.name||c.pid}</span>
               <span style={{fontSize:12,color:"#888"}}>{fARS(p?.salePrice||0)} c/u</span>
-              <span onClick={()=>delComp(c.pid)} style={{color:RED,cursor:"pointer",padding:"0 4px"}}>✕</span>
+              <span onClick={()=>delComp(c.pid)} style={{color:RED,cursor:"pointer",padding:"0 4px",display:"inline-flex"}}><XIcon size={12} strokeWidth={2.6}/></span>
             </div>
           );
         })}
@@ -8518,7 +8534,7 @@ function ComboForm({products, editing, nextSku, onSave, onCancel}) {
           {mostrarEnFiesta && <CheckCircle size={13} strokeWidth={3} color="#fff"/>}
         </div>
         <div>
-          <div style={{fontWeight:700,fontSize:13}}>🎉 Mostrar en "De fiesta con Madrid"</div>
+          <div style={{fontWeight:700,fontSize:13,display:"flex",alignItems:"center",gap:6}}><PartyPopper size={13} strokeWidth={2.3}/> Mostrar en "De fiesta con Madrid"</div>
           <div style={{fontSize:11,color:"#888",marginTop:1}}>Aparece en la sección de regalitos de cumpleaños del home de la web</div>
         </div>
       </div>
