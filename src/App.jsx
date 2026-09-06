@@ -549,7 +549,7 @@ function buildVendorSuggestions({products, promos, productPairs, stockLog, cart}
   const push = (pid, motivo) => {
     if(cartPids.has(pid) || sugeridos.has(pid)) return;
     const p = products.find(x=>x.id===pid);
-    if(!p || p.stock<=0) return;
+    if(!p || (p.disponible??p.stock)<=0) return;
     sugeridos.add(pid);
     out.push({product:p, motivo});
   };
@@ -565,7 +565,7 @@ function buildVendorSuggestions({products, promos, productPairs, stockLog, cart}
   // 3) Sin rotación hace 180 días o más
   const lastMovMap = buildLastMovMap(stockLog);
   products
-    .filter(p=>p.stock>0 && !cartPids.has(p.id) && !sugeridos.has(p.id))
+    .filter(p=>(p.disponible??p.stock)>0 && !cartPids.has(p.id) && !sugeridos.has(p.id))
     .map(p=>({p, dias:diasSinRotacion(lastMovMap,p.id)}))
     .filter(x=>x.dias!==null && x.dias>=180)
     .sort((a,b)=>b.dias-a.dias)
@@ -604,9 +604,17 @@ function useLocalData(key, initial) {
   return [data, setter];
 }
 
-function SPill({n}) {
-  const [c,b] = n===0?["#c0392b","#fdecea"]:n<=5?["#e67e22","#fef9e7"]:["#1e8449","#d5f5e3"];
-  return <span style={{background:b,color:c,borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}>{n===0?"Sin stock":n<=5?<><AlertTriangle size={10} strokeWidth={2.6}/>{n}</>:n}</span>;
+function SPill({n, reservado}) {
+  // n = disponible (stock físico menos lo reservado en otros pedidos) — puede dar
+  // 0 o negativo tanto porque no hay stock físico como porque está todo reservado;
+  // distinguimos ambos casos para no decir "Sin stock" de algo que sí hay, solo
+  // que está comprometido en otro pedido.
+  if(n<=0) {
+    const [c,b] = reservado>0 ? ["#e67e22","#fef9e7"] : ["#c0392b","#fdecea"];
+    return <span style={{background:b,color:c,borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}>{reservado>0?"Reservado":"Sin stock"}</span>;
+  }
+  const [c,b] = n<=5?["#e67e22","#fef9e7"]:["#1e8449","#d5f5e3"];
+  return <span style={{background:b,color:c,borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}>{n<=5?<><AlertTriangle size={10} strokeWidth={2.6}/>{n}</>:n}</span>;
 }
 function Bdg({stage}) {
   const c=SCFG[stage]||{};
@@ -1949,13 +1957,40 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   };
   // Products with prices adjusted for active list
   const isTestUser = isTestOrder(currentUser.vendedor || currentUser.name);
-  const pricedProducts = useMemo(()=>products.map(p=>({
-    ...p,
-    salePrice: getPrice(p),
-    _basePrice: p.salePrice,
+  // "Reservado": suma de lo pedido en pedidos reales que todavía no se entregaron.
+  // No es una columna — se recalcula en vivo a partir de `orders`, así nunca se
+  // desincroniza del stock real. El stock físico solo baja al Entregar (ver setStage).
+  const reservadoReal = useMemo(() => {
+    const m = {};
+    orders.forEach(o => {
+      if (o.isSandbox || o.stage === "entregado") return;
+      (o.items||[]).forEach(it => { m[it.pid] = (m[it.pid]||0) + it.qty; });
+    });
+    return m;
+  }, [orders]);
+  const reservadoSandbox = useMemo(() => {
+    const m = {};
+    orders.forEach(o => {
+      if (!o.isSandbox || o.stage === "entregado") return;
+      (o.items||[]).forEach(it => { m[it.pid] = (m[it.pid]||0) + it.qty; });
+    });
+    return m;
+  }, [orders]);
+  const pricedProducts = useMemo(()=>products.map(p=>{
     // Vendedor Prueba ve el stock sandbox, no el real
-    stock: isTestUser ? (sandboxStock[p.id] ?? p.stock) : p.stock,
-  })),[products, activeList, isTestUser, sandboxStock]);
+    const stockBase = isTestUser ? (sandboxStock[p.id] ?? p.stock) : p.stock;
+    const reservado = isTestUser ? (reservadoSandbox[p.id]||0) : (reservadoReal[p.id]||0);
+    return {
+      ...p,
+      salePrice: getPrice(p),
+      _basePrice: p.salePrice,
+      stock: stockBase,
+      reservado,
+      // "Disponible": lo que de verdad se puede vender ahora — reemplaza a `stock`
+      // en toda decisión de disponibilidad (ver plan "Stock en reserva").
+      disponible: stockBase - reservado,
+    };
+  }),[products, activeList, isTestUser, sandboxStock, reservadoReal, reservadoSandbox]);
 
   const addLog = async (entry) => {
     const full = {id:genId(),fecha:new Date().toLocaleString("es-AR"),usuario:currentUser.name,rol:currentUser.role,...entry};
@@ -1976,43 +2011,18 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const isSandbox = test;
 
     if(isSandbox) {
-      // SANDBOX: el stock usa el paralelo en memoria/localStorage (nunca toca lm_products).
-      // El PEDIDO si se guarda en Supabase para que el admin pueda verlo en el Dashboard Demo
-      // desde cualquier dispositivo, sin generar notificaciones ni tocar el stock real.
-      updateSandboxStock(prev => {
-        const next = {...prev};
-        orderWithNum.items.forEach(it => {
-          next[it.pid] = Math.max(0, (next[it.pid] ?? 0) - it.qty);
-        });
-        return next;
-      });
+      // SANDBOX: el pedido se guarda en Supabase para que el admin pueda verlo en el
+      // Dashboard Demo desde cualquier dispositivo, sin generar notificaciones. El stock
+      // sandbox recién se toca al Entregar (ver setStage) — hasta entonces solo queda
+      // "reservado" (calculado en vivo, ver reservadoSandbox).
       setOrders(o=>[{...orderWithNum, isSandbox: true},...o]);
       await db.upsertOrder({...orderWithNum, isSandbox: true});
       if(!order.fromQuote) setTimeout(() => printDoc(orderWithNum, "reserva"), 400);
       return; // ← no notifs, no log de actividad, no toca stock real
     }
 
-    // REAL: descontar stock (respetando variantes con pool compartido), guardar en Supabase, notificar
-    const qtyByPid = {};
-    orderWithNum.items.forEach(i=>{ qtyByPid[i.pid] = (qtyByPid[i.pid]||0) + i.qty; });
-    let updatedProds = products;
-    for(const [pid,qty] of Object.entries(qtyByPid)) updatedProds = applyStockDelta(updatedProds, pid, -qty);
-    setProducts(updatedProds);
-    const idsAfectados = new Set();
-    Object.keys(qtyByPid).forEach(pid=>{
-      const t = products.find(p=>p.id===pid);
-      const grupoId = t ? grupoVarianteId(t) : pid;
-      updatedProds.filter(p=>grupoVarianteId(p)===grupoId).forEach(p=>idsAfectados.add(p.id));
-    });
-    for(const p of updatedProds.filter(p=>idsAfectados.has(p.id))) await db.upsertProduct(p);
-    // Registro en el historial de stock: sin esto la venta es el único movimiento
-    // de stock que no queda en ningún lado, y el historial no sirve para auditar
-    // si no tiene TODOS los movimientos, no solo los ajustes manuales.
-    Object.entries(qtyByPid).forEach(([pid,qty])=>{
-      const antes = products.find(p=>p.id===pid);
-      const despues = updatedProds.find(p=>p.id===pid);
-      if(antes && despues) addLog({tipo:"SALIDA", productoId:pid, producto:antes.name, stockAntes:antes.stock, stockDespues:despues.stock, cambio:-qty, motivo:`Vendido en pedido ${orderWithNum.docNum} (${orderWithNum.client})`});
-    });
+    // REAL: guardar en Supabase, notificar. El stock físico recién se descuenta al
+    // Entregar (ver setStage) — hasta entonces solo queda "reservado" (en vivo, reservadoReal).
     setOrders(o=>[{...orderWithNum, isSandbox: false},...o]);
     await db.upsertOrder({...orderWithNum, isSandbox: false});
     const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"NUEVO_PEDIDO",para:"admin",icono:"🛒",titulo:"Nuevo pedido registrado",cuerpo:`${orderWithNum.client} - ${fARS(orderWithNum.total)} - ${orderWithNum.docNum}`,ref:orderWithNum.id};
@@ -2032,6 +2042,52 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       const test = isTestOrder(ord.vendedor);
       const n = test ? 0 : await db.nextCounter("comp");
       updated = {...updated, compNum: test ? `TEST-${genId().slice(-6).toUpperCase()}` : fmtDocNum("Comp", n), isTest: test};
+    }
+
+    // Cruce de frontera "entregado": acá (y no al crear el pedido) es donde el stock
+    // físico se descuenta de verdad — antes de esto el pedido solo estaba "reservado"
+    // (ver reservadoReal/reservadoSandbox). Al deshacer una entrega, se restaura igual.
+    const entrando = ord.stage !== "entregado" && stage === "entregado";
+    const saliendo = ord.stage === "entregado" && stage !== "entregado";
+    if(entrando || saliendo) {
+      const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
+      const signo = entrando ? -1 : 1;
+      const qtyByPid = {};
+      (ord.items||[]).forEach(it=>{ qtyByPid[it.pid] = (qtyByPid[it.pid]||0) + it.qty; });
+      if(isSandboxOrder) {
+        updateSandboxStock(prev => {
+          const next = {...prev};
+          Object.entries(qtyByPid).forEach(([pid,qty]) => {
+            next[pid] = Math.max(0, (next[pid] ?? 0) + signo*qty);
+          });
+          return next;
+        });
+      } else {
+        let updatedProds = products;
+        for(const [pid,qty] of Object.entries(qtyByPid)) updatedProds = applyStockDelta(updatedProds, pid, signo*qty);
+        setProducts(updatedProds);
+        const idsAfectados = new Set();
+        Object.keys(qtyByPid).forEach(pid=>{
+          const t = products.find(p=>p.id===pid);
+          const grupoId = t ? grupoVarianteId(t) : pid;
+          updatedProds.filter(p=>grupoVarianteId(p)===grupoId).forEach(p=>idsAfectados.add(p.id));
+        });
+        for(const p of updatedProds.filter(p=>idsAfectados.has(p.id))) await db.upsertProduct(p);
+        // Historial: recién acá se descuenta/restaura stock real, así que el movimiento
+        // de venta queda registrado en el cruce de frontera, no en la creación del pedido.
+        Object.entries(qtyByPid).forEach(([pid,qty])=>{
+          const antes = products.find(p=>p.id===pid);
+          const despues = updatedProds.find(p=>p.id===pid);
+          if(antes && despues) addLog({
+            tipo: entrando ? "SALIDA" : "ENTRADA",
+            productoId:pid, producto:antes.name, stockAntes:antes.stock, stockDespues:despues.stock,
+            cambio: signo*qty,
+            motivo: entrando
+              ? `Vendido en pedido ${updated.docNum||updated.compNum||id} (${updated.client})`
+              : `Stock restaurado al deshacer la entrega del pedido ${updated.docNum||updated.compNum||id} (${updated.client})`,
+          });
+        });
+      }
     }
 
     setOrders(o=>o.map(x=>x.id===id?updated:x));
@@ -2059,25 +2115,35 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const ord=orders.find(o=>o.id===id);
     // Detectar sandbox por isSandbox flag O por vendedor de prueba
     const isSandboxOrder = ord && (ord.isSandbox || isTestOrder(ord.vendedor));
-    if(ord && ord.stage!=="entregado") {
+    // Solo un pedido Entregado ya descontó stock físico de verdad (ver setStage) — borrar
+    // uno que no llegó a Entregado no toca stock, porque nunca era más que "reservado".
+    if(ord && ord.stage==="entregado") {
+      const qtyByPid = {};
+      (ord.items||[]).forEach(it=>{ qtyByPid[it.pid] = (qtyByPid[it.pid]||0) + it.qty; });
       if(isSandboxOrder) {
         // SANDBOX: devolver stock al paralelo en memoria, nunca tocar Supabase
         updateSandboxStock(prev => {
           const next = {...prev};
-          ord.items.forEach(it => { next[it.pid] = (next[it.pid] ?? 0) + it.qty; });
+          Object.entries(qtyByPid).forEach(([pid,qty]) => { next[pid] = (next[pid] ?? 0) + qty; });
           return next;
         });
       } else {
-        const updatedProds=products.map(x=>{const qty=ord.items.filter(i=>i.pid===x.id).reduce((s,i)=>s+i.qty,0);return qty>0?{...x,stock:x.stock+qty}:x;});
+        let updatedProds = products;
+        for(const [pid,qty] of Object.entries(qtyByPid)) updatedProds = applyStockDelta(updatedProds, pid, qty);
         setProducts(updatedProds);
-        const afectados = updatedProds.filter(p=>ord.items.find(i=>i.pid===p.id));
-        for(const p of afectados) await db.upsertProduct(p);
+        const idsAfectados = new Set();
+        Object.keys(qtyByPid).forEach(pid=>{
+          const t = products.find(p=>p.id===pid);
+          const grupoId = t ? grupoVarianteId(t) : pid;
+          updatedProds.filter(p=>grupoVarianteId(p)===grupoId).forEach(p=>idsAfectados.add(p.id));
+        });
+        for(const p of updatedProds.filter(p=>idsAfectados.has(p.id))) await db.upsertProduct(p);
         // Registro en el historial de stock: el stock que vuelve al borrar un
         // pedido es un movimiento real, antes quedaba completamente invisible.
-        afectados.forEach(p=>{
-          const antes = products.find(x=>x.id===p.id);
-          const qty = ord.items.filter(i=>i.pid===p.id).reduce((s,i)=>s+i.qty,0);
-          addLog({tipo:"ENTRADA", productoId:p.id, producto:p.name, stockAntes:antes?antes.stock:p.stock-qty, stockDespues:p.stock, cambio:qty, motivo:`Stock restaurado al eliminar el pedido ${ord.docNum||ord.compNum||ord.id} (${ord.client})`});
+        Object.entries(qtyByPid).forEach(([pid,qty])=>{
+          const antes = products.find(p=>p.id===pid);
+          const despues = updatedProds.find(p=>p.id===pid);
+          if(antes && despues) addLog({tipo:"ENTRADA", productoId:pid, producto:antes.name, stockAntes:antes.stock, stockDespues:despues.stock, cambio:qty, motivo:`Stock restaurado al eliminar el pedido ${ord.docNum||ord.compNum||ord.id} (${ord.client})`});
         });
       }
     }
@@ -2231,29 +2297,33 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const ord = orders.find(o=>o.id===id);
     if(!ord) return;
     const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
-    // Aplicar cambios: restaurar stock viejo, descontar nuevo
-    if(isSandboxOrder) {
-      // SANDBOX: ajustar el stock paralelo en memoria, nunca tocar Supabase
-      updateSandboxStock(prev => {
-        const next = {...prev};
-        ord.items.forEach(it => { next[it.pid] = (next[it.pid] ?? 0) + it.qty; });
-        ord.editItems.forEach(it => { next[it.pid] = Math.max(0, (next[it.pid] ?? 0) - it.qty); });
-        return next;
-      });
-    } else {
-      // Devolver stock de items originales, descontar stock de items nuevos —
-      // todo pasando por applyStockDelta para respetar variantes con pool compartido.
-      let prods = products;
-      ord.items.forEach(it => { prods = applyStockDelta(prods, it.pid, it.qty); });
-      ord.editItems.forEach(it => { prods = applyStockDelta(prods, it.pid, -it.qty); });
-      setProducts(prods);
-      const idsAfectados = new Set();
-      [...ord.items, ...ord.editItems].forEach(it=>{
-        const t = products.find(p=>p.id===it.pid);
-        const grupoId = t ? grupoVarianteId(t) : it.pid;
-        prods.filter(p=>grupoVarianteId(p)===grupoId).forEach(p=>idsAfectados.add(p.id));
-      });
-      for(const p of prods.filter(p=>idsAfectados.has(p.id))) await db.upsertProduct(p);
+    // El stock físico solo está "en juego" si el pedido ya fue Entregado (ver setStage) —
+    // si todavía no, era puro "reservado", y ese se recalcula solo con los items nuevos.
+    if(ord.stage === "entregado") {
+      // Aplicar cambios: restaurar stock viejo, descontar nuevo
+      if(isSandboxOrder) {
+        // SANDBOX: ajustar el stock paralelo en memoria, nunca tocar Supabase
+        updateSandboxStock(prev => {
+          const next = {...prev};
+          ord.items.forEach(it => { next[it.pid] = (next[it.pid] ?? 0) + it.qty; });
+          ord.editItems.forEach(it => { next[it.pid] = Math.max(0, (next[it.pid] ?? 0) - it.qty); });
+          return next;
+        });
+      } else {
+        // Devolver stock de items originales, descontar stock de items nuevos —
+        // todo pasando por applyStockDelta para respetar variantes con pool compartido.
+        let prods = products;
+        ord.items.forEach(it => { prods = applyStockDelta(prods, it.pid, it.qty); });
+        ord.editItems.forEach(it => { prods = applyStockDelta(prods, it.pid, -it.qty); });
+        setProducts(prods);
+        const idsAfectados = new Set();
+        [...ord.items, ...ord.editItems].forEach(it=>{
+          const t = products.find(p=>p.id===it.pid);
+          const grupoId = t ? grupoVarianteId(t) : it.pid;
+          prods.filter(p=>grupoVarianteId(p)===grupoId).forEach(p=>idsAfectados.add(p.id));
+        });
+        for(const p of prods.filter(p=>idsAfectados.has(p.id))) await db.upsertProduct(p);
+      }
     }
     // Usa el total que el vendedor ya calculó al enviar los cambios (con descuento
     // aplicado si corresponde). Si no existe (flujo viejo), recalcula sin descuento.
@@ -2282,7 +2352,9 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     const ord = orders.find(o=>o.id===id);
     if(!ord) return;
     const isSandboxOrder = ord.isSandbox || isTestOrder(ord.vendedor);
-    if(!isSandboxOrder) {
+    // El stock físico solo está "en juego" si el pedido ya fue Entregado (ver setStage) —
+    // si todavía no, era puro "reservado", y ese se recalcula solo con los items nuevos.
+    if(!isSandboxOrder && ord.stage === "entregado") {
       let prods = products;
       ord.items.forEach(it => { prods = applyStockDelta(prods, it.pid, it.qty); });
       newItems.forEach(it => { prods = applyStockDelta(prods, it.pid, -it.qty); });
@@ -4034,7 +4106,7 @@ function OCard({o,exp,toggle,getP,onStage,onDel,onSaveNote,onRequestEdit,onAppro
             )}
             {idx>0&&!es&&(isAdmin||o.stage!=="entregado")&&<button onClick={async()=>{
               const label = STAGES[idx-1]; const cfg = SCFG[label];
-              if(o.stage==="entregado"&&isAdmin){if(!await confirmDialog("¿Retroceder pedido entregado?",`Vas a deshacer el estado "Entregado" y volver a "${cfg.label}". El stock ya fue descontado — tenés que ajustarlo manualmente si hace falta.`,true)) return;}
+              if(o.stage==="entregado"&&isAdmin){if(!await confirmDialog("¿Retroceder pedido entregado?",`Vas a deshacer el estado "Entregado" y volver a "${cfg.label}". El stock que se había descontado se restaura automáticamente.`,true)) return;}
               onStage(o.id,label);
             }} style={{padding:"8px 12px",borderRadius:8,border:`1.5px solid ${o.stage==="entregado"?"#f1948a":"#e5e5e5"}`,cursor:"pointer",background:"#fff",color:o.stage==="entregado"?RED:"#666",fontWeight:600,fontSize:13,display:"inline-flex",alignItems:"center",gap:5}}><ArrowLeftIcon size={12} strokeWidth={2.4}/> {o.stage==="entregado"?"Deshacer entrega":"Retroceder"}</button>}
             <button onClick={()=>printDoc(o, o.stage==="reserva"?"reserva":"confirmado")} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #d6eaf8",cursor:"pointer",background:"#fff",color:"#1a5276",fontWeight:600,fontSize:13}}>
@@ -4539,7 +4611,7 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
     const q=search.toLowerCase();
     let arr = products.filter(p=>{
       if(cat!=="todos"&&p.category!==cat)return false;
-      if(soloStock&&p.stock<=0)return false;
+      if(soloStock&&p.disponible<=0)return false;
       if(q)return norm(p.name).includes(norm(q))||normSKU(p.id).includes(normSKU(q));
       return true;
     });
@@ -4565,12 +4637,13 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
   // ── Productos regulares (no-combo) ──
   // En loteMode (Solicitud de Compra), el proveedor exige pedir en multiplos de caja (columna UNIDAD del Excel)
   const step = p => loteMode ? (p.multiploCompra||1) : 1;
-  // "Por encargue": si se pide más de lo que hay en stock, no se bloquea — se deja
-  // tomar el pedido igual, pero queda marcado para hacerle seguimiento despues.
+  // "Por encargue": si se pide más de lo disponible (stock físico menos lo ya
+  // reservado en otros pedidos), no se bloquea — se deja tomar el pedido igual,
+  // pero queda marcado para hacerle seguimiento despues.
   // No aplica en Solicitud de Compra (loteMode): ahi no se le vende a un cliente.
   const encargueFields = (p,qty) => loteMode ? {} : {
-    porEncargue: qty > (p.stock||0),
-    qtyFaltante: Math.max(0, qty - (p.stock||0)),
+    porEncargue: qty > (p.disponible ?? p.stock ?? 0),
+    qtyFaltante: Math.max(0, qty - (p.disponible ?? p.stock ?? 0)),
   };
   const addC=p=>setCart(c=>{
     const promo = getProductPromo(promos,p.id);
@@ -4718,7 +4791,7 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
                   <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4,flexWrap:"wrap"}}>
                     {isDesc&&<span style={{fontSize:11,color:"#aaa",textDecoration:"line-through"}}>{fARS(p.salePrice)}</span>}
                     <span style={{fontSize:15,fontWeight:800,color:RED}}>{fARS(finalPrice)}</span>
-                    <SPill n={p.stock}/>
+                    <SPill n={p.disponible} reservado={p.reservado}/>
                     {ic?.porEncargue && <span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef3e0",color:"#b7770d",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}><Package size={9} strokeWidth={2.5}/>{ic.qtyFaltante} por encargue</span>}
                   </div>
                 </div>
@@ -4763,7 +4836,7 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
               {loteMode && p.multiploCompra>1 && <div style={{marginBottom:7}}><span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"1.5px 8px",fontSize:10,fontWeight:700}}><BoxIcon size={10} strokeWidth={2.4}/>Caja de {p.multiploCompra}</span></div>}
               {!loteMode && p.multiploCompra>1 && <div style={{marginBottom:7}}><span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef9e7",color:"#b7770d",border:"1px solid #f0d080",borderRadius:20,padding:"1.5px 8px",fontSize:10,fontWeight:700}}><BoxIcon size={10} strokeWidth={2.4}/>Paquete cerrado: {p.multiploCompra} unidades</span></div>}
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                <span>{isDesc&&<span style={{fontSize:11,color:"#aaa",textDecoration:"line-through",marginRight:5}}>{fARS(p.salePrice)}</span>}<span style={{fontSize:17,fontWeight:800,color:RED}}>{fARS(finalPrice)}</span></span><SPill n={p.stock}/>
+                <span>{isDesc&&<span style={{fontSize:11,color:"#aaa",textDecoration:"line-through",marginRight:5}}>{fARS(p.salePrice)}</span>}<span style={{fontSize:17,fontWeight:800,color:RED}}>{fARS(finalPrice)}</span></span><SPill n={p.disponible} reservado={p.reservado}/>
               </div>
               {ic?.porEncargue && <div style={{marginBottom:10}}><span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef3e0",color:"#b7770d",borderRadius:20,padding:"2px 8px",fontSize:10,fontWeight:700}}><Package size={9} strokeWidth={2.5}/>{ic.qtyFaltante} por encargue</span></div>}
               {ic?<div style={{display:"flex",alignItems:"center",gap:5}}>
@@ -5482,8 +5555,8 @@ function StockAlert({low, onPedirReposicion}) {
                 {p.multiploCompra>1&&<span style={{fontSize:10,color:"#9a7d0a",marginLeft:6}}>(caja de {p.multiploCompra})</span>}
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{background:p.stock===0?"#fdecea":"#fff3cd",color:p.stock===0?RED:"#856404",borderRadius:8,padding:"2px 8px",fontSize:12,fontWeight:700,border:`1px solid ${p.stock===0?"#f5c6cb":"#ffc107"}`,display:"inline-flex",alignItems:"center",gap:3}}>
-                  {p.stock===0?"Sin stock":<><AlertTriangle size={11} strokeWidth={2.6}/>{p.stock} u.</>}
+                <span style={{background:p.disponible<=0?"#fdecea":"#fff3cd",color:p.disponible<=0?RED:"#856404",borderRadius:8,padding:"2px 8px",fontSize:12,fontWeight:700,border:`1px solid ${p.disponible<=0?"#f5c6cb":"#ffc107"}`,display:"inline-flex",alignItems:"center",gap:3}}>
+                  {p.disponible<=0?"Sin stock":<><AlertTriangle size={11} strokeWidth={2.6}/>{p.disponible} u.</>}
                 </span>
                 {onPedirReposicion && (
                   <button onClick={(e)=>{e.stopPropagation();onPedirReposicion(p.id,p.multiploCompra||1);}}
@@ -5788,7 +5861,7 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
   useEffect(()=>setPage(0),[search,cat,soloConStock,soloSinRotacion]);
 
   const filtered=useMemo(()=>products.filter(p=>{
-    if(soloConStock && p.stock<=0) return false;
+    if(soloConStock && p.disponible<=0) return false;
     if(cat!=="todos"&&p.category!==cat) return false;
     if(soloSinRotacion && isAdmin){ const d=diasSinRot(p.id); if(!d || d<180) return false; }
     if(q) return norm(p.name).includes(norm(q))||normSKU(p.id).includes(normSKU(q));
@@ -5797,7 +5870,7 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const shown = filtered.slice(page*PAGE_SIZE, (page+1)*PAGE_SIZE);
-  const low=products.filter(p=>p.stock>0&&p.stock<=5);
+  const low=products.filter(p=>p.disponible>0&&p.disponible<=5);
 
   // Contadores de productos sin rotación (solo relevantes para admin)
   const stale180 = isAdmin ? products.filter(p=>{ const d=diasSinRot(p.id); return d!==null&&d>=180&&d<360; }).length : 0;
@@ -5907,7 +5980,7 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
                             </button>
                           )}
                         </td>
-                        <td style={{padding:"10px 12px",textAlign:"right"}}><SPill n={p.stock}/></td>
+                        <td style={{padding:"10px 12px",textAlign:"right"}}><SPill n={p.disponible} reservado={p.reservado}/></td>
                         <td style={{padding:"10px 12px",fontWeight:700,color:RED,textAlign:"right",whiteSpace:"nowrap"}}>{fARS(p.salePrice)}</td>
                       </tr>
                     ) : (
@@ -5922,7 +5995,7 @@ function Stock({products,onUpd,onDel,onAdjust,isAdmin,addLog,stockLog,setStockLo
                         </div>
                       </td>
                       <td style={{padding:"9px 12px",color:"#aaa",fontSize:11}}>{p.category}</td>
-                      <td style={{padding:"9px 12px"}}><SPill n={p.stock}/></td>
+                      <td style={{padding:"9px 12px"}}><SPill n={p.disponible} reservado={p.reservado}/></td>
                       <td style={{padding:"9px 12px",fontWeight:700,color:RED}}>{fARS(p.salePrice)}</td>
                       {isAdmin&&<td style={{padding:"9px 12px",color:"#666"}}>{fARS(p.costPrice)}</td>}
                       {isAdmin&&<td style={{padding:"9px 12px",fontWeight:700,color:+m>=40?"#1e8449":"#e67e22"}}>{m}%</td>}
