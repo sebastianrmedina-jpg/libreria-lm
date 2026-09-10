@@ -3091,7 +3091,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
                 }}/>
             </>}
         {tab==="compras"    && <Compras products={products} onStock={addStock} isMobile={isMobile} canScan={currentUser.role==="admin"||isTestOrder(currentUser.vendedor||currentUser.name)||currentUser.barcodeEnabled} onResolverEncargue={resolverEncargue}/>}
-        {tab==="solicitud"  && <SolicitudCompra products={products} currentUser={currentUser} isAdmin={isAdmin} purchaseOrders={purchaseOrders} setPurchaseOrders={setPurchaseOrders} isMobile={isMobile} onStockExternal={addStock} addLog={addLog}
+        {tab==="solicitud"  && <SolicitudCompra products={products} orders={orders} currentUser={currentUser} isAdmin={isAdmin} purchaseOrders={purchaseOrders} setPurchaseOrders={setPurchaseOrders} isMobile={isMobile} onStockExternal={addStock} addLog={addLog}
           autoOpenId={deepLinkPOId} onConsumedAutoOpen={()=>setDeepLinkPOId(null)}
           prefillItem={deepLinkSolicitudItem} onConsumedPrefillItem={()=>setDeepLinkSolicitudItem(null)}
           onResolverEncargue={resolverEncargue}
@@ -6583,7 +6583,7 @@ function procesarExcelProveedor(po, file) {
   });
 }
 
-function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchaseOrders,isMobile,onStockExternal,addLog,onCreated,autoOpenId,onConsumedAutoOpen,prefillItem,onConsumedPrefillItem,onResolverEncargue}) {
+function SolicitudCompra({products,orders,currentUser,isAdmin,purchaseOrders,setPurchaseOrders,isMobile,onStockExternal,addLog,onCreated,autoOpenId,onConsumedAutoOpen,prefillItem,onConsumedPrefillItem,onResolverEncargue}) {
   const [view, setView] = useState("lista"); // lista | nueva | detalle
   const [selected, setSelected] = useState(null);
   const [showAddProduct, setShowAddProduct] = useState(false);
@@ -6624,6 +6624,22 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
     onConsumedAutoOpen && onConsumedAutoOpen();
   }, [autoOpenId, purchaseOrders]);
 
+  // Arma un carrito de Solicitud a partir de [{pid,qty}], resolviendo cada pid al SKU
+  // real del proveedor (una variante hija se pide por el SKU de su fila "padre" —
+  // mismo criterio que "Pedir reposición" desde Stock) y sumando cantidades cuando
+  // dos entradas terminan resolviendo al mismo SKU real.
+  const buildCartFromEncargue = (items) => {
+    const merged = {};
+    items.forEach(it => {
+      const base = products.find(pr=>pr.id===it.pid);
+      const pidReal = base?.skuProveedor || it.pid;
+      merged[pidReal] = (merged[pidReal]||0) + (it.qty||1);
+    });
+    return Object.entries(merged)
+      .map(([pid,qty]) => { const p = products.find(pr=>pr.id===pid); return p ? {pid:p.id, id:p.id, cartKey:p.id, qty, price:p.salePrice, name:p.name} : null; })
+      .filter(Boolean);
+  };
+
   // Deep-link desde "Pedir reposicion" (stock bajo) — abre Nueva Solicitud con el producto
   // ya cargado, en la cantidad del multiplo del proveedor (el admin la puede modificar despues)
   // Tambien acepta un array de items (ej: "Pedir lo que falta" desde un pedido con varios
@@ -6631,9 +6647,7 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
   useEffect(() => {
     if(!prefillItem) return;
     const items = Array.isArray(prefillItem) ? prefillItem : [prefillItem];
-    const newCart = items
-      .map(it => { const p = products.find(pr=>pr.id===it.pid); return p ? {pid:p.id, id:p.id, cartKey:p.id, qty:it.qty||1, price:p.salePrice, name:p.name} : null; })
-      .filter(Boolean);
+    const newCart = buildCartFromEncargue(items);
     if(newCart.length) {
       setCart(newCart);
       setView("nueva");
@@ -6642,13 +6656,40 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
   }, [prefillItem]);
 
   const myOrders = (isAdmin ? purchaseOrders : purchaseOrders.filter(po=>po.vendedor===currentUser.vendedor||po.vendedor===currentUser.name)).slice().sort(comparePOFechaDesc);
-  const [verHistorial, setVerHistorial] = useState(false);
+  const [listaSubView, setListaSubView] = useState("activas"); // activas | historial | faltantes
   // Una solicitud "recibida" a la que todavía le falta el paso de "Ingresar al
   // Stock" (stockPendiente) sigue siendo trabajo pendiente, no historial cerrado
   // — si no, queda enterrada en la pestaña que menos se mira a diario.
-  const myOrdersFiltradas = myOrders.filter(po => verHistorial ? (po.estado==="recibido" && !stockPendiente(po)) : (po.estado!=="recibido" || stockPendiente(po)));
+  const myOrdersFiltradas = myOrders.filter(po => listaSubView==="historial" ? (po.estado==="recibido" && !stockPendiente(po)) : (po.estado!=="recibido" || stockPendiente(po)));
   const countCerradas = myOrders.filter(po=>po.estado==="recibido" && !stockPendiente(po)).length;
   const countActivas = myOrders.filter(po=>po.estado!=="recibido" || stockPendiente(po)).length;
+
+  // Bandeja de faltantes: todo lo "por encargue" sin resolver, juntado por producto en
+  // vez de por pedido — mismo criterio que ya usa el chip "Por encargue" de Central
+  // (countEncargue), así el número no queda distinto entre las dos pantallas.
+  const faltantes = useMemo(() => {
+    const map = {};
+    (orders||[]).forEach(o => {
+      if(o.encargueResuelto) return;
+      (o.items||[]).forEach(it => {
+        if(!it.porEncargue || !(it.qtyFaltante>0)) return;
+        if(!map[it.pid]) {
+          const p = products.find(pr=>pr.id===it.pid);
+          map[it.pid] = { pid: it.pid, name: p?.name||it.name, qty: 0, clientes: [] };
+        }
+        map[it.pid].qty += it.qtyFaltante;
+        map[it.pid].clientes.push(o.client);
+      });
+    });
+    return Object.values(map).sort((a,b)=>b.qty-a.qty);
+  }, [orders, products]);
+
+  const armarSolicitudFaltantes = () => {
+    const newCart = buildCartFromEncargue(faltantes.map(f=>({pid:f.pid, qty:f.qty})));
+    if(!newCart.length) return;
+    setCart(newCart);
+    setView("nueva");
+  };
 
   const savePO = async (po) => {
     setPurchaseOrders(prev=>prev.find(x=>x.id===po.id)?prev.map(x=>x.id===po.id?po:x):[po,...prev]);
@@ -6705,23 +6746,48 @@ function SolicitudCompra({products,currentUser,isAdmin,purchaseOrders,setPurchas
         </button>
       </div>
 
-      {/* Toggle activas / historial */}
+      {/* Toggle activas / historial / faltantes */}
       <div style={{display:"flex",gap:6,marginBottom:12,margin:isMobile?"0 12px 12px":"0 0 12px"}}>
-        <button onClick={()=>setVerHistorial(false)}
-          style={{flex:1,padding:"8px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:!verHistorial?"linear-gradient(135deg,#1a5e20,#1e8449)":"#f0f0f0",color:!verHistorial?"#fff":"#555",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+        <button onClick={()=>setListaSubView("activas")}
+          style={{flex:1,padding:"8px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:listaSubView==="activas"?"linear-gradient(135deg,#1a5e20,#1e8449)":"#f0f0f0",color:listaSubView==="activas"?"#fff":"#555",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
           <ClipboardList size={12} strokeWidth={2.3}/> Activas ({countActivas})
         </button>
-        <button onClick={()=>setVerHistorial(true)}
-          style={{flex:1,padding:"8px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:verHistorial?"linear-gradient(135deg,#1a5276,#2980b9)":"#f0f0f0",color:verHistorial?"#fff":"#555",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+        <button onClick={()=>setListaSubView("historial")}
+          style={{flex:1,padding:"8px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:listaSubView==="historial"?"linear-gradient(135deg,#1a5276,#2980b9)":"#f0f0f0",color:listaSubView==="historial"?"#fff":"#555",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
           <Clock size={12} strokeWidth={2.3}/> Historial ({countCerradas})
+        </button>
+        <button onClick={()=>setListaSubView("faltantes")}
+          style={{flex:1,padding:"8px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:listaSubView==="faltantes"?"linear-gradient(135deg,#6c3483,#8e44ad)":"#f0f0f0",color:listaSubView==="faltantes"?"#fff":"#555",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+          <Package size={12} strokeWidth={2.3}/> Faltantes ({faltantes.length})
         </button>
       </div>
 
-      {myOrdersFiltradas.length===0
+      {listaSubView==="faltantes" ? (
+        faltantes.length===0
+          ? <div style={{textAlign:"center",padding:"50px 20px",color:"#aaa",background:"#fff",borderRadius:12,margin:isMobile?"0 12px":"0"}}>
+              <div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><Package size={42} color="#ccc" strokeWidth={1.6}/></div>
+              <div style={{fontWeight:700,fontSize:15}}>No hay nada por encargue pendiente</div>
+              <div style={{fontSize:13,marginTop:4}}>Cuando un pedido pida más de lo disponible, aparece acá</div>
+            </div>
+          : <div style={{background:"#fff",borderRadius:12,padding:"4px 16px",boxShadow:"0 1px 4px #0001",margin:isMobile?"0 12px":"0"}}>
+              {faltantes.map((f,i)=>(
+                <div key={f.pid} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderTop:i>0?"1px solid #f0f0f0":"none"}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:700,fontSize:13.5}}>{f.name}</div>
+                    <div style={{fontSize:11,color:"#999",marginTop:2}}>{f.clientes.length} pedido{f.clientes.length!==1?"s":""} esperando ({f.clientes.slice(0,3).join(", ")}{f.clientes.length>3?` y ${f.clientes.length-3} más`:""})</div>
+                  </div>
+                  <div style={{fontFamily:"ui-monospace,Consolas,monospace",fontWeight:800,fontSize:16,color:RED,flexShrink:0}}>{f.qty} u.</div>
+                </div>
+              ))}
+              <button onClick={armarSolicitudFaltantes} style={{width:"100%",margin:"10px 0 12px",padding:"11px",borderRadius:9,border:"none",background:"linear-gradient(135deg,#6c3483,#8e44ad)",color:"#fff",fontWeight:700,fontSize:13.5,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+                <ShoppingCart size={13} strokeWidth={2.4}/> Armar una solicitud con todo esto
+              </button>
+            </div>
+      ) : myOrdersFiltradas.length===0
         ? <div style={{textAlign:"center",padding:"50px 20px",color:"#aaa",background:"#fff",borderRadius:12,margin:isMobile?"0 12px":"0"}}>
             <div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><ClipboardList size={42} color="#ccc" strokeWidth={1.6}/></div>
-            <div style={{fontWeight:700,fontSize:15}}>{verHistorial?"No hay solicitudes recibidas aún":"No hay solicitudes activas"}</div>
-            <div style={{fontSize:13,marginTop:4}}>{verHistorial?"Las solicitudes ingresadas aparecen acá":"Creá una para pedir mercadería al proveedor"}</div>
+            <div style={{fontWeight:700,fontSize:15}}>{listaSubView==="historial"?"No hay solicitudes recibidas aún":"No hay solicitudes activas"}</div>
+            <div style={{fontSize:13,marginTop:4}}>{listaSubView==="historial"?"Las solicitudes ingresadas aparecen acá":"Creá una para pedir mercadería al proveedor"}</div>
           </div>
         : myOrdersFiltradas.map(po=>{
             const cfg = getEstadoCfg(po);
