@@ -7971,7 +7971,10 @@ function AnalisisComprasPanel({products, pricedProducts, purchaseOrders, stockLo
       const sinDatos = !ventas || ventas.eventos < 3;
       if (sinDatos) {
         // Sin ritmo confiable — solo vale la pena avisar si además queda poco.
-        if (disponible <= 5) out.push({ pid:p.id, name:p.name, disponible, sinDatos:true, semanas:ventas?.semanas||Array(8).fill(0), ritmoSemanal:0, ratio:-1, estado:"sindatos" });
+        // >0 y no solo "<=5": un producto ya en cero sin ventas recientes no es una
+        // señal de reposición, es un producto viejo o descontinuado — barrer todo el
+        // catálogo con eso adentro llenaría la lista de miles de filas sin utilidad.
+        if (disponible > 0 && disponible <= 5) out.push({ pid:p.id, name:p.name, disponible, sinDatos:true, semanas:ventas?.semanas||Array(8).fill(0), ritmoSemanal:0, ratio:-1, estado:"sindatos" });
         return;
       }
       const ritmoSemanal = ventas.total / (VENTANA_DIAS/7);
