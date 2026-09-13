@@ -3105,7 +3105,8 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
             });
           }}
         />}
-        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} purchaseOrders={purchaseOrders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile} sandboxStock={sandboxStock} setSandboxStock={setSandboxStock} updateSandboxStock={updateSandboxStock} promos={promos} setPromos={setPromos} productPairs={productPairs} setProductPairs={setProductPairs} settings={settings} onToggleExigirPago={toggleExigirPago} onConfirmarComprobante={confirmarComprobante} onRechazarComprobante={rechazarComprobante} onConfirmarEfectivo={confirmarEfectivo} onRechazarEfectivo={rechazarEfectivo}
+        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} pricedProducts={pricedProducts} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} purchaseOrders={purchaseOrders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile} sandboxStock={sandboxStock} setSandboxStock={setSandboxStock} updateSandboxStock={updateSandboxStock} promos={promos} setPromos={setPromos} productPairs={productPairs} setProductPairs={setProductPairs} settings={settings} onToggleExigirPago={toggleExigirPago} onConfirmarComprobante={confirmarComprobante} onRechazarComprobante={rechazarComprobante} onConfirmarEfectivo={confirmarEfectivo} onRechazarEfectivo={rechazarEfectivo}
+          onPedirEncargue={(items)=>{setDeepLinkSolicitudItem(items);setTab("solicitud");}}
           autoSection={deepLinkAdminSection} onConsumedAutoSection={()=>setDeepLinkAdminSection(null)}
           prefillProductId={deepLinkOfertaProductId} onConsumedPrefill={()=>setDeepLinkOfertaProductId(null)}/>}
       </div>
@@ -7912,7 +7913,7 @@ function PagosPanel({orders, onConfirmarComprobante, onRechazarComprobante, onCo
 }
 
 // ─── ANÁLISIS DE COMPRAS Y COSTOS — cambios de costo del proveedor + trazabilidad ──
-function AnalisisComprasPanel({products, purchaseOrders}) {
+function AnalisisComprasPanel({products, pricedProducts, purchaseOrders, stockLog, onPedirEncargue}) {
   const [tab, setTab] = useState("costos");
 
   const cambios = useMemo(()=>products
@@ -7937,6 +7938,67 @@ function AnalisisComprasPanel({products, purchaseOrders}) {
   const promedio = entregas.length ? (entregas.reduce((s,e)=>s+e.dias,0)/entregas.length).toFixed(1) : null;
   const masLenta = entregas.length ? [...entregas].sort((a,b)=>b.dias-a.dias)[0] : null;
 
+  // ── SUGERENCIAS DE REPOSICIÓN ──
+  // Ventas reales de los últimos VENTANA_DIAS: una sola pasada sobre stockLog
+  // (nunca por producto — con 14.000+ productos sería carísimo). Un movimiento
+  // cuenta como venta real solo si es "SALIDA" con el motivo que pone `setStage`
+  // al Entregar ("Vendido en pedido ...") — StockAdjust también escribe "SALIDA"
+  // para bajas/ajustes manuales, y esas no son ventas.
+  const VENTANA_DIAS = 56; // 8 semanas
+  const ventasPorProducto = useMemo(() => {
+    const desde = new Date(Date.now() - VENTANA_DIAS*86400000);
+    const m = {};
+    (stockLog||[]).forEach(l => {
+      if (l.tipo !== "SALIDA" || !l.motivo?.startsWith("Vendido en pedido")) return;
+      const f = parseFechaLog(l.fecha);
+      if (!f || f < desde) return;
+      const semana = Math.floor((Date.now() - f) / (7*86400000));
+      if (!m[l.productoId]) m[l.productoId] = { eventos: 0, total: 0, semanas: Array(8).fill(0) };
+      m[l.productoId].eventos += 1;
+      m[l.productoId].total += Math.abs(l.cambio);
+      if (semana >= 0 && semana < 8) m[l.productoId].semanas[7-semana] += Math.abs(l.cambio);
+    });
+    return m;
+  }, [stockLog]);
+
+  const leadTime = promedio!=null ? Number(promedio) : null;
+  const sugerencias = useMemo(() => {
+    if (leadTime==null) return [];
+    const out = [];
+    (pricedProducts||[]).forEach(p => {
+      const ventas = ventasPorProducto[p.id];
+      const disponible = p.disponible ?? p.stock ?? 0;
+      const sinDatos = !ventas || ventas.eventos < 3;
+      if (sinDatos) {
+        // Sin ritmo confiable — solo vale la pena avisar si además queda poco.
+        if (disponible <= 5) out.push({ pid:p.id, name:p.name, disponible, sinDatos:true, semanas:ventas?.semanas||Array(8).fill(0), ritmoSemanal:0, ratio:-1, estado:"sindatos" });
+        return;
+      }
+      const ritmoSemanal = ventas.total / (VENTANA_DIAS/7);
+      const ritmoDiario = ritmoSemanal/7;
+      const diasCobertura = ritmoDiario>0 ? disponible/ritmoDiario : Infinity;
+      const ratio = diasCobertura / leadTime;
+      const estado = ratio<1 ? "urgente" : ratio<1.5 ? "pronto" : "tranquilo";
+      if (estado==="tranquilo") { out.push({ pid:p.id, estado }); return; } // solo cuenta, no se detalla
+      const multiplo = p.multiploCompra||1;
+      const qtyCruda = Math.ceil(ritmoDiario*(leadTime+7)) - disponible;
+      const qtySugerida = Math.max(multiplo, Math.ceil(Math.max(qtyCruda,1)/multiplo)*multiplo);
+      out.push({ pid:p.id, name:p.name, disponible, sinDatos:false, semanas:ventas.semanas, ritmoSemanal, diasCobertura, ratio, estado, qtySugerida });
+    });
+    return out.sort((a,b)=>(a.ratio??-1)-(b.ratio??-1));
+  }, [pricedProducts, ventasPorProducto, leadTime]);
+  const urgentes = sugerencias.filter(s=>s.estado==="urgente");
+  const prontos = sugerencias.filter(s=>s.estado==="pronto");
+  const tranquilos = sugerencias.filter(s=>s.estado==="tranquilo");
+  const sinDatosLista = sugerencias.filter(s=>s.estado==="sindatos");
+  const listaVisible = [...urgentes, ...prontos, ...sinDatosLista];
+
+  // Alturas de barras del mini-histograma (8 semanas), escaladas a un máximo de 22px.
+  const sparkBars = (semanas) => {
+    const max = Math.max(...semanas, 1);
+    return semanas.map((v,i) => ({ x: i*9, h: Math.max(2, Math.round(v/max*22)) }));
+  };
+
   return (
     <div>
       <div style={{display:"flex",gap:8,marginBottom:18,maxWidth:640}}>
@@ -7945,6 +8007,9 @@ function AnalisisComprasPanel({products, purchaseOrders}) {
         </button>
         <button onClick={()=>setTab("entregas")} style={{flex:1,padding:"9px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,fontSize:12.5,background:tab==="entregas"?"#1a1a1a":"#fff",color:tab==="entregas"?"#fff":"#666",boxShadow:"0 1px 4px #0001",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}>
           <Truck size={12} strokeWidth={2.4}/> Trazabilidad de Entregas
+        </button>
+        <button onClick={()=>setTab("reposicion")} style={{flex:1,padding:"9px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,fontSize:12.5,background:tab==="reposicion"?"linear-gradient(135deg,#6c3483,#8e44ad)":"#fff",color:tab==="reposicion"?"#fff":"#666",boxShadow:"0 1px 4px #0001",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}>
+          <Clock size={12} strokeWidth={2.4}/> Sugerencias de Reposición {(urgentes.length+prontos.length)>0&&`(${urgentes.length+prontos.length})`}
         </button>
       </div>
 
@@ -7996,7 +8061,7 @@ function AnalisisComprasPanel({products, purchaseOrders}) {
               </div>
             </>
           )
-        ) : (
+        ) : tab==="entregas" ? (
           entregas.length===0 ? (
             <div style={{textAlign:"center",padding:40,background:"#fff",borderRadius:12,color:"#aaa"}}>
               <div style={{marginBottom:6,display:"flex",justifyContent:"center"}}><Truck size={32} color="#ccc" strokeWidth={1.6}/></div>
@@ -8034,6 +8099,94 @@ function AnalisisComprasPanel({products, purchaseOrders}) {
                   </div>
                 ))}
               </div>
+            </>
+          )
+        ) : (
+          leadTime==null ? (
+            <div style={{textAlign:"center",padding:40,background:"#fff",borderRadius:12,color:"#aaa"}}>
+              <div style={{marginBottom:6,display:"flex",justifyContent:"center"}}><Clock size={32} color="#ccc" strokeWidth={1.6}/></div>
+              <div style={{fontWeight:600,fontSize:13}}>Todavía no hay entregas registradas</div>
+              <div style={{fontSize:11.5,marginTop:4}}>Hace falta al menos una solicitud cerrada y recibida para saber cuánto tarda el proveedor — en cuanto haya una, esta pestaña se activa.</div>
+            </div>
+          ) : (
+            <>
+              <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+                <div style={{flex:1,minWidth:120,background:"#fff",borderRadius:12,padding:"14px 16px",borderLeft:"3px solid #c0392b",boxShadow:"0 1px 4px #0001"}}>
+                  <div style={{fontFamily:SERIF,fontSize:24,fontWeight:700,color:"#c0392b"}}>{urgentes.length}</div>
+                  <div style={{fontSize:11.5,color:"#888",marginTop:2,fontWeight:600}}>Pedir ahora</div>
+                </div>
+                <div style={{flex:1,minWidth:120,background:"#fff",borderRadius:12,padding:"14px 16px",borderLeft:"3px solid #b7770d",boxShadow:"0 1px 4px #0001"}}>
+                  <div style={{fontFamily:SERIF,fontSize:24,fontWeight:700,color:"#b7770d"}}>{prontos.length}</div>
+                  <div style={{fontSize:11.5,color:"#888",marginTop:2,fontWeight:600}}>Pedir pronto</div>
+                </div>
+                <div style={{flex:1,minWidth:120,background:"#fff",borderRadius:12,padding:"14px 16px",borderLeft:"3px solid #1e8449",boxShadow:"0 1px 4px #0001"}}>
+                  <div style={{fontFamily:SERIF,fontSize:24,fontWeight:700,color:"#1e8449"}}>{tranquilos.length}</div>
+                  <div style={{fontSize:11.5,color:"#888",marginTop:2,fontWeight:600}}>Tranquilos</div>
+                </div>
+              </div>
+
+              {listaVisible.length===0 ? (
+                <div style={{textAlign:"center",padding:40,background:"#fff",borderRadius:12,color:"#aaa"}}>
+                  <div style={{marginBottom:6,display:"flex",justifyContent:"center"}}><CheckCircle size={32} color="#ccc" strokeWidth={1.6}/></div>
+                  <div style={{fontWeight:600,fontSize:13}}>Nada urgente por ahora</div>
+                  <div style={{fontSize:11.5,marginTop:4}}>Avisa acá apenas algún producto empiece a quedarse corto.</div>
+                </div>
+              ) : (
+                <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 4px #0001",overflow:"hidden"}}>
+                  <div style={{padding:"12px 16px",borderBottom:"1px solid #f0f0f0",fontWeight:800,fontSize:13.5}}>Ordenado por urgencia</div>
+                  <div style={{padding:"9px 16px",borderBottom:"1px solid #f5f5f5",fontSize:11,color:"#999",display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{display:"inline-block",width:2,height:11,background:"#24151a99",flexShrink:0}}/>
+                    la línea marca el punto en que el stock dura exactamente lo que tarda el próximo pedido — a la izquierda, no llega a tiempo
+                  </div>
+                  {listaVisible.map(s=>{
+                    const bars = sparkBars(s.semanas);
+                    const pillCfg = s.estado==="urgente" ? {bg:"#fdecea",color:"#c0392b",label:"⛔ Pedir ahora"}
+                      : s.estado==="pronto" ? {bg:"#fef9e7",color:"#b7770d",label:"⚠ Pedir pronto"}
+                      : {bg:"#f0f0f0",color:"#888",label:"Sin historial suficiente"};
+                    const fillColor = s.sinDatos ? null : s.estado==="urgente" ? "#c0392b" : "#e67e22";
+                    const fillPct = s.sinDatos ? 100 : Math.min(100, s.ratio*50);
+                    return (
+                      <div key={s.pid} style={{padding:"12px 16px 13px",borderBottom:"1px solid #f5f5f5"}}>
+                        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:9}}>
+                          <div>
+                            <div style={{fontWeight:700,fontSize:12.5,color:"#1a1a1a"}}>{s.name}</div>
+                            <div style={{fontSize:11,color:"#999",marginTop:2}}>{s.pid} · {s.disponible} disponibles</div>
+                          </div>
+                          <span style={{background:pillCfg.bg,color:pillCfg.color,borderRadius:20,padding:"4px 10px",fontSize:10.5,fontWeight:700,display:"inline-flex",alignItems:"center",gap:4,whiteSpace:"nowrap",flexShrink:0}}>{pillCfg.label}</span>
+                        </div>
+                        <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+                          <div style={{flexShrink:0,textAlign:"center"}}>
+                            <svg width="70" height="24" viewBox="0 0 70 24">
+                              {bars.map((b,i)=><rect key={i} x={b.x} y={24-b.h} width="6" height={b.h} rx="1.5" fill={s.sinDatos?"#ccc1b3":"#9a8c81"}/>)}
+                            </svg>
+                            <div style={{fontSize:9.5,color:"#bbb",marginTop:2}}>{s.sinDatos?"pocas ventas":`~${s.ritmoSemanal.toFixed(1)} u./sem`}</div>
+                          </div>
+                          <div style={{flex:1,minWidth:180}}>
+                            <div style={{position:"relative",height:10,background:"#f0ebe3",borderRadius:5}}>
+                              {s.sinDatos
+                                ? <div style={{position:"absolute",inset:0,borderRadius:5,background:"repeating-linear-gradient(45deg,#e9e3d8,#e9e3d8 4px,#f4efe6 4px,#f4efe6 8px)"}}/>
+                                : <div style={{height:"100%",borderRadius:5,width:`${fillPct}%`,background:fillColor}}/>}
+                              <div style={{position:"absolute",left:"50%",top:-3,bottom:-3,width:2,background:"#24151a99",borderRadius:1}}/>
+                            </div>
+                            <div style={{display:"flex",justifyContent:"space-between",fontSize:10.5,color:"#999",marginTop:4}}>
+                              <span>{s.sinDatos?"Sin ritmo confiable":`Se agota en ~${Math.round(s.diasCobertura)} días`}</span>
+                              <span>Proveedor tarda ~{leadTime} días</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {urgentes.length>0 && onPedirEncargue && (
+                    <div style={{padding:12}}>
+                      <button onClick={()=>onPedirEncargue(urgentes.map(u=>({pid:u.pid, qty:u.qtySugerida})))}
+                        style={{width:"100%",padding:11,borderRadius:9,border:"none",background:"#c0392b",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+                        <ShoppingCart size={13} strokeWidth={2.4}/> Agregar los {urgentes.length} urgentes a una solicitud
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )
         )}
@@ -8131,7 +8284,7 @@ function DineroDisponiblePanel({orders, purchaseOrders}) {
   );
 }
 
-function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,purchaseOrders,priceLists,setPriceLists,isMobile,sandboxStock,setSandboxStock,updateSandboxStock,promos,setPromos,productPairs,setProductPairs,settings,onToggleExigirPago,onConfirmarComprobante,onRechazarComprobante,onConfirmarEfectivo,onRechazarEfectivo,autoSection,onConsumedAutoSection,prefillProductId,onConsumedPrefill}) {
+function AdminPanel({users,setUsers,vendors,setVendors,products,pricedProducts,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,purchaseOrders,priceLists,setPriceLists,isMobile,sandboxStock,setSandboxStock,updateSandboxStock,promos,setPromos,productPairs,setProductPairs,settings,onToggleExigirPago,onConfirmarComprobante,onRechazarComprobante,onConfirmarEfectivo,onRechazarEfectivo,onPedirEncargue,autoSection,onConsumedAutoSection,prefillProductId,onConsumedPrefill}) {
   const [section, setSection] = useState("home");
   // Deep-link desde otras pantallas (ej: "Ver en Pagos" desde un pedido bloqueado)
   useEffect(() => {
@@ -8300,7 +8453,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,setProducts,stoc
       {section==="users"       && <UsersPanel     users={users} setUsers={setUsers} vendors={vendors} priceLists={priceLists}/>}
       {section==="pricelists"  && <PriceListsPanel priceLists={priceLists} setPriceLists={setPriceLists}/>}
       {section==="excel"       && <ExcelPanel     products={products} setProducts={setProducts}/>}
-      {section==="compras"     && <AnalisisComprasPanel products={products} purchaseOrders={purchaseOrders}/>}
+      {section==="compras"     && <AnalisisComprasPanel products={products} pricedProducts={pricedProducts} purchaseOrders={purchaseOrders} stockLog={stockLog} onPedirEncargue={onPedirEncargue}/>}
       {section==="disponible" && <DineroDisponiblePanel orders={orders} purchaseOrders={purchaseOrders}/>}
       {section==="notifcfg"    && <NotifConfig    users={users} setUsers={setUsers} notifs={notifs} setNotifs={setNotifs}/>}
     </div>
