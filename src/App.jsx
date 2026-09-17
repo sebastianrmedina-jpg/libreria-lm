@@ -8004,6 +8004,37 @@ function AnalisisComprasPanel({products, pricedProducts, purchaseOrders, stockLo
     return semanas.map((v,i) => ({ x: i*9, h: Math.max(2, Math.round(v/max*22)) }));
   };
 
+  // ── RENTABILIDAD ────────────────────────────────────────────────────────
+  // Todo se deriva de pricedProducts (ya trae costPrice/salePrice/stock) —
+  // sin llamadas nuevas, se recalcula solo cuando cambian los precios.
+  const rentabilidad = useMemo(() => {
+    const validos = pricedProducts.filter(p => p.costPrice>0 && p.salePrice>0);
+    const markups = validos.map(p => (p.salePrice-p.costPrice)/p.costPrice*100);
+    const avgMarkup = markups.reduce((s,m)=>s+m,0) / (markups.length||1);
+    const avgMargen = avgMarkup/(100+avgMarkup)*100; // margen sobre venta, derivado del markup promedio
+    const capitalCosto = validos.reduce((s,p)=>s+p.costPrice*(p.stock||0),0);
+    const capitalVenta = validos.reduce((s,p)=>s+p.salePrice*(p.stock||0),0);
+    const unidadesEnStock = validos.reduce((s,p)=>s+(p.stock||0),0);
+    const perdida = validos.filter(p=>p.salePrice<=p.costPrice)
+      .map(p=>({...p, margen:(p.salePrice-p.costPrice)/p.costPrice*100}))
+      .sort((a,b)=>a.margen-b.margen);
+    // Agrupa por markup redondeado al entero más cercano, para detectar si
+    // hay una fórmula fija dominando el catálogo (sin asumir que el número
+    // siempre va a ser 56 — si algún día cambian el criterio, esto se
+    // recalcula solo).
+    const grupos = {};
+    markups.forEach(m => { const k=Math.round(m); grupos[k]=(grupos[k]||0)+1; });
+    const [markupDominante, cantDominante] = Object.entries(grupos).sort((a,b)=>b[1]-a[1])[0] || [null,0];
+    // Panorama al facturar: si se absorbe el 21% de IVA sin poder acreditarlo
+    // (compra informal), el precio actual pasa a ser "con IVA incluido" —
+    // se recalcula desde el markup promedio real, no un numero fijo.
+    const markupAbsorbSinCredito = ((1+avgMarkup/100)/1.21 - 1)*100;
+    const margenAbsorbSinCredito = markupAbsorbSinCredito/(100+markupAbsorbSinCredito)*100;
+    return { avgMarkup, avgMargen, capitalCosto, capitalVenta, unidadesEnStock, totalValidos: validos.length, perdida,
+      markupDominante: markupDominante==null?null:+markupDominante, cantDominante, pctDominante: cantDominante/(validos.length||1)*100,
+      markupAbsorbSinCredito, margenAbsorbSinCredito };
+  }, [pricedProducts]);
+
   return (
     <div>
       <div style={{display:"flex",gap:8,marginBottom:18,maxWidth:640}}>
@@ -8015,6 +8046,9 @@ function AnalisisComprasPanel({products, pricedProducts, purchaseOrders, stockLo
         </button>
         <button onClick={()=>setTab("reposicion")} style={{flex:1,padding:"9px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,fontSize:12.5,background:tab==="reposicion"?"linear-gradient(135deg,#6c3483,#8e44ad)":"#fff",color:tab==="reposicion"?"#fff":"#666",boxShadow:"0 1px 4px #0001",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}>
           <Clock size={12} strokeWidth={2.4}/> Sugerencias de Reposición {(urgentes.length+prontos.length)>0&&`(${urgentes.length+prontos.length})`}
+        </button>
+        <button onClick={()=>setTab("rentabilidad")} style={{flex:1,padding:"9px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,fontSize:12.5,background:tab==="rentabilidad"?"linear-gradient(135deg,#c0392b,#a5721f)":"#fff",color:tab==="rentabilidad"?"#fff":"#666",boxShadow:"0 1px 4px #0001",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}>
+          <CircleDollarSign size={12} strokeWidth={2.4}/> Rentabilidad {rentabilidad.perdida.length>0&&`(${rentabilidad.perdida.length})`}
         </button>
       </div>
 
@@ -8106,7 +8140,7 @@ function AnalisisComprasPanel({products, pricedProducts, purchaseOrders, stockLo
               </div>
             </>
           )
-        ) : (
+        ) : tab==="reposicion" ? (
           leadTime==null ? (
             <div style={{textAlign:"center",padding:40,background:"#fff",borderRadius:12,color:"#aaa"}}>
               <div style={{marginBottom:6,display:"flex",justifyContent:"center"}}><Clock size={32} color="#ccc" strokeWidth={1.6}/></div>
@@ -8194,6 +8228,86 @@ function AnalisisComprasPanel({products, pricedProducts, purchaseOrders, stockLo
               )}
             </>
           )
+        ) : (
+          <>
+            {/* BLOQUE A — situación actual, en vivo */}
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:12}}>
+              <span style={{width:7,height:7,borderRadius:"50%",background:"#c0392b",display:"inline-block"}}/>
+              <span style={{fontSize:11.5,fontWeight:700,color:"#c0392b",textTransform:"uppercase",letterSpacing:.4}}>En vivo — se recalcula con tus precios actuales</span>
+            </div>
+
+            <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+              <div style={{flex:1,minWidth:130,background:"#fff",borderRadius:12,padding:"14px 16px",borderLeft:"3px solid #c0392b",boxShadow:"0 1px 4px #0001"}}>
+                <div style={{fontSize:20,fontWeight:800,color:"#c0392b"}}>{rentabilidad.avgMarkup.toFixed(1)}%</div>
+                <div style={{fontSize:11,color:"#888",marginTop:2}}>Markup promedio sobre costo</div>
+              </div>
+              <div style={{flex:1,minWidth:130,background:"#fff",borderRadius:12,padding:"14px 16px",borderLeft:"3px solid #a5721f",boxShadow:"0 1px 4px #0001"}}>
+                <div style={{fontSize:20,fontWeight:800,color:"#a5721f"}}>{rentabilidad.avgMargen.toFixed(1)}%</div>
+                <div style={{fontSize:11,color:"#888",marginTop:2}}>Margen real sobre precio de venta</div>
+              </div>
+              <div style={{flex:1,minWidth:130,background:"#fff",borderRadius:12,padding:"14px 16px",borderLeft:"3px solid #666",boxShadow:"0 1px 4px #0001"}}>
+                <div style={{fontSize:20,fontWeight:800,color:"#333"}}>{fARS(rentabilidad.capitalCosto)}</div>
+                <div style={{fontSize:11,color:"#888",marginTop:2}}>Capital inmovilizado (stock a costo)</div>
+              </div>
+              <div style={{flex:1,minWidth:130,background:"#fff",borderRadius:12,padding:"14px 16px",borderLeft:"3px solid #1e8449",boxShadow:"0 1px 4px #0001"}}>
+                <div style={{fontSize:20,fontWeight:800,color:"#1e8449"}}>{fARS(rentabilidad.capitalVenta-rentabilidad.capitalCosto)}</div>
+                <div style={{fontSize:11,color:"#888",marginTop:2}}>Ganancia bruta potencial si se vende todo el stock actual</div>
+              </div>
+            </div>
+
+            {rentabilidad.markupDominante!=null && rentabilidad.pctDominante>50 && (
+              <div style={{background:"#fdecea",borderRadius:10,padding:"12px 14px",fontSize:12.5,color:"#7a1f16",marginBottom:16}}>
+                <b>Hallazgo:</b> {rentabilidad.cantDominante} de {rentabilidad.totalValidos} productos ({rentabilidad.pctDominante.toFixed(1)}%) tienen exactamente el mismo margen (~{rentabilidad.markupDominante}%), sin importar la categoría — el precio de venta se calcula con una fórmula fija (costo × {(1+rentabilidad.markupDominante/100).toFixed(2)}), no con un margen definido por producto.
+              </div>
+            )}
+
+            <div style={{background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"0 1px 4px #0001",marginBottom:24}}>
+              <div style={{padding:"11px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid #f0f0f0"}}>Productos vendiendo a pérdida</div>
+              {rentabilidad.perdida.length===0 ? (
+                <div style={{padding:20,textAlign:"center",color:"#1e8449",fontSize:12.5,fontWeight:600}}>Ningún producto se vende a pérdida ahora mismo.</div>
+              ) : rentabilidad.perdida.map(p=>(
+                <div key={p.id} style={{padding:"10px 16px",borderBottom:"1px solid #f5f5f5",display:"flex",alignItems:"center",gap:10}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:600,fontSize:12.5}}>{p.name}</div>
+                    <div style={{fontSize:11,color:"#999"}}>{p.id} · Costo {fARS(p.costPrice)} · Venta {fARS(p.salePrice)}</div>
+                  </div>
+                  <div style={{fontWeight:800,fontSize:13,color:"#c0392b",flexShrink:0}}>{p.margen.toFixed(1)}%</div>
+                </div>
+              ))}
+            </div>
+
+            {/* BLOQUE B — panorama al facturar, planificación */}
+            <div style={{background:"#fffaf0",border:"1.5px dashed #a5721f",borderRadius:12,padding:16}}>
+              <div style={{fontWeight:800,fontSize:13.5,color:"#7a5a17",marginBottom:2}}>📋 Panorama al facturar</div>
+              <div style={{fontSize:11.5,color:"#9c7e3f",marginBottom:14}}>Esto es para planificar — no se actualiza solo con tus ventas, son escenarios sobre tu margen actual ({rentabilidad.avgMargen.toFixed(1)}%).</div>
+
+              <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:14}}>
+                <div style={{background:"#fff",borderRadius:10,padding:"12px 14px"}}>
+                  <div style={{fontWeight:700,fontSize:12.5,color:"#c0392b"}}>😬 Absorbés el IVA, sin crédito fiscal</div>
+                  <div style={{fontSize:11.5,color:"#888",margin:"3px 0 6px"}}>Mismo precio al público, pero ahora ese precio "incluye" el 21% que le das a AFIP. Si el proveedor no factura formal, no hay IVA para recuperar.</div>
+                  <div style={{fontSize:12}}>Margen real: <b>{rentabilidad.avgMargen.toFixed(1)}% → {rentabilidad.margenAbsorbSinCredito.toFixed(1)}%</b> · Precio al público: sin cambios</div>
+                </div>
+                <div style={{background:"#fff",borderRadius:10,padding:"12px 14px"}}>
+                  <div style={{fontWeight:700,fontSize:12.5,color:"#1e8449"}}>🙂 Con crédito fiscal (proveedor factura formal)</div>
+                  <div style={{fontSize:11.5,color:"#888",margin:"3px 0 6px"}}>Si el proveedor ya factura con IVA discriminado, al pasar a Responsable Inscripto se recupera ese IVA como crédito — el impacto se cancela casi por completo.</div>
+                  <div style={{fontSize:12}}>Margen real: <b>{rentabilidad.avgMargen.toFixed(1)}% → {rentabilidad.avgMargen.toFixed(1)}%</b> · Precio al público: sin cambios</div>
+                </div>
+                <div style={{background:"#fff",borderRadius:10,padding:"12px 14px"}}>
+                  <div style={{fontWeight:700,fontSize:12.5,color:"#a5721f"}}>💰 Trasladás el IVA al precio</div>
+                  <div style={{fontSize:11.5,color:"#888",margin:"3px 0 6px"}}>Subís los precios un 21% para mantener el margen de hoy — más simple en lo contable, pero el producto se vuelve un 21% más caro para el cliente.</div>
+                  <div style={{fontSize:12}}>Margen real: <b>{rentabilidad.avgMargen.toFixed(1)}% (sin cambios)</b> · Precio al público: <b>+21%</b></div>
+                </div>
+                <div style={{background:"#fff",borderRadius:10,padding:"12px 14px"}}>
+                  <div style={{fontWeight:700,fontSize:12.5}}>🧾 Monotributo vs. Responsable Inscripto</div>
+                  <div style={{fontSize:11.5,color:"#888",marginTop:3}}>Monotributo: no cobrás ni discriminás IVA, más simple, pero hay un tope de facturación anual (cambia con la inflación — conviene chequear qué categoría corresponde). Responsable Inscripto: cobrás y podés recuperar IVA, sin tope, con más trabajo contable.</div>
+                </div>
+              </div>
+
+              <div style={{background:"#fdecea",borderRadius:10,padding:"12px 14px",fontSize:12}}>
+                <b>La pregunta que define todo:</b> ¿el proveedor factura formalmente con IVA discriminado? Si sí, facturar afecta mucho menos de lo que parece. Si la compra es informal, el golpe al margen es real y conviene decidir de antemano si se absorbe o se traslada al precio.
+              </div>
+            </div>
+          </>
         )}
       </div>
     </div>
