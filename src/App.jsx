@@ -6145,6 +6145,7 @@ function VariantesModal({producto, onClose, onConfirm}) {
 }
 
 function EditModal({p,onSave,onClose}) {
+  const [name,setName]=useState(p.name);
   const [cost,setCost]=useState(p.costPrice);
   const [sale,setSale]=useState(p.salePrice);
   const [stock,setStock]=useState(p.stock);
@@ -6185,8 +6186,9 @@ function EditModal({p,onSave,onClose}) {
   return (
     <div style={{position:"fixed",inset:0,background:"#0007",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}}>
       <div style={{background:"#fff",borderRadius:16,padding:24,width:"100%",maxWidth:440,boxShadow:"0 20px 60px #0003"}}>
-        <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}>
-          <div style={{fontWeight:800,fontSize:14,color:"#1a1a1a",flex:1,marginRight:8,lineHeight:1.3}}>{p.name}</div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
+          <input value={name} onChange={e=>setName(e.target.value)} onFocus={e=>e.target.select()}
+            style={{fontWeight:800,fontSize:14,color:"#1a1a1a",flex:1,marginRight:8,lineHeight:1.3,border:"none",borderBottom:"1.5px dashed #ddd",outline:"none",background:"transparent",padding:"0 0 4px",fontFamily:"inherit"}}/>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:22,color:"#aaa"}}>x</button>
         </div>
 
@@ -6225,7 +6227,7 @@ function EditModal({p,onSave,onClose}) {
         </div>
         <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
           <button onClick={onClose} style={{padding:"8px 14px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontWeight:600,color:"#666"}}>Cancelar</button>
-          <button onClick={()=>onSave({...p,costPrice:cost,salePrice:sale,stock,category,imageUrl})} style={{padding:"8px 14px",borderRadius:8,border:"none",background:RED,color:"#fff",cursor:"pointer",fontWeight:700}}>Guardar</button>
+          <button onClick={()=>onSave({...p,name:name.trim()||p.name,costPrice:cost,salePrice:sale,stock,category,imageUrl})} style={{padding:"8px 14px",borderRadius:8,border:"none",background:RED,color:"#fff",cursor:"pointer",fontWeight:700}}>Guardar</button>
         </div>
       </div>
       {showLightbox && <ImageLightbox src={imageUrl} onClose={()=>setShowLightbox(false)}/>}
