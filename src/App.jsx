@@ -181,6 +181,7 @@ const mapProduct = r => ({id:r.id,name:r.name,category:r.category,costPrice:r.co
 const mapOrder = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,stage:r.stage,date:r.date,items:r.items||[],docNum:r.doc_num||"",compNum:r.comp_num||"",isTest:r.is_test||false,isSandbox:r.is_sandbox||false,internalNote:r.internal_note||"",editStatus:r.edit_status||"",editReason:r.edit_reason||"",editItems:r.edit_items||null,editTotal:r.edit_total??null,editRejectReason:r.edit_reject_reason||"",comprobanteUrl:r.comprobante_url||"",comprobanteNombre:r.comprobante_nombre||"",comprobanteFecha:r.comprobante_fecha||"",pagoTipo:r.pago_tipo||"",pagoEfectivoFecha:r.pago_efectivo_fecha||"",encargueResuelto:r.encargue_resuelto||false});
 const mapQuote = r => ({id:r.id,client:r.client,vendedor:r.vendedor,notes:r.notes,total:r.total,date:r.date,items:r.items||[],validity:r.validity||"",docNum:r.doc_num||"",convertida:r.convertida||false,ordenId:r.orden_id||"",extendida:r.extendida||false,extendReason:r.extend_reason||"",extendDate:r.extend_date||"",globalDisc:r.global_disc||null,subtotal:r.subtotal||0,shareToken:r.share_token||"",customExpiry:r.custom_expiry||""});
 const mapPromo = r => ({id:r.id,tipo:r.tipo,nombre:r.nombre,activa:r.activa!==false,vigenciaDesde:r.vigencia_desde||"",vigenciaHasta:r.vigencia_hasta||"",data:r.data||{},createdAt:r.created_at||""});
+const mapDiscountCode = r => ({id:r.id,code:r.code,tipo:r.tipo,valor:r.valor,activo:r.activo!==false,vigenciaDesde:r.vigencia_desde||"",vigenciaHasta:r.vigencia_hasta||"",maxUsos:r.max_usos==null?null:r.max_usos,usos:r.usos||0,createdAt:r.created_at||""});
 const mapProductPair = r => ({productId:r.product_id, relatedProductId:r.related_product_id, source:r.source||"manual", updatedAt:r.updated_at||""});
 const mapClient = r => ({id:r.id,name:r.name,phone:r.phone||"",email:r.email||"",cuit:r.cuit||"",address:r.address||"",notes:r.notes||"",deleteRequested:r.delete_requested||false,deleteReason:r.delete_reason||"",createdBy:r.created_by||"",createdAt:r.created_at||""});
 const mapStockLogEntry = r => ({...r,productoId:r.producto_id,stockAntes:r.stock_antes,stockDespues:r.stock_despues});
@@ -367,6 +368,12 @@ const db = {
   getPromos:    async () => { try { const {data,error} = await supabase.from("lm_promos").select("*").order("created_at",{ascending:false}); if(error) throw error; return (data||[]).map(mapPromo); } catch(e) { console.warn("getPromos:", e); return []; } },
   savePromo:    async (p) => { const {error} = await supaAdmin.from("lm_promos").upsert({id:p.id,tipo:p.tipo,nombre:p.nombre,activa:p.activa!==false,vigencia_desde:p.vigenciaDesde||"",vigencia_hasta:p.vigenciaHasta||"",data:p.data||{},created_at:p.createdAt||new Date().toISOString()}); if(error) throw error; },
   deletePromo:  async (id) => { const {error} = await supaAdmin.from("lm_promos").delete().eq("id",id); if(error) throw error; },
+
+  // SQL: ver CREATE TABLE lm_discount_codes + redeem_discount_code en el plan de esta feature.
+  getDiscountCodes:    async () => { try { const {data,error} = await supabase.from("lm_discount_codes").select("*").order("created_at",{ascending:false}); if(error) throw error; return (data||[]).map(mapDiscountCode); } catch(e) { console.warn("getDiscountCodes:", e); return []; } },
+  saveDiscountCode:    async (c) => { const {error} = await supaAdmin.from("lm_discount_codes").upsert({id:c.id,code:c.code,tipo:c.tipo,valor:c.valor,activo:c.activo!==false,vigencia_desde:c.vigenciaDesde||"",vigencia_hasta:c.vigenciaHasta||"",max_usos:c.maxUsos==null?null:c.maxUsos,usos:c.usos||0,created_at:c.createdAt||new Date().toISOString()}); if(error) throw error; },
+  deleteDiscountCode:  async (id) => { const {error} = await supaAdmin.from("lm_discount_codes").delete().eq("id",id); if(error) throw error; },
+  redeemDiscountCode:  async (code) => { const {data,error} = await supabase.rpc("redeem_discount_code",{p_code:code}); if(error) throw error; return (data&&data[0])||null; },
   // Combinaciones producto→producto para el aviso destacado de la web ("combina con tu compra").
   // source "manual" = cargada a mano por el admin, siempre gana. "auto" = calculada
   // sola a partir de qué se compró junto en pedidos reales, se recalcula cada tanto.
@@ -521,6 +528,21 @@ function getProductPromo(promos, pid) {
 }
 function getVigentCombos(promos) {
   return (promos||[]).filter(p=>isPromoVigente(p) && p.tipo==="combo");
+}
+function isDiscountCodeVigente(c) {
+  if(!c || !c.activo) return false;
+  const t = todayISO();
+  if(c.vigenciaDesde && t < c.vigenciaDesde) return false;
+  if(c.vigenciaHasta && t > c.vigenciaHasta) return false;
+  if(c.maxUsos!=null && c.usos>=c.maxUsos) return false;
+  return true;
+}
+// Busca un código a mano (case-insensitive) entre los vigentes — usado para la
+// validación inmediata en el vendedor; el canje real/atómico pasa por el RPC.
+function findDiscountCode(codes, input) {
+  const norm = (input||"").trim().toUpperCase();
+  if(!norm) return null;
+  return (codes||[]).find(c=>c.code===norm && isDiscountCodeVigente(c)) || null;
 }
 // Último movimiento de stock por producto (para "sin rotación") — única fuente de
 // verdad, la usan tanto la pestaña Stock como las sugerencias al vendedor.
@@ -1615,6 +1637,7 @@ function AppInner() {
   const [notifs, setNotifs]     = useState([]);
   const [clients, setClients]   = useState([]);
   const [promos, setPromos]     = useState([]);
+  const [discountCodes, setDiscountCodes] = useState([]);
   const [productPairs, setProductPairs] = useState([]);
   const [settings, setSettings] = useState({exigirPagoConfirmado:false});
   const [loading, setLoading]   = useState(true);
@@ -1660,12 +1683,12 @@ function AppInner() {
     if(!currentUser) return;
     async function loadAll() {
       try {
-        const [u,v,p,o,q,sl,act,pl,po,n,cl,pr,st,pp] = await Promise.all([
+        const [u,v,p,o,q,sl,act,pl,po,n,cl,pr,st,pp,dc] = await Promise.all([
           db.getUsers(), db.getVendors(), db.getProducts(),
-          db.getOrders(), db.getQuotes(), db.getStockLog(), db.getActivity(), db.getPriceLists(), db.getPurchaseOrders(), db.getNotifs(), db.getClients(), db.getPromos(), db.getSettings(), db.getProductPairs(),
+          db.getOrders(), db.getQuotes(), db.getStockLog(), db.getActivity(), db.getPriceLists(), db.getPurchaseOrders(), db.getNotifs(), db.getClients(), db.getPromos(), db.getSettings(), db.getProductPairs(), db.getDiscountCodes(),
         ]);
         setUsers(u); setVendors(v); setProducts(p);
-        setOrders(o); setQuotes(q); setStockLog(sl); setActivity(act); setPriceLists(pl); setPurchaseOrders(po); setNotifs(n); setClients(cl); setPromos(pr); setSettings(st); setProductPairs(pp);
+        setOrders(o); setQuotes(q); setStockLog(sl); setActivity(act); setPriceLists(pl); setPurchaseOrders(po); setNotifs(n); setClients(cl); setPromos(pr); setSettings(st); setProductPairs(pp); setDiscountCodes(dc);
         // Inicializar sandbox — recuperar de localStorage si existe, sino copiar stock real
         try {
           const saved = localStorage.getItem("lm_sandbox_stock");
@@ -1736,6 +1759,7 @@ function AppInner() {
     sandboxStock={sandboxStock} setSandboxStock={setSandboxStock}
     clients={clients} setClients={setClients}
     promos={promos} setPromos={setPromos}
+    discountCodes={discountCodes} setDiscountCodes={setDiscountCodes}
     productPairs={productPairs} setProductPairs={setProductPairs}
     settings={settings} setSettings={setSettings}
   />;
@@ -1876,7 +1900,7 @@ export default function App() {
 }
 
 // ─── MAIN APP (authenticated) ─────────────────────────────────────────────────
-function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,products,setProducts,orders,setOrders,quotes,setQuotes,stockLog,setStockLog,activity,setActivity,priceLists,setPriceLists,purchaseOrders,setPurchaseOrders,notifs,setNotifs,sandboxStock,setSandboxStock,clients,setClients,promos,setPromos,productPairs,setProductPairs,settings,setSettings}) {
+function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,products,setProducts,orders,setOrders,quotes,setQuotes,stockLog,setStockLog,activity,setActivity,priceLists,setPriceLists,purchaseOrders,setPurchaseOrders,notifs,setNotifs,sandboxStock,setSandboxStock,clients,setClients,promos,setPromos,discountCodes,setDiscountCodes,productPairs,setProductPairs,settings,setSettings}) {
   // updateSandboxStock persists to localStorage on every change
   const updateSandboxStock = (updater) => {
     setSandboxStock(prev => {
@@ -2806,15 +2830,16 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
           // Al reconectarse después de un error, recargar datos para no perderse
           // eventos que pasaron mientras el canal estaba caído
           try {
-            const [freshOrders, freshQuotes, freshNotifs, freshPOs, freshPromos, freshPairs, freshPriceLists, freshClients, freshSettings, freshStockLog, freshActivity] = await Promise.all([
+            const [freshOrders, freshQuotes, freshNotifs, freshPOs, freshPromos, freshCodes, freshPairs, freshPriceLists, freshClients, freshSettings, freshStockLog, freshActivity] = await Promise.all([
               db.getOrders(), db.getQuotes(), db.getNotifs(), db.getPurchaseOrders(),
-              db.getPromos(), db.getProductPairs(), db.getPriceLists(), db.getClients(), db.getSettings(), db.getStockLog(), db.getActivity(),
+              db.getPromos(), db.getDiscountCodes(), db.getProductPairs(), db.getPriceLists(), db.getClients(), db.getSettings(), db.getStockLog(), db.getActivity(),
             ]);
             setOrders(freshOrders);
             setQuotes(freshQuotes);
             setNotifs(freshNotifs);
             setPurchaseOrders(freshPOs);
             setPromos(freshPromos);
+            setDiscountCodes(freshCodes);
             setProductPairs(freshPairs);
             setPriceLists(freshPriceLists);
             setClients(freshClients);
@@ -3064,7 +3089,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
           onPedirEncargue={(items)=>{setDeepLinkSolicitudItem(items);setTab("solicitud");}}
           onResolverEncargue={resolverEncargue}
           currentUser={currentUser} isMobile={isMobile}/>}
-        {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} promos={promos} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={setPreviewListId} productPairs={productPairs} stockLog={stockLog}/>}
+        {tab==="nuevo"      && <Nuevo products={pricedProducts} vendors={vendors} onAdd={addOrder} onDone={()=>setTab("central")} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} promos={promos} discountCodes={discountCodes} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={setPreviewListId} productPairs={productPairs} stockLog={stockLog}/>}
         {tab==="clientes"   && <ClientesPanel clients={clients} onSave={saveClient} onDelete={deleteClient} onRequestDelete={requestDeleteClient} onRejectDelete={rejectDeleteClient} currentUser={currentUser} isMobile={isMobile} orders={orders}/>}
         {tab==="cotizacion" && <Cotizaciones quotes={quotes} products={pricedProducts} vendors={vendors} onAdd={addQuote} onDel={delQuote} onConvert={convertQuoteToOrder} onExtend={extendQuote} onSetExpiry={setQuoteExpiry} onEnsureShareToken={ensureShareToken} onTabChange={setTab} currentUser={currentUser} isMobile={isMobile} clients={clients} onSaveClient={saveClient} orders={orders} priceLists={priceLists} previewListId={previewListId} onChangeList={setPreviewListId} promos={promos} productPairs={productPairs} stockLog={stockLog}/>}
         {tab==="precios"    && <Precios products={pricedProducts} canScan={currentUser.role==="admin"||isTestOrder(currentUser.vendedor||currentUser.name)||currentUser.barcodeEnabled} showCamilaPrice={(currentUser.vendedor||currentUser.name)==="Camila"}/>}
@@ -3105,7 +3130,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
             });
           }}
         />}
-        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} pricedProducts={pricedProducts} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} purchaseOrders={purchaseOrders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile} sandboxStock={sandboxStock} setSandboxStock={setSandboxStock} updateSandboxStock={updateSandboxStock} promos={promos} setPromos={setPromos} productPairs={productPairs} setProductPairs={setProductPairs} settings={settings} onToggleExigirPago={toggleExigirPago} onConfirmarComprobante={confirmarComprobante} onRechazarComprobante={rechazarComprobante} onConfirmarEfectivo={confirmarEfectivo} onRechazarEfectivo={rechazarEfectivo}
+        {tab==="admin"      && isAdmin && <AdminPanel users={users} setUsers={setUsers} vendors={vendors} setVendors={setVendors} products={products} pricedProducts={pricedProducts} setProducts={setProducts} stockLog={stockLog} setStockLog={setStockLog} notifs={notifs} setNotifs={setNotifs} activity={activity} setActivity={setActivity} orders={orders} purchaseOrders={purchaseOrders} priceLists={priceLists} setPriceLists={setPriceLists} isMobile={isMobile} sandboxStock={sandboxStock} setSandboxStock={setSandboxStock} updateSandboxStock={updateSandboxStock} promos={promos} setPromos={setPromos} discountCodes={discountCodes} setDiscountCodes={setDiscountCodes} productPairs={productPairs} setProductPairs={setProductPairs} settings={settings} onToggleExigirPago={toggleExigirPago} onConfirmarComprobante={confirmarComprobante} onRechazarComprobante={rechazarComprobante} onConfirmarEfectivo={confirmarEfectivo} onRechazarEfectivo={rechazarEfectivo}
           onPedirEncargue={(items)=>{setDeepLinkSolicitudItem(items);setTab("solicitud");}}
           autoSection={deepLinkAdminSection} onConsumedAutoSection={()=>setDeepLinkAdminSection(null)}
           prefillProductId={deepLinkOfertaProductId} onConsumedPrefill={()=>setDeepLinkOfertaProductId(null)}/>}
@@ -4908,12 +4933,44 @@ function CartSummaryLines({cart}) {
   );
 }
 
-function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSaveClient,promos,orders,priceLists,previewListId,onChangeList,productPairs,stockLog}) {
+// Campo para canjear un código de descuento a mano, usado en Nuevo (venta real).
+// La validación acá es solo para feedback inmediato al vendedor — el canje
+// atómico de verdad (incrementar "usos") pasa por el RPC al guardar el pedido.
+function CodigoDescuentoField({discountCodes, applied, onApply, onRemove}) {
+  const [input, setInput] = useState("");
+  const [error, setError] = useState("");
+  const aplicar = () => {
+    const found = findDiscountCode(discountCodes, input);
+    if(!found) { setError("Código inválido o vencido"); return; }
+    setError(""); setInput("");
+    onApply(found);
+  };
+  if(applied) {
+    return (
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#eafaf1",border:"1.5px solid #a9dfbf",borderRadius:8,padding:"7px 10px",marginBottom:8}}>
+        <span style={{fontSize:12,fontWeight:700,color:"#1e8449",display:"flex",alignItems:"center",gap:5}}><Tag size={12} strokeWidth={2.4}/>Código {applied.code} aplicado</span>
+        <span onClick={onRemove} style={{color:RED,cursor:"pointer",fontSize:11,fontWeight:700}}>Quitar</span>
+      </div>
+    );
+  }
+  return (
+    <div style={{marginBottom:8}}>
+      <div style={{display:"flex",gap:6}}>
+        <input value={input} onChange={e=>{setInput(e.target.value.toUpperCase());setError("");}} onKeyDown={e=>e.key==="Enter"&&aplicar()} placeholder="¿Código de descuento?" style={{flex:1,padding:"6px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:12,textTransform:"uppercase"}}/>
+        <button type="button" onClick={aplicar} style={{padding:"6px 12px",borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",fontWeight:700,fontSize:11,cursor:"pointer",color:"#555"}}>Aplicar</button>
+      </div>
+      {error && <div style={{color:RED,fontSize:11,marginTop:3}}>{error}</div>}
+    </div>
+  );
+}
+
+function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSaveClient,promos,discountCodes,orders,priceLists,previewListId,onChangeList,productPairs,stockLog}) {
   const [selectedClient, setSelectedClient] = useState(null);
   const [notes,setNotes]=useState("");
   const [vendedor,setVendedor]=useState(currentUser.role==="vendedor"?(currentUser.vendedor||currentUser.name):"");
   const [cart,setCart]=useState([]);
   const [globalDisc,setGlobalDisc]=useState({type:"%",value:""});
+  const [codigoAplicado,setCodigoAplicado]=useState(null);
   const [ok,setOk]=useState(false);
   const [saving,setSaving]=useState(false);
   const [mStep,setMStep]=useState(1);
@@ -4922,12 +4979,22 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
   const total=applyGlobalDiscount(subtotal,globalDisc);
   const globalDiscAmt=subtotal-total;
 
+  const aplicarCodigo=(found)=>{ setGlobalDisc({type:found.tipo,value:String(found.valor)}); setCodigoAplicado(found); };
+  const quitarCodigo=()=>{ setGlobalDisc({type:"%",value:""}); setCodigoAplicado(null); };
+
   const submit=async ()=>{
     if(!selectedClient){toast.error("Seleccioná un cliente");return;}
     if(!vendedor&&currentUser.role==="admin"){toast.error("Seleccioná un vendedor");return;}
     if(!cart.length){toast.error("Agregá productos");return;}
     setSaving(true);
-    await onAdd({id:genId(),client:selectedClient.name,clientId:selectedClient.id,notes,vendedor:vendedor||currentUser.vendedor||currentUser.name,items:cart,total,subtotal,globalDisc,stage:"reserva",date:today()});
+    const notesConCodigo = codigoAplicado ? `${notes ? notes+"\n" : ""}Código de descuento: ${codigoAplicado.code}` : notes;
+    await onAdd({id:genId(),client:selectedClient.name,clientId:selectedClient.id,notes:notesConCodigo,vendedor:vendedor||currentUser.vendedor||currentUser.name,items:cart,total,subtotal,globalDisc,stage:"reserva",date:today()});
+    if(codigoAplicado) {
+      try {
+        const result = await db.redeemDiscountCode(codigoAplicado.code);
+        if(!result) toast.error("El código ya no estaba disponible, pero el pedido se guardó igual.");
+      } catch(e) { console.warn("redeemDiscountCode:", e); }
+    }
     setSaving(false);
     setOk(true); setTimeout(()=>onDone(),1400);
   };
@@ -5002,15 +5069,16 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
             <div style={{borderTop:"1px solid #f5f5f5",margin:"8px 0",paddingTop:8}}>
               <CartSummaryLines cart={cart}/>
             </div>
+            <CodigoDescuentoField discountCodes={discountCodes} applied={codigoAplicado} onApply={aplicarCodigo} onRemove={quitarCodigo}/>
             <div style={{background:"#f9fdf9",border:"1.5px solid #e5e5e5",borderRadius:8,padding:"10px 12px",marginBottom:8}}>
               <div style={{fontSize:11,color:"#555",fontWeight:700,marginBottom:6}}>DESCUENTO GLOBAL</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"center"}}>
-                <select value={globalDisc.type} onChange={e=>setGlobalDisc(d=>({...d,type:e.target.value}))}
-                  style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48,flexShrink:0}}>
+                <select value={globalDisc.type} disabled={!!codigoAplicado} onChange={e=>setGlobalDisc(d=>({...d,type:e.target.value}))}
+                  style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:codigoAplicado?"#f5f5f5":"#fff",cursor:codigoAplicado?"default":"pointer",width:48,flexShrink:0}}>
                   <option value="%">%</option><option value="$">$</option>
                 </select>
-                <input type="number" min="0" value={globalDisc.value} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))} onFocus={e=>e.target.select()}
-                  placeholder="0" style={{flex:1,minWidth:60,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
+                <input type="number" min="0" value={globalDisc.value} disabled={!!codigoAplicado} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))} onFocus={e=>e.target.select()}
+                  placeholder="0" style={{flex:1,minWidth:60,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center",background:codigoAplicado?"#f5f5f5":"#fff"}}/>
                 {globalDiscAmt>0&&<span style={{fontSize:11,color:"#1e8449",fontWeight:700,whiteSpace:"nowrap"}}>−{fARS(globalDiscAmt)}</span>}
               </div>
             </div>
@@ -5061,15 +5129,16 @@ function Nuevo({products,vendors,onAdd,onDone,currentUser,isMobile,clients,onSav
             {cart.length===0?<div style={{textAlign:"center",color:"#aaa",fontSize:12,padding:"10px 0"}}>Agregá productos al pedido</div>
             :<CartSummaryLines cart={cart}/>}
           </div>
+          <CodigoDescuentoField discountCodes={discountCodes} applied={codigoAplicado} onApply={aplicarCodigo} onRemove={quitarCodigo}/>
           <div style={{background:"#f9fdf9",border:"1.5px solid #e5e5e5",borderRadius:8,padding:"10px 12px",marginBottom:8}}>
             <div style={{fontSize:11,color:"#555",fontWeight:700,marginBottom:6}}>DESCUENTO GLOBAL</div>
             <div style={{display:"flex",gap:6,alignItems:"center"}}>
-              <select value={globalDisc.type} onChange={e=>setGlobalDisc(d=>({...d,type:e.target.value}))}
-                style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:"#fff",cursor:"pointer",width:48}}>
+              <select value={globalDisc.type} disabled={!!codigoAplicado} onChange={e=>setGlobalDisc(d=>({...d,type:e.target.value}))}
+                style={{padding:"5px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontSize:13,fontWeight:700,background:codigoAplicado?"#f5f5f5":"#fff",cursor:codigoAplicado?"default":"pointer",width:48}}>
                 <option value="%">%</option><option value="$">$</option>
               </select>
-              <input type="number" min="0" value={globalDisc.value} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))} onFocus={e=>e.target.select()}
-                placeholder="0" style={{flex:1,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
+              <input type="number" min="0" value={globalDisc.value} disabled={!!codigoAplicado} onChange={e=>setGlobalDisc(d=>({...d,value:e.target.value}))} onFocus={e=>e.target.select()}
+                placeholder="0" style={{flex:1,padding:"5px 8px",borderRadius:6,border:"1.5px solid #ccc",fontSize:13,fontWeight:700,outline:"none",textAlign:"center",background:codigoAplicado?"#f5f5f5":"#fff"}}/>
               {globalDiscAmt>0&&<span style={{fontSize:11,color:"#1e8449",fontWeight:700,whiteSpace:"nowrap"}}>−{fARS(globalDiscAmt)}</span>}
             </div>
           </div>
@@ -8403,7 +8472,7 @@ function DineroDisponiblePanel({orders, purchaseOrders}) {
   );
 }
 
-function AdminPanel({users,setUsers,vendors,setVendors,products,pricedProducts,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,purchaseOrders,priceLists,setPriceLists,isMobile,sandboxStock,setSandboxStock,updateSandboxStock,promos,setPromos,productPairs,setProductPairs,settings,onToggleExigirPago,onConfirmarComprobante,onRechazarComprobante,onConfirmarEfectivo,onRechazarEfectivo,onPedirEncargue,autoSection,onConsumedAutoSection,prefillProductId,onConsumedPrefill}) {
+function AdminPanel({users,setUsers,vendors,setVendors,products,pricedProducts,setProducts,stockLog,setStockLog,notifs,setNotifs,activity,setActivity,orders,purchaseOrders,priceLists,setPriceLists,isMobile,sandboxStock,setSandboxStock,updateSandboxStock,promos,setPromos,discountCodes,setDiscountCodes,productPairs,setProductPairs,settings,onToggleExigirPago,onConfirmarComprobante,onRechazarComprobante,onConfirmarEfectivo,onRechazarEfectivo,onPedirEncargue,autoSection,onConsumedAutoSection,prefillProductId,onConsumedPrefill}) {
   const [section, setSection] = useState("home");
   // Deep-link desde otras pantallas (ej: "Ver en Pagos" desde un pedido bloqueado)
   useEffect(() => {
@@ -8421,6 +8490,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,pricedProducts,s
     {k:"ventas",      label:"Ventas",           Icon:TrendUp,      grp:"negocio"},
     {k:"pagos",       label:"Pagos",            Icon:CreditCard,   grp:"negocio", badge:pagosPendientes, urgentColor:"#b7770d"},
     {k:"ofertas",     label:"Ofertas y Combos", Icon:Gift,         grp:"negocio"},
+    {k:"codigos",     label:"Códigos de Descuento", Icon:Tag,     grp:"negocio"},
     {k:"combinaciones", label:"Combinaciones",  Icon:RefreshCw,    grp:"negocio"},
     {k:"pricelists",  label:"Listas de Precio", Icon:CircleDollarSign, grp:"negocio"},
     {k:"compras",     label:"Análisis Compras", Icon:TrendDown,    grp:"negocio", badge:negativosCount, urgentColor:"#c0392b"},
@@ -8532,6 +8602,7 @@ function AdminPanel({users,setUsers,vendors,setVendors,products,pricedProducts,s
           settings={settings} onToggleExigirPago={onToggleExigirPago}/>
       )}
       {section==="ofertas"     && <OfertasPanel   promos={promos} setPromos={setPromos} products={products} isMobile={isMobile} prefillProductId={prefillProductId} onConsumedPrefill={onConsumedPrefill}/>}
+      {section==="codigos"     && <CodigosDescuentoPanel discountCodes={discountCodes} setDiscountCodes={setDiscountCodes} isMobile={isMobile}/>}
       {section==="combinaciones" && <CombinacionesPanel productPairs={productPairs} setProductPairs={setProductPairs} products={products} orders={orders} isMobile={isMobile}/>}
       {section==="sandboxstock" && (
         <div>
@@ -9306,6 +9377,169 @@ function DestacadoForm({products, editing, nextSku, onSave, onCancel}) {
       <div style={{display:"flex",gap:10,marginTop:14}}>
         <button onClick={onCancel} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancelar</button>
         <button onClick={submit} disabled={saving} style={{flex:2,padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",opacity:saving?.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>{saving?"Guardando...":<><CheckCircle size={13} strokeWidth={2.4}/> Guardar Aviso</>}</button>
+      </div>
+    </div>
+  );
+}
+
+function CodigosDescuentoPanel({discountCodes, setDiscountCodes, isMobile}) {
+  const [view, setView] = useState("lista"); // lista | form
+  const [editing, setEditing] = useState(null);
+
+  const fDate = (iso) => { if(!iso) return ""; const [y,m,d]=iso.split("-"); return `${d}/${m}/${y}`; };
+
+  const saveCode = async (codeIn) => {
+    await db.saveDiscountCode(codeIn);
+    setDiscountCodes(prev => prev.find(c=>c.id===codeIn.id) ? prev.map(c=>c.id===codeIn.id?codeIn:c) : [codeIn,...prev]);
+    setEditing(null); setView("lista");
+  };
+  const togglePausa = async (c) => {
+    const updated = {...c, activo:!c.activo};
+    await db.saveDiscountCode(updated);
+    setDiscountCodes(prev=>prev.map(x=>x.id===c.id?updated:x));
+  };
+  const delCode = async (c) => {
+    if(!await confirmDialog("¿Eliminar código?", `Vas a eliminar "${c.code}". Esta acción no se puede deshacer.`, true)) return;
+    await db.deleteDiscountCode(c.id);
+    setDiscountCodes(prev => prev.filter(x=>x.id!==c.id));
+  };
+  const editCode = (c) => { setEditing(c); setView("form"); };
+  const cancelForm = () => { setEditing(null); setView("lista"); };
+
+  if(view==="form") return <CodigoDescuentoForm editing={editing} existingCodes={discountCodes} onSave={saveCode} onCancel={cancelForm}/>;
+
+  const estadoBadge = (c) => {
+    const vigente = isDiscountCodeVigente(c);
+    const label = vigente ? "● Vigente" : !c.activo ? "⏸ Pausado" : "No vigente";
+    const bg = vigente ? "#d5f5e3" : "#f0f0f0", color = vigente ? "#1e8449" : "#888";
+    return <span style={{fontSize:11,fontWeight:700,borderRadius:10,padding:"3px 9px",background:bg,color,whiteSpace:"nowrap"}}>{label}</span>;
+  };
+  const vigTexto = (c) => !c.vigenciaDesde && !c.vigenciaHasta ? "Sin vencimiento" : `${c.vigenciaDesde?fDate(c.vigenciaDesde):"…"} al ${c.vigenciaHasta?fDate(c.vigenciaHasta):"…"}`;
+
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10,marginBottom:16}}>
+        <div style={{fontWeight:800,fontSize:15}}>Códigos de Descuento ({discountCodes.length})</div>
+        <button onClick={()=>{setEditing(null);setView("form");}} style={{padding:"9px 16px",borderRadius:8,border:"none",cursor:"pointer",fontWeight:800,fontSize:12,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff"}}>+ Nuevo código</button>
+      </div>
+
+      {discountCodes.length===0
+        ? <div style={{textAlign:"center",color:"#aaa",padding:"40px 0"}}>Todavía no creaste ningún código de descuento</div>
+        : isMobile
+          ? <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {discountCodes.map(c=>(
+                <div key={c.id} style={{background:"#fff",borderRadius:10,padding:14,boxShadow:"0 1px 4px #0001"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                    <span style={{fontWeight:800,fontSize:14,fontFamily:"monospace",letterSpacing:.5}}>{c.code}</span>
+                    <div>
+                      <button onClick={()=>editCode(c)} style={{background:"none",border:"none",cursor:"pointer",padding:"2px 6px",display:"flex",alignItems:"center"}}><Pencil size={13} strokeWidth={2.3} color="#888"/></button>
+                      <button onClick={()=>togglePausa(c)} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"2px 6px"}}>{c.activo?"⏸️":"▶️"}</button>
+                      <button onClick={()=>delCode(c)} style={{background:"none",border:"none",cursor:"pointer",padding:"2px 6px",display:"flex",alignItems:"center"}}><Trash size={13} strokeWidth={2.3} color="#888"/></button>
+                    </div>
+                  </div>
+                  <div style={{fontSize:13,color:"#555"}}>{c.tipo==="%" ? `${c.valor}% de descuento` : `${fARS(c.valor)} de descuento`}</div>
+                  <div style={{fontSize:11,color:"#888",marginTop:2}}>Usos: {c.usos}{c.maxUsos!=null?` / ${c.maxUsos}`:""}</div>
+                  <div style={{marginTop:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontSize:11,color:"#aaa"}}>{vigTexto(c)}</span>
+                    {estadoBadge(c)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          : <div style={{background:"#fff",borderRadius:12,boxShadow:"0 1px 6px #0001",overflow:"hidden"}}>
+              <table style={{width:"100%",borderCollapse:"collapse"}}>
+                <thead><tr style={{background:"#f9f9f9"}}>
+                  <th style={{textAlign:"left",padding:"10px 14px",fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:.5}}>Código</th>
+                  <th style={{textAlign:"left",padding:"10px 14px",fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:.5}}>Descuento</th>
+                  <th style={{textAlign:"left",padding:"10px 14px",fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:.5}}>Usos</th>
+                  <th style={{textAlign:"left",padding:"10px 14px",fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:.5}}>Vigencia</th>
+                  <th style={{textAlign:"left",padding:"10px 14px",fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:.5}}>Estado</th>
+                  <th></th>
+                </tr></thead>
+                <tbody>
+                  {discountCodes.map(c=>(
+                    <tr key={c.id} style={{borderBottom:"1px solid #f5f5f5"}}>
+                      <td style={{padding:"11px 14px",fontWeight:800,fontFamily:"monospace",letterSpacing:.5}}>{c.code}</td>
+                      <td style={{padding:"11px 14px",fontSize:13}}>{c.tipo==="%" ? `${c.valor}%` : fARS(c.valor)}</td>
+                      <td style={{padding:"11px 14px",fontSize:12,color:"#555"}}>{c.usos}{c.maxUsos!=null?` / ${c.maxUsos}`:""}</td>
+                      <td style={{padding:"11px 14px",fontSize:12,color:"#555"}}>{vigTexto(c)}</td>
+                      <td style={{padding:"11px 14px"}}>{estadoBadge(c)}</td>
+                      <td style={{padding:"11px 14px",textAlign:"right",whiteSpace:"nowrap"}}>
+                        <button onClick={()=>editCode(c)} title="Editar" style={{background:"none",border:"none",cursor:"pointer",padding:"4px 6px",color:"#888",display:"flex",alignItems:"center"}}><Pencil size={13} strokeWidth={2.3}/></button>
+                        <button onClick={()=>togglePausa(c)} title={c.activo?"Pausar":"Reactivar"} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"4px 6px",color:"#888"}}>{c.activo?"⏸️":"▶️"}</button>
+                        <button onClick={()=>delCode(c)} title="Eliminar" style={{background:"none",border:"none",cursor:"pointer",padding:"4px 6px",color:"#888",display:"flex",alignItems:"center"}}><Trash size={13} strokeWidth={2.3}/></button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+      }
+    </div>
+  );
+}
+
+function CodigoDescuentoForm({editing, existingCodes, onSave, onCancel}) {
+  const isEdit = !!editing;
+  const [code, setCode] = useState(editing?.code || "");
+  const [tipo, setTipo] = useState(editing?.tipo || "%");
+  const [valor, setValor] = useState(editing?.valor!=null ? String(editing.valor) : "");
+  const [maxUsos, setMaxUsos] = useState(editing?.maxUsos!=null ? String(editing.maxUsos) : "");
+  const [vigDesde, setVigDesde] = useState(editing?.vigenciaDesde || "");
+  const [vigHasta, setVigHasta] = useState(editing?.vigenciaHasta || "");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    const norm = code.trim().toUpperCase().replace(/[^A-Z0-9]/g,"");
+    if(!norm) { setError("Ingresá el código"); return; }
+    if((existingCodes||[]).find(c=>c.code===norm && c.id!==editing?.id)) { setError("Ya existe un código igual"); return; }
+    if(!valor || +valor<=0) { setError("Ingresá el valor del descuento"); return; }
+    setError(""); setSaving(true);
+    try {
+      await onSave({
+        id: editing?.id || genId(), code:norm, tipo, valor:+valor, activo:editing?.activo!==false,
+        vigenciaDesde:vigDesde, vigenciaHasta:vigHasta,
+        maxUsos: maxUsos.trim()!=="" ? +maxUsos : null, usos: editing?.usos||0,
+        createdAt: editing?.createdAt,
+      });
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{maxWidth:680}}>
+      <div style={{fontWeight:800,fontSize:15,marginBottom:14,display:"flex",alignItems:"center",gap:7}}><Tag size={15} strokeWidth={2.3}/>{isEdit?"Editar":"Nuevo"} Código de Descuento</div>
+
+      <Field label="Código *">
+        <input value={code} onChange={e=>setCode(e.target.value.toUpperCase())} placeholder="Ej: VERANO20" style={{...inputStyle,fontFamily:"monospace",fontWeight:700,letterSpacing:1}}/>
+        <div style={{fontSize:11,color:"#aaa",marginTop:4}}>Se guarda en mayúsculas, sin espacios ni símbolos. El cliente lo escribe tal cual al pagar.</div>
+      </Field>
+
+      <Field label="Tipo de descuento">
+        <div style={{display:"flex",gap:8,marginBottom:14}}>
+          <div onClick={()=>setTipo("%")} style={{padding:"8px 16px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:13,fontWeight:700,borderColor:tipo==="%"?RED:"#e5e5e5",background:tipo==="%"?"#fdecea":"#fff",color:tipo==="%"?RED:"#666"}}>% Porcentaje</div>
+          <div onClick={()=>setTipo("$")} style={{padding:"8px 16px",borderRadius:20,border:"1.5px solid",cursor:"pointer",fontSize:13,fontWeight:700,borderColor:tipo==="$"?RED:"#e5e5e5",background:tipo==="$"?"#fdecea":"#fff",color:tipo==="$"?RED:"#666"}}>$ Monto fijo</div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <input type="number" value={valor} onChange={e=>setValor(e.target.value)} onFocus={e=>e.target.select()} style={{width:100,padding:"10px 12px",borderRadius:8,border:`1.5px solid ${RED}`,fontSize:18,fontWeight:800,color:RED,textAlign:"center",outline:"none"}}/>
+          <span style={{fontSize:14,color:"#555",fontWeight:600}}>{tipo==="%" ? "% de descuento sobre el total del pedido" : "$ de descuento sobre el total del pedido"}</span>
+        </div>
+      </Field>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        <Field label="Vigencia desde (opcional)"><input type="date" value={vigDesde} onChange={e=>setVigDesde(e.target.value)} style={inputStyle}/></Field>
+        <Field label="Vigencia hasta (opcional)"><input type="date" value={vigHasta} onChange={e=>setVigHasta(e.target.value)} style={inputStyle}/></Field>
+      </div>
+
+      <Field label="Límite de usos (opcional)">
+        <input type="number" min="1" value={maxUsos} onChange={e=>setMaxUsos(e.target.value)} placeholder="Vacío = ilimitado" style={{...inputStyle,maxWidth:160}}/>
+        {isEdit && <div style={{fontSize:11,color:"#aaa",marginTop:4}}>Lleva usados: {editing.usos||0}</div>}
+      </Field>
+
+      {error && <div style={{color:RED,fontSize:12,fontWeight:600,margin:"10px 0 0"}}>{error}</div>}
+      <div style={{display:"flex",gap:10,marginTop:14}}>
+        <button onClick={onCancel} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancelar</button>
+        <button onClick={submit} disabled={saving} style={{flex:2,padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",opacity:saving?.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>{saving?"Guardando...":<><CheckCircle size={13} strokeWidth={2.4}/> Guardar Código</>}</button>
       </div>
     </div>
   );
