@@ -527,7 +527,7 @@ function getProductPromo(promos, pid) {
   return list.find(p=>p.tipo==="3x2") || list.find(p=>p.tipo==="descuento") || null;
 }
 function getVigentCombos(promos) {
-  return (promos||[]).filter(p=>isPromoVigente(p) && p.tipo==="combo");
+  return (promos||[]).filter(p=>isPromoVigente(p) && (p.tipo==="combo"||p.tipo==="caja"));
 }
 function isDiscountCodeVigente(c) {
   if(!c || !c.activo) return false;
@@ -676,6 +676,29 @@ const applyGlobalDiscount = (subtotal, disc) => {
   if(disc.type === "%") return Math.max(0, subtotal - subtotal * v / 100);
   return Math.max(0, subtotal - v);
 };
+// Agrupa los items de un pedido/cotización que pertenecen a un mismo combo o
+// caja en una sola línea para lo que ve el cliente (comprobante impreso,
+// cotización compartida) — sin desglosar los productos reales ni mostrar su
+// precio individual. El stock se sigue descontando por producto real a
+// partir de los items sin agrupar (acá nunca se toca esa lista original).
+function groupComboItemsForDisplay(items) {
+  const list = items||[];
+  const out = [];
+  const seen = new Set();
+  list.forEach(it => {
+    if(it.comboId) {
+      if(seen.has(it.comboId)) return;
+      seen.add(it.comboId);
+      const group = list.filter(x=>x.comboId===it.comboId);
+      const total = group.reduce((s,x)=>s+applyItemDiscount(x.price,x.qty,x.disc),0);
+      const boxQty = it.comboQty || 1;
+      out.push({name:it.comboNombre||it.promoLabel||"Combo", qty:boxQty, price:total/boxQty, disc:null, imageUrl:null, pid:it.comboId, id:it.comboId});
+    } else {
+      out.push(it);
+    }
+  });
+  return out;
+}
 // Format discount label for display
 // ─── WHATSAPP MESSAGE BUILDER ────────────────────────────────────────────────
 function buildWAOrder(o) {
@@ -965,7 +988,7 @@ function printDoc(doc, tipo, products=[]) {
       return `<td class="foto-cell"><a class="foto-link" href="${url}" target="_blank" title="Ver foto completa"><img src="${url}" alt=""/><span class="foto-hint">Ver</span></a></td>`;
     };
 
-    const itemRows = doc.items.map(it => {
+    const itemRows = groupComboItemsForDisplay(doc.items).map(it => {
       const hasDisc = it.disc && parseFloat(it.disc.value) > 0;
       const lineTotal = applyItemDiscount(it.price, it.qty, it.disc);
       const originalTotal = it.price * it.qty;
@@ -1541,7 +1564,7 @@ function PublicQuoteView({token}) {
               <th className="r" style={{width:"21%"}}>Subtotal</th>
             </tr></thead>
             <tbody>
-              {quote.items.map((it,i) => {
+              {groupComboItemsForDisplay(quote.items).map((it,i) => {
                 const hasDisc = it.disc && parseFloat(it.disc.value) > 0;
                 const lineTotal = applyItemDiscount(it.price, it.qty, it.disc);
                 const originalTotal = it.price * it.qty;
@@ -4696,6 +4719,12 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
   };
 
   // ── Combos ──
+  // Texto "incluye" de una tarjeta de combo/caja: productos reales + (si es
+  // una caja) los nombres de los items externos, en la misma lista.
+  const comboIncludes = (promo) => [
+    ...(promo.data?.componentes||[]).map(c=>products.find(x=>x.id===c.pid)?.name).filter(Boolean),
+    ...(promo.data?.itemsExternos||[]).map(it=>it.nombre),
+  ].join(" + ");
   const comboQtyOf = (promo) => {
     const comp0 = promo.data?.componentes?.[0];
     if(!comp0) return 0;
@@ -4708,11 +4737,18 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
       if(newQty<=0) return without;
       const componentes = promo.data?.componentes||[];
       const precioNormal = componentes.reduce((s,comp)=>{const pr=products.find(x=>x.id===comp.pid);return s+(pr?pr.salePrice*comp.qty:0);},0);
-      const pct = precioNormal>0 ? Math.max(0,(1-(promo.data?.precioFijo||0)/precioNormal)*100) : 0;
+      // Sin clamp a 0: en una Caja el precio final suele ser MAYOR a la suma de
+      // solo los productos reales (ahi adentro esta el costo de los items
+      // externos, que no tienen su propia linea) — si se clampeara a 0 el total
+      // cobrado quedaria por debajo del precio final, sin cubrir esos items.
+      const pct = precioNormal>0 ? (1-(promo.data?.precioFijo||0)/precioNormal)*100 : 0;
+      // Sin redondear a 1 decimal (a diferencia de otras promos, acá el %
+      // nunca se muestra al vendedor/cliente) — redondear perdía centavos y
+      // el total ya no cerraba exacto contra el precio final.
       const nuevos = componentes.map(comp=>{
         const pr = products.find(x=>x.id===comp.pid);
         return {pid:comp.pid,cartKey:promo.id+":"+comp.pid,qty:comp.qty*newQty,price:pr?pr.salePrice:0,name:pr?pr.name:comp.pid,
-          disc:{type:"%",value:Math.round(pct*10)/10},promoLabel:promo.nombre,comboId:promo.id,comboNombre:promo.nombre};
+          disc:{type:"%",value:pct},promoLabel:promo.nombre,comboId:promo.id,comboNombre:promo.nombre,comboQty:newQty};
       });
       return [...without,...nuevos];
     });
@@ -4783,9 +4819,9 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
             {shownCombos.map(promo=>{const cq=comboQtyOf(promo); return (
               <div key={promo.id} style={{background:"#fffdf8",borderRadius:10,padding:"12px 14px",display:"flex",alignItems:"center",gap:10,boxShadow:"0 1px 4px #0001",border:cq>0?`2px solid ${RED}`:"2px solid #c9a96a"}}>
                 <div style={{flex:1,minWidth:0}}>
-                  <span style={{background:"#7b1a1a",color:"#fff",fontSize:10,fontWeight:800,borderRadius:6,padding:"2px 7px",display:"inline-flex",alignItems:"center",gap:4}}><Gift size={10} strokeWidth={2.6}/> COMBO</span>
+                  <span style={{background:"#7b1a1a",color:"#fff",fontSize:10,fontWeight:800,borderRadius:6,padding:"2px 7px",display:"inline-flex",alignItems:"center",gap:4}}>{promo.tipo==="caja"?<Package size={10} strokeWidth={2.6}/>:<Gift size={10} strokeWidth={2.6}/>} {promo.tipo==="caja"?"CAJA":"COMBO"}</span>
                   <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",lineHeight:1.3,margin:"4px 0 2px"}}>{promo.nombre}</div>
-                  <div style={{fontSize:11,color:"#666"}}>{(promo.data?.componentes||[]).map(c=>products.find(x=>x.id===c.pid)?.name).filter(Boolean).join(" + ")}</div>
+                  <div style={{fontSize:11,color:"#666"}}>{comboIncludes(promo)}</div>
                   <span style={{fontSize:15,fontWeight:800,color:RED,marginTop:4,display:"block"}}>{fARS(promo.data?.precioFijo||0)}</span>
                 </div>
                 {cq>0
@@ -4835,16 +4871,16 @@ function ProductSelector({products,cart,setCart,isMobile,promos=[],loteMode=fals
         : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(195px,1fr))",gap:10}}>
             {shownCombos.map(promo=>{const cq=comboQtyOf(promo); return (
               <div key={promo.id} style={{background:"#fffdf8",borderRadius:10,padding:14,border:cq>0?`2px solid ${RED}`:"2px solid #c9a96a",boxShadow:"0 1px 4px #0001"}}>
-                <div style={{marginBottom:6}}><span style={{background:"#7b1a1a",color:"#fff",fontSize:10,fontWeight:800,borderRadius:6,padding:"2px 7px",display:"inline-flex",alignItems:"center",gap:4}}><Gift size={10} strokeWidth={2.6}/> COMBO</span></div>
+                <div style={{marginBottom:6}}><span style={{background:"#7b1a1a",color:"#fff",fontSize:10,fontWeight:800,borderRadius:6,padding:"2px 7px",display:"inline-flex",alignItems:"center",gap:4}}>{promo.tipo==="caja"?<Package size={10} strokeWidth={2.6}/>:<Gift size={10} strokeWidth={2.6}/>} {promo.tipo==="caja"?"CAJA":"COMBO"}</span></div>
                 <div style={{fontWeight:700,fontSize:12,color:"#1a1a1a",marginBottom:3,lineHeight:1.3}}>{promo.nombre}</div>
-                <div style={{fontSize:11,color:"#666",marginBottom:7}}>{(promo.data?.componentes||[]).map(c=>products.find(x=>x.id===c.pid)?.name).filter(Boolean).join(" + ")}</div>
+                <div style={{fontSize:11,color:"#666",marginBottom:7}}>{comboIncludes(promo)}</div>
                 <div style={{marginBottom:10}}><span style={{fontSize:17,fontWeight:800,color:RED}}>{fARS(promo.data?.precioFijo||0)}</span></div>
                 {cq>0?<div style={{display:"flex",alignItems:"center",gap:5}}>
                   <button onClick={()=>setComboQty(promo,cq-1)} style={{width:27,height:27,borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:15,fontWeight:700}}>−</button>
                   <span style={{flex:1,textAlign:"center",fontWeight:800,fontSize:13}}>{cq}</span>
                   <button onClick={()=>setComboQty(promo,cq+1)} style={{width:27,height:27,borderRadius:6,border:"1.5px solid #e5e5e5",background:"#fff",cursor:"pointer",fontSize:15,fontWeight:700}}>+</button>
                   <span style={{color:"#1e8449",fontSize:12,fontWeight:700}}>✓</span>
-                </div>:<button onClick={()=>setComboQty(promo,1)} style={{width:"100%",padding:"7px",borderRadius:7,border:"none",cursor:"pointer",background:"#7b1a1a",color:"#fff",fontWeight:700,fontSize:12}}>+ Agregar combo</button>}
+                </div>:<button onClick={()=>setComboQty(promo,1)} style={{width:"100%",padding:"7px",borderRadius:7,border:"none",cursor:"pointer",background:"#7b1a1a",color:"#fff",fontWeight:700,fontSize:12}}>+ Agregar {promo.tipo==="caja"?"caja":"combo"}</button>}
               </div>
             );})}
             {shown.map(p=>{
@@ -8828,6 +8864,7 @@ function VentasPanel({orders}) {
 function TypeBadge({tipo}) {
   const CFG = {
     combo:     {label:"COMBO",  Icon:Gift,      bg:"#7b1a1a", color:"#fff",    border:"none"},
+    caja:      {label:"CAJA",   Icon:Package,   bg:"#fdecea", color:RED,       border:"1px solid #f5b7b1"},
     "3x2":     {label:"OFERTA", Icon:Tag,       bg:"#fef9e7", color:"#b7770d", border:"1px solid #f3d98a"},
     descuento: {label:"DESC.",  Icon:TrendDown, bg:"#fdecea", color:"#c0392b", border:"1px solid #f5b7b1"},
     destacado: {label:"AVISO",  Icon:Star,      bg:"#eaf4fc", color:"#1a5276", border:"1px solid #aed6f1"},
@@ -8852,6 +8889,8 @@ function promoDisplay(promo, products) {
   let titulo = promo.nombre, sub = "";
   if(promo.tipo==="combo") {
     sub = `${promo.id} · ${(d.componentes||[]).length} productos · ${fARS(d.precioFijo||0)}${d.mostrarEnFiesta?" · Fiesta":""}`;
+  } else if(promo.tipo==="caja") {
+    sub = `${promo.id} · ${(d.componentes||[]).length} productos + ${(d.itemsExternos||[]).length} ítems · ${fARS(d.precioFijo||0)}${d.mostrarEnFiesta?" · Fiesta":""}`;
   } else if(promo.tipo==="3x2") {
     const prod = products.find(p=>p.id===d.productoId);
     titulo = prod?.name || promo.nombre;
@@ -8920,6 +8959,7 @@ function OfertasPanel({promos, setPromos, products, isMobile, prefillProductId, 
   const cancelForm = () => { setEditing(null); setView("vigentes"); };
 
   if(view==="combo")     return <ComboForm products={products} editing={editing} nextSku={nextPromoSku(promos)} onSave={savePromo} onCancel={cancelForm}/>;
+  if(view==="caja")      return <CajaForm products={products} editing={editing} nextSku={nextPromoSku(promos)} onSave={savePromo} onCancel={cancelForm}/>;
   if(view==="3x2")       return <TresPorDosForm products={products} editing={editing} nextSku={nextPromoSku(promos)} onSave={savePromo} onCancel={cancelForm}/>;
   if(view==="descuento") return <DescuentoForm products={products} editing={editing} prefillProductId={prefillProductId} onSave={savePromo} onCancel={cancelForm}/>;
   if(view==="destacado") return <DestacadoForm products={products} editing={editing} nextSku={nextPromoSku(promos)} onSave={savePromo} onCancel={cancelForm}/>;
@@ -8927,6 +8967,7 @@ function OfertasPanel({promos, setPromos, products, isMobile, prefillProductId, 
   if(view==="elegir") {
     const TIPOS = [
       {k:"combo",     Icon:Gift,    title:"Combo",            desc:"Varios productos distintos agrupados a un precio fijo"},
+      {k:"caja",      Icon:Package, title:"Caja Personalizada", desc:"Productos + ítems propios (ej. plastificado), con precio final a tu criterio"},
       {k:"3x2",       Icon:Tag,     title:"Oferta 3×N",        desc:"Comprando X unidades de un producto, paga menos"},
       {k:"descuento", Icon:TrendDown, title:"Descuento simple", desc:"Un producto puntual con % o $ de descuento"},
       {k:"destacado", Icon:Bell,    title:"Aviso destacado",  desc:"Mostrale a los clientes un producto puntual en un aviso chico, sin descuento"},
@@ -9131,6 +9172,146 @@ function ComboForm({products, editing, nextSku, onSave, onCancel}) {
       <div style={{display:"flex",gap:10,marginTop:6}}>
         <button onClick={onCancel} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancelar</button>
         <button onClick={submit} disabled={saving} style={{flex:2,padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",opacity:saving?.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>{saving?"Guardando...":<><CheckCircle size={13} strokeWidth={2.4}/> Guardar Combo</>}</button>
+      </div>
+    </div>
+  );
+}
+
+// Igual que un Combo (mismo SKU automático, mismos productos del catálogo),
+// más "items externos" — cosas que no son productos (sin SKU, sin stock,
+// ej. "Plastificado") que solo suman valor al calculo de referencia. El
+// precio final lo pone el admin a mano: puede ser menor (descuento real) o
+// mayor que la suma de productos (porque ahi adentro esta cubierto el costo
+// de los items externos) — ambos casos son validos, por eso el cuadro de
+// abajo cambia de "Ahorro" a "Recargo" segun el signo.
+function CajaForm({products, editing, nextSku, onSave, onCancel}) {
+  const isEdit = !!editing;
+  const [sku] = useState(editing?.id || nextSku);
+  const [nombre, setNombre] = useState(editing?.nombre || "");
+  const [search, setSearch] = useState("");
+  const [componentes, setComponentes] = useState(editing?.data?.componentes || []);
+  const [itemsExternos, setItemsExternos] = useState(editing?.data?.itemsExternos || []);
+  const [itemNombre, setItemNombre] = useState("");
+  const [itemValor, setItemValor] = useState("");
+  const [precioFijo, setPrecioFijo] = useState(editing?.data?.precioFijo!=null ? String(editing.data.precioFijo) : "");
+  const [mostrarEnFiesta, setMostrarEnFiesta] = useState(editing?.data?.mostrarEnFiesta || false);
+  const [vigDesde, setVigDesde] = useState(editing?.vigenciaDesde || "");
+  const [vigHasta, setVigHasta] = useState(editing?.vigenciaHasta || "");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const found = useMemo(()=>{
+    if(!search.trim()) return [];
+    return products.filter(p=>!componentes.find(c=>c.pid===p.id) && (matchesQuery(p.name, search)||normSKU(p.id).includes(normSKU(search)))).slice(0,8);
+  },[search,products,componentes]);
+
+  const addComp  = (p) => { setComponentes(c=>[...c,{pid:p.id,qty:1}]); setSearch(""); };
+  const setQty   = (pid,qty) => setComponentes(c=>c.map(i=>i.pid===pid?{...i,qty:Math.max(1,qty)}:i));
+  const delComp  = (pid) => setComponentes(c=>c.filter(i=>i.pid!==pid));
+
+  const addItemExterno = () => {
+    if(!itemNombre.trim() || !itemValor || +itemValor<=0) return;
+    setItemsExternos(it=>[...it,{nombre:itemNombre.trim(), valor:+itemValor}]);
+    setItemNombre(""); setItemValor("");
+  };
+  const delItemExterno = (idx) => setItemsExternos(it=>it.filter((_,i)=>i!==idx));
+
+  const componentesSum = componentes.reduce((s,c)=>{ const p=products.find(pr=>pr.id===c.pid); return s+(p?p.salePrice*c.qty:0); },0);
+  const itemsExternosSum = itemsExternos.reduce((s,it)=>s+it.valor,0);
+  const precioNormal = componentesSum + itemsExternosSum;
+  const ahorro = precioNormal - (parseFloat(precioFijo)||0);
+  const ahorroPct = precioNormal>0 ? (ahorro/precioNormal*100) : 0;
+  const esRecargo = ahorro<0;
+
+  const submit = async () => {
+    if(!sku.trim())               { setError("El SKU es obligatorio"); return; }
+    if(!nombre.trim())            { setError("El nombre es obligatorio"); return; }
+    if(componentes.length===0)    { setError("Agregá al menos un producto del catálogo — la caja necesita al menos uno para poder venderse"); return; }
+    if(!precioFijo || +precioFijo<=0) { setError("Ingresá el precio final de la caja"); return; }
+    setError(""); setSaving(true);
+    try {
+      await onSave({
+        id:sku.trim(), tipo:"caja", nombre:nombre.trim(), activa:editing?.activa!==false,
+        vigenciaDesde:vigDesde, vigenciaHasta:vigHasta,
+        data:{precioFijo:+precioFijo, componentes, itemsExternos, mostrarEnFiesta}, createdAt:editing?.createdAt,
+      });
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{maxWidth:680}}>
+      <div style={{fontWeight:800,fontSize:15,marginBottom:14,display:"flex",alignItems:"center",gap:7}}><Package size={15} strokeWidth={2.3}/>{isEdit?"Editar":"Nueva"} Caja Personalizada</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        <Field label="SKU de la caja (automático)"><input value={sku} disabled style={{...inputStyle,background:"#f5f5f5",color:"#888",fontWeight:700}}/></Field>
+        <Field label="Nombre de la caja *"><input value={nombre} onChange={e=>setNombre(e.target.value)} style={inputStyle}/></Field>
+      </div>
+
+      <Field label="Productos incluidos">
+        <div style={{position:"relative",marginBottom:8}}><Search size={13} color="#aaa" strokeWidth={2.3} style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)"}}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar producto para agregar a la caja..." style={{...inputStyle,paddingLeft:32}}/></div>
+        {found.length>0 && <div style={{border:"1.5px solid #f0f0f0",borderRadius:8,marginBottom:8,overflow:"hidden"}}>
+          {found.map(p=><div key={p.id} onClick={()=>addComp(p)} style={{padding:"8px 12px",cursor:"pointer",fontSize:12,borderBottom:"1px solid #f5f5f5"}}>{p.name} <span style={{color:"#aaa"}}>· {fARS(p.salePrice)}</span></div>)}
+        </div>}
+        {componentes.map(c=>{
+          const p = products.find(pr=>pr.id===c.pid);
+          return (
+            <div key={c.pid} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:"#f9f9f9",borderRadius:8,marginBottom:6,border:"1.5px solid #f0f0f0"}}>
+              <input type="number" min="1" value={c.qty} onChange={e=>setQty(c.pid,+e.target.value||1)} onFocus={e=>e.target.select()} style={{width:46,padding:"4px 6px",borderRadius:6,border:"1.5px solid #e5e5e5",fontWeight:800,fontSize:12,textAlign:"center"}}/>
+              <span style={{flex:1,fontSize:13,fontWeight:600}}>{p?.name||c.pid}</span>
+              <span style={{fontSize:12,color:"#888"}}>{fARS(p?.salePrice||0)} c/u</span>
+              <span onClick={()=>delComp(c.pid)} style={{color:RED,cursor:"pointer",padding:"0 4px",display:"inline-flex"}}><XIcon size={12} strokeWidth={2.6}/></span>
+            </div>
+          );
+        })}
+      </Field>
+
+      <Field label={<span style={{display:"flex",alignItems:"center",gap:6}}>Ítems personalizados <span style={{background:RED,color:"#fff",fontSize:9,fontWeight:800,padding:"1px 6px",borderRadius:5}}>NUEVO</span></span>}>
+        {itemsExternos.map((it,idx)=>(
+          <div key={idx} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:"#f9f9f9",borderRadius:8,marginBottom:6,border:"1.5px solid #f0f0f0"}}>
+            <span style={{fontSize:9,fontWeight:800,color:"#b7770d",background:"#fef9e7",border:"1px solid #f3d98a",borderRadius:5,padding:"2px 6px",flexShrink:0}}>ÍTEM</span>
+            <span style={{flex:1,fontSize:13,fontWeight:600}}>{it.nombre}</span>
+            <span style={{fontSize:12,color:"#888",fontWeight:700}}>{fARS(it.valor)}</span>
+            <span onClick={()=>delItemExterno(idx)} style={{color:RED,cursor:"pointer",padding:"0 4px",display:"inline-flex"}}><XIcon size={12} strokeWidth={2.6}/></span>
+          </div>
+        ))}
+        <div style={{display:"flex",gap:8,marginTop:4}}>
+          <input value={itemNombre} onChange={e=>setItemNombre(e.target.value)} placeholder="Nombre del ítem (ej: Plastificado)" style={{...inputStyle,flex:2}}/>
+          <input type="number" value={itemValor} onChange={e=>setItemValor(e.target.value)} onFocus={e=>e.target.select()} placeholder="$" style={{...inputStyle,flex:1,minWidth:90}}/>
+          <button type="button" onClick={addItemExterno} style={{flexShrink:0,padding:"0 16px",borderRadius:8,border:"1.5px solid #e5e5e5",background:"#fff",color:"#555",fontWeight:700,fontSize:12,cursor:"pointer"}}>+ Agregar</button>
+        </div>
+        <div style={{fontSize:11,color:"#aaa",marginTop:5}}>No es un producto del catálogo — no tiene SKU ni stock, solo suma al precio de referencia.</div>
+      </Field>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,alignItems:"end"}}>
+        <Field label="Precio normal (suma)"><div style={{padding:"8px 12px",fontSize:14,color:"#888",textDecoration:"line-through"}}>{fARS(precioNormal)}</div></Field>
+        <Field label="Precio final de la caja *"><input type="number" value={precioFijo} onChange={e=>setPrecioFijo(e.target.value)} onFocus={e=>e.target.select()} style={{...inputStyle,fontWeight:800,color:RED,fontSize:15}}/></Field>
+      </div>
+
+      {precioFijo && precioNormal>0 && (
+        <div style={{background:esRecargo?"#fdecea":"#eafaf1",border:`1.5px solid ${esRecargo?"#f5b7b1":"#a9dfbf"}`,borderRadius:8,padding:"12px 14px",margin:"14px 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:13,fontWeight:700,color:esRecargo?RED:"#1e8449"}}><Banknote size={12} strokeWidth={2.4}/>{esRecargo?"Recargo sobre el precio normal":"Ahorro para el cliente"}</span>
+          <span style={{fontSize:15,fontWeight:800,color:esRecargo?RED:"#1e8449"}}>{fARS(Math.abs(ahorro))} ({Math.abs(ahorroPct).toFixed(1)}%)</span>
+        </div>
+      )}
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginTop:precioFijo&&precioNormal>0?0:14}}>
+        <Field label="Vigencia desde (opcional)"><input type="date" value={vigDesde} onChange={e=>setVigDesde(e.target.value)} style={inputStyle}/></Field>
+        <Field label="Vigencia hasta (opcional)"><input type="date" value={vigHasta} onChange={e=>setVigHasta(e.target.value)} style={inputStyle}/></Field>
+      </div>
+
+      <div onClick={()=>setMostrarEnFiesta(v=>!v)} style={{display:"flex",alignItems:"center",gap:10,marginTop:14,padding:"12px 14px",borderRadius:10,border:`1.5px solid ${mostrarEnFiesta?"#e6b800":"#e5e5e5"}`,background:mostrarEnFiesta?"#fffbea":"#fafafa",cursor:"pointer"}}>
+        <div style={{width:20,height:20,borderRadius:6,border:`2px solid ${mostrarEnFiesta?"#e6b800":"#ccc"}`,background:mostrarEnFiesta?"#e6b800":"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          {mostrarEnFiesta && <CheckCircle size={13} strokeWidth={3} color="#fff"/>}
+        </div>
+        <div>
+          <div style={{fontWeight:700,fontSize:13,display:"flex",alignItems:"center",gap:6}}><PartyPopper size={13} strokeWidth={2.3}/> Mostrar en "De fiesta con Madrid"</div>
+          <div style={{fontSize:11,color:"#888",marginTop:1}}>Aparece en la sección de regalitos de cumpleaños del home de la web</div>
+        </div>
+      </div>
+
+      {error && <div style={{color:RED,fontSize:12,fontWeight:600,marginBottom:10}}>{error}</div>}
+      <div style={{display:"flex",gap:10,marginTop:6}}>
+        <button onClick={onCancel} style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #e5e5e5",background:"#fff",color:"#666",fontWeight:600,fontSize:13,cursor:"pointer"}}>Cancelar</button>
+        <button onClick={submit} disabled={saving} style={{flex:2,padding:"11px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:800,fontSize:14,background:`linear-gradient(135deg,${REDD},${RED})`,color:"#fff",opacity:saving?.7:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>{saving?"Guardando...":<><CheckCircle size={13} strokeWidth={2.4}/> Guardar Caja</>}</button>
       </div>
     </div>
   );
