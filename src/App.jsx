@@ -3028,15 +3028,23 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
               </div>
             ))}
             <div style={{borderTop:"2px solid #e5e5e5",marginTop:216,paddingTop:8}}>
-              {/* Botón de notificaciones OneSignal */}
+              {/* Botón de notificaciones OneSignal — iOS exige que el pedido de
+                  permiso nativo sea parte DIRECTA del gesto del usuario, sin
+                  ningún await antes (ni siquiera uno rápido). Un await de por
+                  medio (como esperar la promesa de getOneSignal()) hace que
+                  Safari ya no lo cuente como "iniciado por el usuario": el
+                  cartel de permiso ni aparece y no hay ningún error visible —
+                  exactamente el síntoma reportado. Por eso acá se usa
+                  window.OneSignal directo (ya cargado para cuando alguien
+                  llega a tocar este botón) en vez de esperar getOneSignal(). */}
               <div onClick={async()=>{
+                const OS = window._oneSignalReady ? window.OneSignal : null;
+                if(!OS) {
+                  toast.error("Todavía está cargando el sistema de notificaciones — esperá un segundo y probá de nuevo.");
+                  setMobileMenu(false);
+                  return;
+                }
                 try {
-                  const OS = await getOneSignal();
-                  if(!OS) {
-                    toast.error("El sistema de notificaciones no está disponible. Verificá tu conexión y recargá la app.");
-                    setMobileMenu(false);
-                    return;
-                  }
                   const granted = await OS.Notifications.requestPermission();
                   setNotifPermission(granted ? "granted" : "denied");
                   if(granted) {

@@ -25,7 +25,12 @@
         await OneSignal.init({
           appId: "00dbe0c1-e7bf-4f80-885c-1680381ed121",
           safari_web_id: "web.onesignal.auto.0be2159b-fe04-48af-91ed-a963117d84ac",
-          serviceWorkerPath: "/OneSignalSDKWorker.js",
+          // Antes apuntaba a /OneSignalSDKWorker.js, un service worker aparte
+          // del propio de la app (service-worker.js) — los dos competían por
+          // el mismo scope ("/"). Ahora los dos viven en un solo archivo
+          // (service-worker.js importa el de OneSignal), así que OneSignal
+          // también se registra ahí — un único service worker real.
+          serviceWorkerPath: "/service-worker.js",
           notifyButton: { enable: false },
           allowLocalhostAsSecureOrigin: true,
         });
@@ -35,16 +40,6 @@
         // Disparar evento para que la app sepa que está listo
         window.dispatchEvent(new Event("oneSignalReady"));
       });
-    </script>
-
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function() {
-          navigator.serviceWorker.register('/service-worker.js')
-            .then(function(reg) { console.log('SW registered'); })
-            .catch(function(err) { console.log('SW error:', err); });
-        });
-      }
     </script>
   </head>
   <body>
