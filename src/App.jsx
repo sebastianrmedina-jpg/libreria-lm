@@ -1962,7 +1962,6 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
   // ?pedido=<id> y esto reusa la misma navegación que ya existe para un tap
   // en la campanita, así se abre directo en el pedido en vez de la pantalla default.
   useEffect(() => {
-    if(loading) return;
     const params = new URLSearchParams(window.location.search);
     const pedidoRef = params.get("pedido");
     if(pedidoRef) {
@@ -1971,7 +1970,8 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
       const rest = params.toString();
       window.history.replaceState({}, "", window.location.pathname + (rest?`?${rest}`:""));
     }
-  }, [loading]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // ── PRICE LIST ──
   // Admin can preview any list; other users use their assigned list
   const [previewListId, setPreviewListId] = useState(null);
