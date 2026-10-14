@@ -2074,6 +2074,9 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     await db.upsertOrder({...orderWithNum, isSandbox: false});
     const notif={id:genId(),fecha:new Date().toLocaleString("es-AR"),leida:[],tipo:"NUEVO_PEDIDO",para:"admin",icono:"🛒",titulo:"Nuevo pedido registrado",cuerpo:`${orderWithNum.client} - ${fARS(orderWithNum.total)} - ${orderWithNum.docNum}`,ref:orderWithNum.id};
     await db.addNotif(notif); setNotifs(n=>[notif,...n]);
+    // Push real (OneSignal) — antes esto solo quedaba como notificación local,
+    // visible nada más si alguien ya tenía la app abierta en ese momento.
+    sendPushNotif({title:notif.titulo, body:notif.cuerpo, targetUsername:"admin"}).catch(()=>{});
     await logActivity("Nuevo pedido", `${orderWithNum.docNum} - ${orderWithNum.client} - ${fARS(orderWithNum.total)} - Vendedor: ${orderWithNum.vendedor||"-"}`, orderWithNum.id, "pedido");
     if(!order.fromQuote) setTimeout(() => printDoc(orderWithNum, "reserva"), 400);
   };
