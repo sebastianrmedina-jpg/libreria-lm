@@ -41,7 +41,7 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const { title, body, targetUsername } = req.body || {};
+  const { title, body, targetUsername, ref } = req.body || {};
   if (!title || !body || !targetUsername) {
     res.status(400).json({ error: "Faltan datos del envío (title, body, targetUsername)." });
     return;
@@ -74,6 +74,9 @@ module.exports = async (req, res) => {
         filters,
         // Sin esto Android puede demorar o no mostrar el push bajo ahorro de batería.
         priority: 10,
+        // Si hay un pedido asociado, al tocar la notificación abre/enfoca la app
+        // directo en ese pedido (ver el useEffect de deep-link en App.jsx).
+        ...(ref ? { url: `https://gestion.libreriamadrid.com.ar/?pedido=${encodeURIComponent(ref)}` } : {}),
       }),
     });
     const json = await osRes.json().catch(() => null);

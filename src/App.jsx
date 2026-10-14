@@ -867,22 +867,22 @@ async function registerOneSignal(username, role) {
 // server-to-server), así que esto SIEMPRE fallaba en silencio sin importar
 // qué tan bien estuviera el resto de la configuración. El endpoint de
 // servidor además evita que la clave de OneSignal viaje en el bundle público.
-async function sendPushNotif({title, body, targetUsername}) {
+async function sendPushNotif({title, body, targetUsername, ref}) {
   try {
-    await callAdminApi("/api/send-push", {title, body, targetUsername});
+    await callAdminApi("/api/send-push", {title, body, targetUsername, ref});
   } catch(e) {
     console.warn("OneSignal push error:", e);
   }
 }
 
 // ─── CROSS-DEVICE NOTIFICATIONS via lm_notifs + OneSignal ────────────────────
-async function sendCrossNotif(db, setNotifs, {title, body, tag, para, de}) {
+async function sendCrossNotif(db, setNotifs, {title, body, tag, para, de, ref}) {
   const notif = {
     id: genId(),
     fecha: new Date().toLocaleString("es-AR"),
     titulo: title, cuerpo: body,
     tag: tag||"lm",
-    para, de,
+    para, de, ref,
     leida: [],  // lista de userIds que ya la leyeron (igual al resto de las notificaciones de la app)
   };
   // La notificacion es secundaria al hecho que la dispara (confirmar pago, aprobar edicion, etc.
@@ -895,7 +895,7 @@ async function sendCrossNotif(db, setNotifs, {title, body, tag, para, de}) {
     console.warn("No se pudo guardar la notificación (la acción principal ya se guardó igual):", e);
   }
   // Enviar push via OneSignal (cuando la app está cerrada) — best-effort, nunca debe bloquear ni trabar a quien envía
-  sendPushNotif({ title, body, targetUsername: para }).catch(()=>{});
+  sendPushNotif({ title, body, targetUsername: para, ref }).catch(()=>{});
 }
 
 // ─── PUSH NOTIFICATIONS ──────────────────────────────────────────────────────
@@ -1958,6 +1958,20 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     // Fallback: si no se reconoce, va a Central
     setTab("central");
   };
+  // Deep-link desde una notificación push (OneSignal) — al tocarla, la URL trae
+  // ?pedido=<id> y esto reusa la misma navegación que ya existe para un tap
+  // en la campanita, así se abre directo en el pedido en vez de la pantalla default.
+  useEffect(() => {
+    if(loading) return;
+    const params = new URLSearchParams(window.location.search);
+    const pedidoRef = params.get("pedido");
+    if(pedidoRef) {
+      handleNotifNavigate({ ref: pedidoRef, tipo: "" });
+      params.delete("pedido");
+      const rest = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (rest?`?${rest}`:""));
+    }
+  }, [loading]);
   // ── PRICE LIST ──
   // Admin can preview any list; other users use their assigned list
   const [previewListId, setPreviewListId] = useState(null);
@@ -2049,7 +2063,7 @@ function MainApp({currentUser,onLogout,users,setUsers,vendors,setVendors,product
     await db.addNotif(notif); setNotifs(n=>[notif,...n]);
     // Push real (OneSignal) — antes esto solo quedaba como notificación local,
     // visible nada más si alguien ya tenía la app abierta en ese momento.
-    sendPushNotif({title:notif.titulo, body:notif.cuerpo, targetUsername:"admin"}).catch(()=>{});
+    sendPushNotif({title:notif.titulo, body:notif.cuerpo, targetUsername:"admin", ref:orderWithNum.id}).catch(()=>{});
     await logActivity("Nuevo pedido", `${orderWithNum.docNum} - ${orderWithNum.client} - ${fARS(orderWithNum.total)} - Vendedor: ${orderWithNum.vendedor||"-"}`, orderWithNum.id, "pedido");
     if(!order.fromQuote) setTimeout(() => printDoc(orderWithNum, "reserva"), 400);
   };
