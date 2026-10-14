@@ -829,8 +829,6 @@ function quoteStatus(q) {
 }
 
 // ─── ONESIGNAL PUSH NOTIFICATIONS ───────────────────────────────────────────
-const OS_APP_ID = "00dbe0c1-e7bf-4f80-885c-1680381ed121";
-
 // Espera hasta que OneSignal esté listo (máx 10 segundos)
 function getOneSignal() {
   return new Promise((resolve) => {
@@ -847,8 +845,6 @@ function getOneSignal() {
     }, 10000);
   });
 }
-const OS_API_KEY = "os_v2_app_adn6bqphx5hybcc4c2adqhwreg4ekar7am5ej5fv4uwxgtau3pqgjfzynkjg226awxtc4737kumrypjz7ju777gjpna26pw6epg2syi";
-
 // Registrar el dispositivo en OneSignal con el username como external_id
 async function registerOneSignal(username, role) {
   try {
@@ -865,49 +861,15 @@ async function registerOneSignal(username, role) {
   }
 }
 
-// Enviar notificación push via OneSignal REST API a un usuario específico
-// targetUsername: username del destinatario ("admin" significa enviar a todos los admins)
+// Enviar notificación push a un usuario específico ("admin" = a todos los admins).
+// Pasa por api/send-push.js — la API REST de OneSignal bloquea por CORS
+// cualquier llamada hecha directo desde el navegador (está pensada para
+// server-to-server), así que esto SIEMPRE fallaba en silencio sin importar
+// qué tan bien estuviera el resto de la configuración. El endpoint de
+// servidor además evita que la clave de OneSignal viaje en el bundle público.
 async function sendPushNotif({title, body, targetUsername}) {
   try {
-    // Si el destinatario es "admin", enviar a todos con rol admin
-    // Si es un username específico, enviar solo a ese usuario
-    const filters = targetUsername === "admin"
-      ? [{ field: "tag", key: "role", relation: "=", value: "admin" }]
-      : [{ field: "tag", key: "username", relation: "=", value: targetUsername }];
-
-    const payload = {
-      app_id: OS_APP_ID,
-      headings: { en: title, es: title },
-      contents: { en: body, es: body },
-      filters,
-      // Sin esto, Android puede recibir el push pero demorarlo o no mostrarlo
-      // bajo ahorro de batería — confirmado comparando contra un envío de
-      // prueba desde el panel de OneSignal (que sí llegaba), que manda alta
-      // prioridad por defecto y este envío armado a mano no lo hacía.
-      priority: 10,
-    };
-    // Llamada a la API de OneSignal — con timeout propio, nunca debe colgar indefinidamente
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-    try {
-      const res = await fetch("https://onesignal.com/api/v1/notifications", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Key ${OS_API_KEY}`,
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
-      // Antes no se revisaba la respuesta — un "0 destinatarios" o un error de
-      // OneSignal quedaba completamente invisible. Ahora al menos queda en consola.
-      const json = await res.json().catch(() => null);
-      if(!res.ok || !json?.recipients) {
-        console.warn("OneSignal push sin destinatarios o con error:", res.status, json);
-      }
-    } finally {
-      clearTimeout(timeoutId);
-    }
+    await callAdminApi("/api/send-push", {title, body, targetUsername});
   } catch(e) {
     console.warn("OneSignal push error:", e);
   }
