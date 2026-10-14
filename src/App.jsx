@@ -880,12 +880,17 @@ async function sendPushNotif({title, body, targetUsername}) {
       headings: { en: title, es: title },
       contents: { en: body, es: body },
       filters,
+      // Sin esto, Android puede recibir el push pero demorarlo o no mostrarlo
+      // bajo ahorro de batería — confirmado comparando contra un envío de
+      // prueba desde el panel de OneSignal (que sí llegaba), que manda alta
+      // prioridad por defecto y este envío armado a mano no lo hacía.
+      priority: 10,
     };
     // Llamada a la API de OneSignal — con timeout propio, nunca debe colgar indefinidamente
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
     try {
-      await fetch("https://onesignal.com/api/v1/notifications", {
+      const res = await fetch("https://onesignal.com/api/v1/notifications", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -894,6 +899,12 @@ async function sendPushNotif({title, body, targetUsername}) {
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
+      // Antes no se revisaba la respuesta — un "0 destinatarios" o un error de
+      // OneSignal quedaba completamente invisible. Ahora al menos queda en consola.
+      const json = await res.json().catch(() => null);
+      if(!res.ok || !json?.recipients) {
+        console.warn("OneSignal push sin destinatarios o con error:", res.status, json);
+      }
     } finally {
       clearTimeout(timeoutId);
     }
